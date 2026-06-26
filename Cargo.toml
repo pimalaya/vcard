@@ -1,0 +1,29 @@
+[package]
+name = "vcard-rs"
+description = "vCard (RFC 6350) model with parser and builder"
+version = "0.0.1"
+authors = ["soywod <clement.douin@posteo.net>"]
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+categories = ["data-structures", "parser-implementations", "encoding"]
+keywords = ["vcard", "contact", "carddav", "rfc6350", "codec"]
+homepage = "https://pimalaya.org"
+documentation = "https://docs.rs/vcard-rs/latest/vcard-rs"
+repository = "https://github.com/pimalaya/vcard-rs"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+name = "vcard_rs"
+path = "src/lib.rs"
+
+[features]
+default = ["parser", "builder"]
+parser = ["dep:memchr"]
+builder = []
+
+[dependencies]
+memchr = { version = "2.8", default-features = false, optional = true }
