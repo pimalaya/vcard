@@ -1,6 +1,6 @@
 [package]
 name = "vcard-rs"
-description = "vCard (RFC 6350) model with parser and builder"
+description = "vCard (RFC 6350): a byte-faithful syntax tree and a decoded model"
 version = "0.0.1"
 authors = ["soywod <clement.douin@posteo.net>"]
 edition = "2024"
@@ -17,13 +17,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [lib]
-name = "vcard_rs"
+name = "vcard"
 path = "src/lib.rs"
 
-[features]
-default = ["parser", "builder"]
-parser = ["dep:memchr"]
-builder = []
-
 [dependencies]
-memchr = { version = "2.8", default-features = false, optional = true }
+memchr = { version = "2.8", default-features = false }
