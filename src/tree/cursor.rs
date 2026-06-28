@@ -6,7 +6,7 @@
 //! through the codec: getters decode (unescape), setters encode (escape) and
 //! write through to the syntax node. Crucially, a setter only rewrites the
 //! component it touches, so every other leaf (and every parameter) of a parsed
-//! line stays byte for byte intact. [`ValueCursor`] exposes both convenience
+//! line stays byte for byte intact. [`VcardValueCursor`] exposes both convenience
 //! accessors for the common single-value and list shapes and raw component-level
 //! access for the structured kinds (`ADR`, `GENDER`, `ORG`, `CLIENTPIDMAP`); the
 //! bespoke [`NCursor`](crate::tree::prop::n::NCursor) names `N`'s components.
@@ -17,12 +17,12 @@ use crate::tree::{lens::VcardParamLens, line::VcardLine};
 
 /// A typed cursor over a content line's value, editing in place and byte
 /// preserving for the components it does not touch.
-pub struct ValueCursor<'c, 'a> {
+pub struct VcardValueCursor<'c, 'a> {
     /// The borrowed content line.
     pub line: &'c mut VcardLine<'a>,
 }
 
-impl ValueCursor<'_, '_> {
+impl VcardValueCursor<'_, '_> {
     /// The whole value as a single decoded text (component 0, value 0).
     pub fn text(&self) -> Cow<'_, str> {
         self.line.value.decode_scalar_at(0)
