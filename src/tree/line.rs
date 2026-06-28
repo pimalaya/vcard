@@ -3,16 +3,26 @@
 //! One raw content line of a card: name, parameters, value, line ending.
 //!
 //! [`VcardLine`] is the syntactic unit a property occupies. It owns the line
-//! tokeniser ([`take`](VcardLine::take), which splits one line off the remaining
-//! input for [`VcardCst::parse`](crate::tree::cst::VcardCst::parse)) and the head
-//! splitter that separates the name from its parameters. It exposes its raw value
-//! and typed parameter access by lens, but stays generic: the meaning of the name
-//! and the decoding of the value belong to the lens markers and the
+//! tokeniser ([`take`](VcardLine::take), which splits one logical line off the
+//! remaining input for [`VcardCst::parse`](crate::tree::cst::VcardCst::parse),
+//! unfolding any RFC 6350 folded continuation lines) and the head splitter that
+//! separates the name from its parameters. It exposes its raw value and typed
+//! parameter access by lens, but stays generic: the meaning of the name and the
+//! decoding of the value belong to the lens markers and the
 //! [`decode`](crate::tree::decode) / [`encode`](crate::tree::encode) bridges.
+//!
+//! Folding is normalised away on parse, not preserved: a folded line unfolds to
+//! its logical content and serializes unfolded. An already-unfolded card still
+//! round-trips byte for byte.
 
 use core::fmt;
 
-use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
+use alloc::{
+    borrow::Cow,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::{
     error::VcardParseError,
@@ -46,30 +56,46 @@ impl<'a> VcardLine<'a> {
         }
     }
 
-    /// Tokenise the line at the start of `rest`, returning it and the remaining
-    /// input.
+    /// Tokenise the logical line at the start of `rest`, unfolding any folded
+    /// continuation lines, and return it with the remaining input. RFC 6350
+    /// folds a long line by inserting a CRLF and a single leading space or tab;
+    /// unfolding drops them. A line with no folds borrows the source; a folded
+    /// line is rebuilt owned, since its bytes are no longer contiguous.
     pub fn take(rest: &'a str) -> Result<(Self, &'a str), VcardParseError> {
-        let bytes = rest.as_bytes();
+        let (first, eol, mut tail) = physical_line(rest)?;
 
-        let Some(lf) = memchr::memchr(b'\n', bytes) else {
-            return Err(VcardParseError::MissingCrlf(rest.to_string()));
-        };
+        if !starts_with_wsp(tail) {
+            return Ok((Self::parse(first, eol)?, tail));
+        }
 
-        let tail = &rest[lf + 1..];
+        let mut logical = String::from(first);
+        let mut last_eol = eol;
 
-        let (content, eol) = if lf > 0 && bytes[lf - 1] == b'\r' {
-            (&rest[..lf - 1], &rest[lf - 1..lf + 1])
-        } else {
-            (&rest[..lf], &rest[lf..lf + 1])
-        };
+        while starts_with_wsp(tail) {
+            let (continuation, eol, rest) = physical_line(&tail[1..])?;
+            logical.push_str(continuation);
+            last_eol = eol;
+            tail = rest;
+        }
 
-        let Some(colon) = memchr::memchr(b':', content.as_bytes()) else {
-            return Err(VcardParseError::MissingPropertyColon(content.to_string()));
-        };
-
-        let line = Self::parse(&content[..colon], &content[colon + 1..], eol);
+        let mut line = Self::parse(&logical, "")?.into_static();
+        line.eol = VcardLeaf::from(last_eol.to_string());
 
         Ok((line, tail))
+    }
+
+    /// Convert into an owned line whose every leaf is owned (`'static`).
+    pub(crate) fn into_static(self) -> VcardLine<'static> {
+        VcardLine {
+            name: self.name.into_static(),
+            params: self
+                .params
+                .into_iter()
+                .map(VcardParamNode::into_static)
+                .collect(),
+            value: self.value.into_static(),
+            eol: self.eol.into_static(),
+        }
     }
 
     /// The raw text of the line's first value, for simple single-value lines.
@@ -97,16 +123,21 @@ impl<'a> VcardLine<'a> {
             .find(|param| param.name.get().eq_ignore_ascii_case(P::NAME))
     }
 
-    /// Parse a head/value/eol triple into a line, splitting the head's params.
-    fn parse(head: &'a str, value: &'a str, eol: &'a str) -> Self {
-        let (name, params) = split_head(head);
+    /// Split one logical line into a typed line at the colon, separating the
+    /// name, its parameters and the value.
+    fn parse<'b>(content: &'b str, eol: &'b str) -> Result<VcardLine<'b>, VcardParseError> {
+        let Some(colon) = memchr::memchr(b':', content.as_bytes()) else {
+            return Err(VcardParseError::MissingPropertyColon(content.to_string()));
+        };
 
-        Self {
+        let (name, params) = split_head(&content[..colon]);
+
+        Ok(VcardLine {
             name: VcardLeaf::from(name),
             params,
-            value: VcardValueNode::parse(value),
+            value: VcardValueNode::parse(&content[colon + 1..]),
             eol: VcardLeaf::from(eol),
-        }
+        })
     }
 }
 
@@ -144,6 +175,31 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
     (name, params)
 }
 
+/// Split the first physical line off `rest`: its content (without the line
+/// ending), its line ending, and the remaining input.
+fn physical_line(rest: &str) -> Result<(&str, &str, &str), VcardParseError> {
+    let bytes = rest.as_bytes();
+
+    let Some(lf) = memchr::memchr(b'\n', bytes) else {
+        return Err(VcardParseError::MissingCrlf(rest.to_string()));
+    };
+
+    let tail = &rest[lf + 1..];
+
+    let (content, eol) = if lf > 0 && bytes[lf - 1] == b'\r' {
+        (&rest[..lf - 1], &rest[lf - 1..lf + 1])
+    } else {
+        (&rest[..lf], &rest[lf..lf + 1])
+    };
+
+    Ok((content, eol, tail))
+}
+
+/// Whether `rest` begins with a folding whitespace (space or tab).
+fn starts_with_wsp(rest: &str) -> bool {
+    matches!(rest.as_bytes().first(), Some(b' ' | b'\t'))
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::string::ToString;
@@ -169,5 +225,26 @@ mod tests {
     fn accepts_a_bare_lf_ending() {
         let (line, _) = VcardLine::take("FN:John\n").unwrap();
         assert_eq!(line.to_string(), "FN:John\n");
+    }
+
+    #[test]
+    fn unfolds_space_and_tab_continuations() {
+        let (line, rest) = VcardLine::take("NOTE:foo\r\n bar\r\n\tbaz\r\nEND:VCARD\r\n").unwrap();
+        assert_eq!(line.name.get(), "NOTE");
+        assert_eq!(line.raw_value(), "foobarbaz");
+        assert_eq!(rest, "END:VCARD\r\n");
+    }
+
+    #[test]
+    fn serializes_an_unfolded_line() {
+        let (line, _) = VcardLine::take("NOTE:foo\r\n bar\r\n").unwrap();
+        assert_eq!(line.to_string(), "NOTE:foobar\r\n");
+    }
+
+    #[test]
+    fn keeps_whitespace_beyond_the_single_fold_indicator() {
+        // only the first space is the fold marker; the rest is value content.
+        let (line, _) = VcardLine::take("NOTE:foo\r\n  bar\r\n").unwrap();
+        assert_eq!(line.raw_value(), "foo bar");
     }
 }

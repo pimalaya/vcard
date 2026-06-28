@@ -26,6 +26,11 @@ impl<'a> VcardLeaf<'a> {
     pub fn set(&mut self, text: impl Into<Cow<'a, str>>) {
         self.0 = text.into();
     }
+
+    /// Convert into an owned leaf (`'static`), cloning the text if borrowed.
+    pub(crate) fn into_static(self) -> VcardLeaf<'static> {
+        VcardLeaf(Cow::Owned(self.0.into_owned()))
+    }
 }
 
 impl<'a> From<&'a str> for VcardLeaf<'a> {

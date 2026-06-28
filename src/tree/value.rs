@@ -42,6 +42,17 @@ impl<'a> VcardValueNode<'a> {
 
         Self { components }
     }
+
+    /// Convert into an owned value node (`'static`).
+    pub(crate) fn into_static(self) -> VcardValueNode<'static> {
+        VcardValueNode {
+            components: self
+                .components
+                .into_iter()
+                .map(|component| component.into_iter().map(VcardLeaf::into_static).collect())
+                .collect(),
+        }
+    }
 }
 
 impl fmt::Display for VcardValueNode<'_> {

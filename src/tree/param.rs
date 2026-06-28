@@ -52,6 +52,18 @@ impl<'a> VcardParamNode<'a> {
             },
         }
     }
+
+    /// Convert into an owned parameter node (`'static`).
+    pub(crate) fn into_static(self) -> VcardParamNode<'static> {
+        VcardParamNode {
+            name: self.name.into_static(),
+            values: self
+                .values
+                .into_iter()
+                .map(VcardLeaf::into_static)
+                .collect(),
+        }
+    }
 }
 
 impl fmt::Display for VcardParamNode<'_> {

@@ -27,7 +27,9 @@
 //! ```
 //!
 //! - **parse** — [`VcardCst::parse`](tree::cst::VcardCst::parse) borrows the
-//!   source; leaves point into it, so a parsed card round-trips byte for byte.
+//!   source; leaves point into it, so an unfolded card round-trips byte for
+//!   byte. RFC 6350 line folding is normalised away: a folded line is unfolded
+//!   into an owned line and serialized unfolded.
 //! - **to_string** — [`Display`](core::fmt::Display) on `VcardCst` emits the
 //!   bytes verbatim (parsed) or canonically (built).
 //! - **decode** — [`VcardCst::decode`](tree::cst::VcardCst::decode) projects

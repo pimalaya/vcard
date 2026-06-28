@@ -255,4 +255,20 @@ mod tests {
         }
         assert_eq!(vcard.to_string(), card);
     }
+
+    #[test]
+    fn unfolds_folded_lines_across_the_card() {
+        let folded = "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long\r\n  note\r\nEND:VCARD\r\n";
+        let card = VcardCst::parse(folded).unwrap();
+
+        // the folded value is unfolded on parse, and serialized unfolded.
+        assert_eq!(
+            card.to_string(),
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long note\r\nEND:VCARD\r\n",
+        );
+        // re-parsing the output is then byte-stable (a fixpoint).
+        let output = card.to_string();
+        let reparsed = VcardCst::parse(&output).unwrap();
+        assert_eq!(reparsed.to_string(), output);
+    }
 }
