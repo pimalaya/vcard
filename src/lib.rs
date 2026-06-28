@@ -55,7 +55,7 @@
 //! knowledge lives in the lens markers
 //! ([`VcardPropLens`](tree::lens::VcardPropLens) /
 //! [`VcardParamLens`](tree::lens::VcardParamLens)): a marker
-//! ([`tree::prop::n::N`], [`tree::param::PID`]) is a zero-sized type pinning a
+//! ([`tree::prop::n::N`], [`tree::param::pid::PID`]) is a zero-sized type pinning a
 //! wire name to the decoded value it produces, plus the `decode`/`encode`
 //! projections. Each property has its own hand-written module under
 //! [`tree::prop`]; most share a value kind
