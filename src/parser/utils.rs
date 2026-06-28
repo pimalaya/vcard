@@ -1,124 +1,136 @@
-use core::{array, ops::Range};
+use core::fmt::{self, Formatter};
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::parser::{leaf::VcardLeaf, param::node::VcardParamNode};
 
 /// The property name (before any parameters) of a content-line head.
-pub fn property_name(head: &str) -> &str {
-    match memchr::memchr(b';', head.as_bytes()) {
+pub(crate) fn property_name(head: &str) -> &str {
+    match head.find(';') {
         Some(semi) => &head[..semi],
         None => head,
     }
 }
 
-/// Split a head range into its name range and its parameter range (the latter
-/// leading with `;`, empty when the property carries none).
-pub fn split_name_params(input: &str, prop: Range<usize>) -> (Range<usize>, Range<usize>) {
-    match memchr::memchr(b';', &input.as_bytes()[prop.clone()]) {
-        Some(rel) => {
-            let semi = prop.start + rel;
-            (prop.start..semi, semi..prop.end)
-        }
-        None => (prop.clone(), prop.end..prop.end),
-    }
-}
+/// Parse a content-line head into its name and parameters. The head is the part
+/// before the colon, for example `EMAIL;TYPE=home`; the name is everything
+/// before the first `;`, the rest splits into `;`-separated parameters.
+pub(crate) fn parse_params(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
+    let (name, mut rest) = match head.find(';') {
+        Some(semi) => (&head[..semi], &head[semi..]),
+        None => return (head, Vec::new()),
+    };
 
-/// Split a parameter range (leading with `;`) into its `;`-separated parameters.
-pub fn parse_params(input: &str, params: Range<usize>) -> Vec<VcardParamNode> {
-    let bytes = input.as_bytes();
-    let mut parsed = Vec::new();
-    let mut start = params.start;
+    let mut params = Vec::new();
 
-    while start < params.end {
-        if bytes[start] == b';' {
-            start += 1;
-            continue;
-        }
-
-        let end = match memchr::memchr(b';', &bytes[start..params.end]) {
-            Some(rel) => start + rel,
-            None => params.end,
+    while let Some(after) = rest.strip_prefix(';') {
+        let (param, tail) = match after.find(';') {
+            Some(semi) => (&after[..semi], &after[semi..]),
+            None => (after, ""),
         };
 
-        parsed.push(VcardParamNode::parse(input, start..end));
-        start = end;
+        params.push(VcardParamNode::parse(param));
+        rest = tail;
     }
 
-    parsed
+    (name, params)
 }
 
-/// Split a value range into its `K` `;`-separated component ranges
-/// (escape-aware), padding with empty ranges when fewer are present.
-pub(crate) fn components<const K: usize>(input: &str, value: Range<usize>) -> [Range<usize>; K] {
-    let bytes = input.as_bytes();
-    let end = value.end;
-    let mut ranges: [Range<usize>; K] = array::from_fn(|_| end..end);
-    let mut start = value.start;
+/// Split a value into its `K` `;`-separated components (escape-aware), padding
+/// with empty slices when fewer are present.
+pub(crate) fn components<const K: usize>(value: &str) -> [&str; K] {
+    let bytes = value.as_bytes();
+    let mut out: [&str; K] = [""; K];
+    let mut start = 0;
 
-    for slot in ranges.iter_mut().take(K - 1) {
-        match next_unescaped(bytes, start..end, b';') {
+    for slot in out.iter_mut().take(K - 1) {
+        match next_unescaped(bytes, start, b';') {
             Some(semi) => {
-                *slot = start..semi;
+                *slot = &value[start..semi];
                 start = semi + 1;
             }
             None => {
-                *slot = start..end;
-                return ranges;
+                *slot = &value[start..];
+                return out;
             }
         }
     }
 
-    ranges[K - 1] = start..end;
-    ranges
+    out[K - 1] = &value[start..];
+    out
 }
 
-/// Split a component range into its `,`-separated value leaves (escape-aware),
-/// always yielding at least one (possibly empty) leaf.
-pub(crate) fn value_leaves(input: &str, component: Range<usize>) -> Vec<VcardLeaf> {
-    let bytes = input.as_bytes();
+/// Split a component into its `,`-separated value leaves (escape-aware), always
+/// yielding at least one (possibly empty) leaf.
+pub(crate) fn value_leaves(component: &str) -> Vec<VcardLeaf<'_>> {
+    let bytes = component.as_bytes();
     let mut leaves = Vec::new();
-    let mut start = component.start;
+    let mut start = 0;
 
-    while let Some(comma) = next_unescaped(bytes, start..component.end, b',') {
-        leaves.push(VcardLeaf::new(start..comma));
+    while let Some(comma) = next_unescaped(bytes, start, b',') {
+        leaves.push(VcardLeaf::from(&component[start..comma]));
         start = comma + 1;
     }
-    leaves.push(VcardLeaf::new(start..component.end));
+    leaves.push(VcardLeaf::from(&component[start..]));
 
     leaves
 }
 
-/// Split a parameter value range into its `,`-separated values, treating a
+/// Split a parameter value list into its `,`-separated value leaves, treating a
 /// comma inside double quotes as literal. Parameter values are quoted, not
 /// backslash-escaped, so this is the parameter counterpart to `value_leaves`.
-pub fn split_param_values(input: &str, range: Range<usize>) -> Vec<Range<usize>> {
-    let bytes = input.as_bytes();
-    let mut ranges = Vec::new();
-    let mut start = range.start;
+pub(crate) fn param_values(values: &str) -> Vec<VcardLeaf<'_>> {
+    let bytes = values.as_bytes();
+    let mut leaves = Vec::new();
+    let mut start = 0;
     let mut quoted = false;
 
-    for i in range.clone() {
-        match bytes[i] {
+    for (i, &byte) in bytes.iter().enumerate() {
+        match byte {
             b'"' => quoted = !quoted,
             b',' if !quoted => {
-                ranges.push(start..i);
+                leaves.push(VcardLeaf::from(&values[start..i]));
                 start = i + 1;
             }
             _ => {}
         }
     }
-    ranges.push(start..range.end);
+    leaves.push(VcardLeaf::from(&values[start..]));
 
-    ranges
+    leaves
 }
 
-/// Decode a list of value leaves into model values.
-pub(crate) fn decode_values<'a>(leaves: &'a [VcardLeaf], input: &'a str) -> Vec<Cow<'a, str>> {
-    leaves
-        .iter()
-        .map(|leaf| unescape(leaf.text(input)))
-        .collect()
+/// Decode value leaves into model values, resolving escapes.
+pub(crate) fn decode_values<'a>(leaves: &'a [VcardLeaf<'a>]) -> Vec<Cow<'a, str>> {
+    leaves.iter().map(|leaf| unescape(leaf.text())).collect()
+}
+
+/// Write `;`-separated components, each a list of `,`-separated value leaves,
+/// reproducing a structured value (the N or ADR component layout).
+pub(crate) fn write_components(
+    f: &mut Formatter<'_>,
+    components: &[&[VcardLeaf<'_>]],
+) -> fmt::Result {
+    for (i, component) in components.iter().enumerate() {
+        if i > 0 {
+            f.write_str(";")?;
+        }
+        write_values(f, component)?;
+    }
+
+    Ok(())
+}
+
+/// Write `,`-separated value leaves verbatim.
+pub(crate) fn write_values(f: &mut Formatter<'_>, values: &[VcardLeaf<'_>]) -> fmt::Result {
+    for (i, value) in values.iter().enumerate() {
+        if i > 0 {
+            f.write_str(",")?;
+        }
+        f.write_str(value.text())?;
+    }
+
+    Ok(())
 }
 
 /// Resolve the RFC 6350 escapes `\\` `\,` `\;` `\n` in a value, borrowing when
@@ -147,17 +159,17 @@ pub(crate) fn unescape(text: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
-/// The offset of the next unescaped `sep` byte in `range`, if any. A byte
-/// preceded by a backslash is escaped and never matches.
-fn next_unescaped(bytes: &[u8], range: Range<usize>, sep: u8) -> Option<usize> {
+/// The offset of the next unescaped `sep` byte at or after `start`, if any. A
+/// byte preceded by a backslash is escaped and never matches.
+fn next_unescaped(bytes: &[u8], start: usize, sep: u8) -> Option<usize> {
     let mut escaped = false;
 
-    for i in range {
+    for (i, &byte) in bytes.iter().enumerate().skip(start) {
         if escaped {
             escaped = false;
-        } else if bytes[i] == b'\\' {
+        } else if byte == b'\\' {
             escaped = true;
-        } else if bytes[i] == sep {
+        } else if byte == sep {
             return Some(i);
         }
     }

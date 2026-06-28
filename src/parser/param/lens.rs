@@ -11,19 +11,16 @@ pub trait VcardParamLens {
     const NAME: &'static str;
 
     /// The first parameter of this type in `params`, if present.
-    fn get<'a>(input: &str, params: &'a [VcardParamNode]) -> Option<&'a VcardParamNode> {
+    fn get<'t, 'a>(params: &'t [VcardParamNode<'a>]) -> Option<&'t VcardParamNode<'a>> {
         params
             .iter()
-            .find(|param| param.name.text(input).eq_ignore_ascii_case(Self::NAME))
+            .find(|param| param.name.text().eq_ignore_ascii_case(Self::NAME))
     }
 
     /// The first parameter of this type in `params`, mutably.
-    fn get_mut<'a>(
-        input: &str,
-        params: &'a mut [VcardParamNode],
-    ) -> Option<&'a mut VcardParamNode> {
+    fn get_mut<'t, 'a>(params: &'t mut [VcardParamNode<'a>]) -> Option<&'t mut VcardParamNode<'a>> {
         params
             .iter_mut()
-            .find(|param| param.name.text(input).eq_ignore_ascii_case(Self::NAME))
+            .find(|param| param.name.text().eq_ignore_ascii_case(Self::NAME))
     }
 }

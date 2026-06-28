@@ -1,39 +1,37 @@
-//! Parsing vCard text into an edition-ready tree of byte-range leaves.
+//! Parsing vCard text into an edition-ready, full-fidelity tree of leaves.
 //!
-//! [`VcardTree`] owns or borrows the source as a [`Cow`] and keeps each
-//! property as byte-range [`VcardLeaf`](leaf::VcardLeaf)s plus an optional
-//! per-leaf override. Rebuilding copies the source verbatim and splices in only
-//! the overridden ranges, so untouched bytes survive exactly and edits stay
-//! precise.
+//! [`VcardTree`] borrows the source `&str` and keeps each content line as
+//! [`VcardLeaf`](leaf::VcardLeaf)s holding a [`Cow`](alloc::borrow::Cow):
+//! borrowed slices when parsed, owned strings when built or edited. Serializing
+//! emits the invariant separators (`;` `=` `,` `:`) a node sits between, and
+//! keeps each line ending verbatim, so a parsed card rebuilds byte for byte and
+//! edits stay precise. The BEGIN, VERSION and END lines are kept as nodes too,
+//! so nothing is reconstructed by rule.
 //!
-//! A property is reached by type through the [`VcardPropLens`] trait
-//! (`card.prop_mut::<N>()`), and its parameters the same way through the
-//! [`VcardParamLens`](param::lens::VcardParamLens) trait
-//! (`...param_mut::<PID>()`); parameters are a `Vec` that can hold any of them,
-//! exactly like properties. The whole tree is walked by [`VcardTree::nodes`],
-//! an explicit-stack iterator that never recurses. The properties and
-//! parameters that need a custom representation get their own module under
-//! [`prop`] and [`param`]; everything else stays generic.
+//! A property is reached by type through the
+//! [`VcardPropLens`] trait (`card.prop_mut::<N>()`),
+//! and its parameters the same way through the
+//! [`VcardParamLens`](param::lens::VcardParamLens) trait (`...param_mut::<PID>()`);
+//! parameters are a `Vec` that can hold any of them, exactly like properties.
+//! The properties and parameters that need a custom representation get their own
+//! module under [`prop`] and [`param`]; everything else stays generic.
 
 pub mod decode;
 pub mod leaf;
 pub mod line;
-pub mod node;
 pub mod param;
 pub mod prop;
 pub mod utils;
 pub mod value;
 
-use core::fmt;
+use core::fmt::{self, Display, Formatter};
 
-use alloc::{borrow::Cow, string::ToString, vec::Vec};
+use alloc::{string::ToString, vec::Vec};
 
 use crate::{
     error::VcardParseError,
     parser::{
-        leaf::VcardLeaf,
         line::VcardLine,
-        node::{VcardNode, VcardNodes},
         prop::{
             lens::VcardPropLens, node::VcardPropNode, view::VcardPropView,
             view_mut::VcardPropViewMut,
@@ -42,152 +40,117 @@ use crate::{
     },
     rfc6350::{
         vcard::{BEGIN, END},
-        version::{VERSION, VcardVersion},
+        version::VERSION,
     },
 };
 
-/// A parsed card: the source it owns or borrows, its version and properties.
+/// A parsed card: its BEGIN, VERSION and END lines, and the property lines in
+/// between, all borrowing the source the leaves point at.
 pub struct VcardTree<'a> {
-    /// The source text the leaf ranges point into.
-    pub input: Cow<'a, str>,
-    /// The card version.
-    pub version: VcardVersion,
-    /// The properties, in source order.
-    pub props: Vec<VcardPropNode>,
+    /// The BEGIN line opening the card.
+    pub begin: VcardPropNode<'a>,
+    /// The VERSION line following BEGIN.
+    pub version: VcardPropNode<'a>,
+    /// The property lines, in source order.
+    pub props: Vec<VcardPropNode<'a>>,
+    /// The END line closing the card.
+    pub end: VcardPropNode<'a>,
 }
 
 impl<'a> VcardTree<'a> {
-    /// Parse exactly one card. Pass a `&str` to borrow the source or a `String`
-    /// to own it; the resulting tree is valid either way.
-    pub fn parse(input: impl Into<Cow<'a, str>>) -> Result<Self, VcardParseError> {
-        let input = input.into();
+    /// Parse exactly one card, borrowing `input` for the tree's lifetime.
+    pub fn parse(input: &'a str) -> Result<Self, VcardParseError> {
+        let (line, mut rest) = VcardLine::parse(input)?;
 
-        let mut version = VcardVersion::default();
-        let mut properties = Vec::new();
-        let mut state = State::Begin;
-        let mut offset = 0;
-
-        while offset < input.len() {
-            let line = VcardLine::parse(&input, offset)?;
-            let name = property_name(&input[line.prop.clone()]);
-            let value = &input[line.value.clone()];
-
-            match state {
-                State::Begin => {
-                    if !name.eq_ignore_ascii_case(BEGIN) {
-                        return Err(VcardParseError::ExpectedBegin(name.to_string()));
-                    }
-
-                    state = State::Version;
-                }
-                State::Version => {
-                    if !name.eq_ignore_ascii_case(VERSION) {
-                        return Err(VcardParseError::ExpectedVersion(name.to_string()));
-                    }
-
-                    version = match value {
-                        "2.1" => VcardVersion::V2_1,
-                        "3.0" => VcardVersion::V3_0,
-                        "4.0" => VcardVersion::V4_0,
-                        v => return Err(VcardParseError::UnsupportedVersion(v.to_string())),
-                    };
-
-                    state = State::Property;
-                }
-                State::Property => {
-                    if name.eq_ignore_ascii_case(END) {
-                        return Ok(Self {
-                            input,
-                            version,
-                            props: properties,
-                        });
-                    }
-
-                    properties.push(VcardPropNode::parse(&input, &line));
-                }
-            }
-
-            offset = line.crlf.end;
+        if !property_name(line.head).eq_ignore_ascii_case(BEGIN) {
+            return Err(VcardParseError::ExpectedBegin(line.head.to_string()));
         }
 
-        Err(VcardParseError::MissingEnd(input.to_string()))
-    }
+        let begin = VcardPropNode::parse(line.head, line.value, line.eol);
 
-    /// A depth-first walk over every leaf in the card, using an explicit stack
-    /// rather than recursion.
-    pub fn nodes(&self) -> VcardNodes<'_> {
-        VcardNodes {
-            stack: self.props.iter().rev().map(VcardNode::Property).collect(),
+        let (line, tail) = VcardLine::parse(rest)?;
+        rest = tail;
+
+        if !property_name(line.head).eq_ignore_ascii_case(VERSION) {
+            return Err(VcardParseError::ExpectedVersion(line.head.to_string()));
+        }
+
+        match line.value {
+            "2.1" | "3.0" | "4.0" => {}
+            other => return Err(VcardParseError::UnsupportedVersion(other.to_string())),
+        }
+
+        let version = VcardPropNode::parse(line.head, line.value, line.eol);
+
+        let mut props = Vec::new();
+
+        loop {
+            if rest.is_empty() {
+                return Err(VcardParseError::MissingEnd(input.to_string()));
+            }
+
+            let (line, tail) = VcardLine::parse(rest)?;
+            rest = tail;
+
+            let node = VcardPropNode::parse(line.head, line.value, line.eol);
+
+            if property_name(line.head).eq_ignore_ascii_case(END) {
+                return Ok(Self {
+                    begin,
+                    version,
+                    props,
+                    end: node,
+                });
+            }
+
+            props.push(node);
         }
     }
 
     /// The first property of type `L` (for example `card.prop::<N>()`), as a
     /// typed view over its name, parameters and value.
-    pub fn prop<L: VcardPropLens>(&self) -> Option<VcardPropView<'_, L::Target>> {
-        self.props.iter().find_map(|property| {
-            let input = &self.input;
-
-            if !property.name.text(input).eq_ignore_ascii_case(L::NAME) {
+    pub fn prop<L: VcardPropLens>(&self) -> Option<VcardPropView<'_, 'a, L::Target<'a>>> {
+        self.props.iter().find_map(|prop| {
+            if !prop.name.text().eq_ignore_ascii_case(L::NAME) {
                 return None;
             }
 
-            Some(VcardPropView {
-                input,
-                name: &property.name,
-                params: &property.params,
-                value: L::get(&property.value)?,
+            L::get(&prop.value).map(|value| VcardPropView {
+                name: &prop.name,
+                params: &prop.params,
+                value,
             })
         })
     }
 
     /// The first property of type `L`, as a fully mutable typed view.
-    pub fn prop_mut<L: VcardPropLens>(&mut self) -> Option<VcardPropViewMut<'_, L::Target>> {
+    pub fn prop_mut<L: VcardPropLens>(
+        &mut self,
+    ) -> Option<VcardPropViewMut<'_, 'a, L::Target<'a>>> {
         self.props.iter_mut().find_map(|prop| {
-            let input = &self.input;
-
-            if !prop.name.text(input).eq_ignore_ascii_case(L::NAME) {
+            if !prop.name.text().eq_ignore_ascii_case(L::NAME) {
                 return None;
             }
 
-            Some(VcardPropViewMut {
-                input,
+            L::get_mut(&mut prop.value).map(|value| VcardPropViewMut {
                 name: &mut prop.name,
                 params: &mut prop.params,
-                value: L::get_mut(&mut prop.value)?,
+                value,
             })
         })
     }
 }
 
-impl fmt::Display for VcardTree<'_> {
-    /// Rebuild the card text: the source verbatim, with each overridden leaf
-    /// spliced in over its original bytes.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut edits: Vec<_> = self.nodes().filter_map(VcardLeaf::edit).collect();
-        edits.sort_by_key(|(range, _)| range.start);
+impl Display for VcardTree<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.begin, self.version)?;
 
-        let input: &str = &self.input;
-        let mut cursor = 0;
-
-        for (range, text) in edits {
-            write!(f, "{}", &input[cursor..range.start])?;
-            write!(f, "{text}")?;
-            cursor = range.end;
+        for prop in &self.props {
+            write!(f, "{prop}")?;
         }
 
-        write!(f, "{}", &input[cursor..])
+        write!(f, "{}", self.end)
     }
-}
-
-/// The state machine position while walking a card.
-#[derive(Clone, Copy)]
-enum State {
-    /// Expecting a BEGIN line to open the card.
-    Begin,
-    /// Expecting the VERSION line right after BEGIN.
-    Version,
-    /// Collecting property lines until an END line.
-    Property,
 }
 
 #[cfg(test)]
@@ -228,11 +191,11 @@ mod tests {
             panic!("expected ADR as the second property");
         };
 
-        assert_eq!(adr.street[0].text(CARD), "1 Main St");
-        assert_eq!(adr.locality[0].text(CARD), "Town");
-        assert_eq!(adr.postal_code[0].text(CARD), "12345");
-        assert_eq!(adr.country[0].text(CARD), "US");
-        assert_eq!(adr.po_box[0].text(CARD), "");
+        assert_eq!(adr.street[0].text(), "1 Main St");
+        assert_eq!(adr.locality[0].text(), "Town");
+        assert_eq!(adr.postal_code[0].text(), "12345");
+        assert_eq!(adr.country[0].text(), "US");
+        assert_eq!(adr.po_box[0].text(), "");
     }
 
     #[test]
@@ -271,7 +234,7 @@ mod tests {
         let card = VcardTree::parse(CARD).unwrap();
 
         let n = card.prop::<N>().expect("an N property");
-        assert_eq!(n.value.given[0].text(CARD), "John");
+        assert_eq!(n.value.given[0].text(), "John");
 
         let name = n.decode();
         assert_eq!(name.family[0].as_ref(), "Doe");
@@ -291,12 +254,5 @@ mod tests {
         n.param_mut::<PID>().expect("a PID parameter").values[0].replace("2");
 
         assert!(card.to_string().contains("N;PID=2:Doe;John;;;\r\n"));
-    }
-
-    #[test]
-    fn the_leaf_walk_visits_every_leaf() {
-        let card = VcardTree::parse(CARD).unwrap();
-        // N(name+5) + ADR(name+7) + KIND(name+1) + FN(name+1) = 6+8+2+2
-        assert_eq!(card.nodes().count(), 18);
     }
 }

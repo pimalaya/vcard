@@ -2,15 +2,15 @@
 //!
 //! [`rfc6350`] holds the typed model. The `parser` feature adds
 //! [`parser::VcardTree`], an edition-ready tree that keeps each property as
-//! byte-range leaves over the source plus an optional per-leaf override,
+//! leaves borrowing the source (or owning edits),
 //! so a card rebuilds byte-for-byte or with precise edits. The `builder`
 //! feature adds the model's `Display` / to_string encoding. Both features are
 //! on by default, and the model alone needs neither.
 //!
 //! The structured value types (`VcardName`, `VcardAddress`, ...) and the
 //! extension RFC modules are decode targets for typed access. Early draft:
-//! only the N property is decomposed into typed leaves; every other property
-//! keeps its value as one raw leaf, and there is no line unfolding yet.
+//! only the N property is decomposed into typed components; every other property
+//! keeps its value as one raw leaf; there is no line unfolding yet.
 
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]

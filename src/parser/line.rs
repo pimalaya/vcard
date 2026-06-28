@@ -1,47 +1,47 @@
-use core::ops::Range;
-
 use alloc::string::ToString;
 
 use crate::error::VcardParseError;
 
-/// The byte ranges that make up one content line within the input.
-pub(crate) struct VcardLine {
+/// One tokenised content line: the head (name and parameters, before the
+/// colon), the value (after the colon), and the line ending, all borrowed from
+/// the source.
+pub(crate) struct VcardLine<'a> {
     /// The property name and parameters, before the colon.
-    pub(crate) prop: Range<usize>,
-    /// The value, after the colon and before the line break.
-    pub(crate) value: Range<usize>,
-    /// The line break (CR?LF) terminating the line.
-    pub(crate) crlf: Range<usize>,
+    pub(crate) head: &'a str,
+    /// The value, after the colon and before the line ending.
+    pub(crate) value: &'a str,
+    /// The line ending that terminated the line (`\r\n` or `\n`).
+    pub(crate) eol: &'a str,
 }
 
-impl VcardLine {
-    /// Tokenise the line that begins at `start` into its name, value and
-    /// line-break ranges, all absolute into `input`.
-    pub(crate) fn parse(input: &str, start: usize) -> Result<Self, VcardParseError> {
-        let bytes = input.as_bytes();
+impl<'a> VcardLine<'a> {
+    /// Tokenise the line at the start of `rest`, returning the line and the
+    /// input that follows it.
+    pub(crate) fn parse(rest: &'a str) -> Result<(Self, &'a str), VcardParseError> {
+        let bytes = rest.as_bytes();
 
-        let Some(lf) = memchr::memchr(b'\n', &bytes[start..]) else {
-            return Err(VcardParseError::MissingCrlf(input[start..].to_string()));
+        let Some(lf) = memchr::memchr(b'\n', bytes) else {
+            return Err(VcardParseError::MissingCrlf(rest.to_string()));
         };
 
-        let lf = start + lf;
+        let tail = &rest[lf + 1..];
 
-        let crlf = match lf > start && bytes[lf - 1] == b'\r' {
-            true => lf - 1..lf + 1,
-            false => lf..lf + 1,
+        let (content, eol) = if lf > 0 && bytes[lf - 1] == b'\r' {
+            (&rest[..lf - 1], &rest[lf - 1..lf + 1])
+        } else {
+            (&rest[..lf], &rest[lf..lf + 1])
         };
 
-        let Some(colon) = memchr::memchr(b':', &bytes[start..crlf.start]) else {
-            let prop = input[start..crlf.start].to_string();
-            return Err(VcardParseError::MissingPropertyColon(prop));
+        let Some(colon) = memchr::memchr(b':', content.as_bytes()) else {
+            return Err(VcardParseError::MissingPropertyColon(content.to_string()));
         };
 
-        let colon = start + colon;
+        let line = Self {
+            head: &content[..colon],
+            value: &content[colon + 1..],
+            eol,
+        };
 
-        Ok(Self {
-            prop: start..colon,
-            value: colon + 1..crlf.start,
-            crlf,
-        })
+        Ok((line, tail))
     }
 }

@@ -1,31 +1,30 @@
-use alloc::{vec, vec::Vec};
+use core::fmt::{self, Display, Formatter};
 
 use crate::parser::{
     leaf::VcardLeaf,
     prop::{adr::VcardAddressNode, kind::VcardKindNode, n::VcardNameNode},
 };
 
-/// A property value: typed leaves when the property is modelled, otherwise
+/// A property value: typed components when the property is modelled, otherwise
 /// the whole value as one raw leaf.
-pub enum VcardValueNode {
+pub enum VcardValueNode<'a> {
     /// The N property, as its five name components.
-    Name(VcardNameNode),
+    Name(VcardNameNode<'a>),
     /// The ADR property, as its seven address components.
-    Address(VcardAddressNode),
+    Address(VcardAddressNode<'a>),
     /// The KIND property, as a single value leaf.
-    Kind(VcardKindNode),
-    /// Any other property: the value as one leaf.
-    Leaf(VcardLeaf),
+    Kind(VcardKindNode<'a>),
+    /// Any other property: the value as one raw leaf.
+    Leaf(VcardLeaf<'a>),
 }
 
-impl VcardValueNode {
-    /// Every leaf of the value, in source order.
-    pub(crate) fn leaves(&self) -> Vec<&VcardLeaf> {
+impl Display for VcardValueNode<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            VcardValueNode::Name(name) => name.leaves(),
-            VcardValueNode::Address(adr) => adr.leaves(),
-            VcardValueNode::Kind(kind) => vec![kind.leaf()],
-            VcardValueNode::Leaf(leaf) => vec![leaf],
+            VcardValueNode::Name(name) => write!(f, "{name}"),
+            VcardValueNode::Address(adr) => write!(f, "{adr}"),
+            VcardValueNode::Kind(kind) => write!(f, "{kind}"),
+            VcardValueNode::Leaf(leaf) => f.write_str(leaf.text()),
         }
     }
 }

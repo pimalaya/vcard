@@ -1,6 +1,6 @@
 //! The N property: its marker type, parsed value and decoding.
 
-use core::ops::Range;
+use core::fmt::{self, Display, Formatter};
 
 use alloc::vec::Vec;
 
@@ -9,7 +9,7 @@ use crate::{
         decode::VcardDecode,
         leaf::VcardLeaf,
         prop::lens::VcardPropLens,
-        utils::{components, decode_values, value_leaves},
+        utils::{components, decode_values, value_leaves, write_components},
         value::VcardValueNode,
     },
     rfc6350::prop::n::{N, VcardName},
@@ -24,23 +24,23 @@ pub struct N {}
 /// The N property as its five `;`-separated components, each a list of
 /// `,`-separated value leaves.
 #[derive(Clone, Debug)]
-pub struct VcardNameNode {
+pub struct VcardNameNode<'a> {
     /// Family name values.
-    pub family: Vec<VcardLeaf>,
+    pub family: Vec<VcardLeaf<'a>>,
     /// Given name values.
-    pub given: Vec<VcardLeaf>,
+    pub given: Vec<VcardLeaf<'a>>,
     /// Additional name values.
-    pub additional: Vec<VcardLeaf>,
+    pub additional: Vec<VcardLeaf<'a>>,
     /// Honorific prefix values.
-    pub prefixes: Vec<VcardLeaf>,
+    pub prefixes: Vec<VcardLeaf<'a>>,
     /// Honorific suffix values.
-    pub suffixes: Vec<VcardLeaf>,
+    pub suffixes: Vec<VcardLeaf<'a>>,
 }
 
-impl VcardNameNode {
-    pub(crate) fn parse(input: &str, value: Range<usize>) -> Self {
+impl<'a> VcardNameNode<'a> {
+    pub(crate) fn parse(value: &'a str) -> Self {
         let [family, given, additional, prefixes, suffixes] =
-            components::<5>(input, value).map(|component| value_leaves(input, component));
+            components::<5>(value).map(value_leaves);
 
         Self {
             family,
@@ -50,34 +50,36 @@ impl VcardNameNode {
             suffixes,
         }
     }
+}
 
-    pub(crate) fn leaves(&self) -> Vec<&VcardLeaf> {
-        [
-            &self.family,
-            &self.given,
-            &self.additional,
-            &self.prefixes,
-            &self.suffixes,
-        ]
-        .into_iter()
-        .flatten()
-        .collect()
+impl Display for VcardNameNode<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write_components(
+            f,
+            &[
+                &self.family,
+                &self.given,
+                &self.additional,
+                &self.prefixes,
+                &self.suffixes,
+            ],
+        )
     }
 }
 
 impl VcardPropLens for N {
     const NAME: &'static str = N;
 
-    type Target = VcardNameNode;
+    type Target<'a> = VcardNameNode<'a>;
 
-    fn get(value: &VcardValueNode) -> Option<&Self::Target> {
+    fn get<'t, 'a>(value: &'t VcardValueNode<'a>) -> Option<&'t VcardNameNode<'a>> {
         match value {
             VcardValueNode::Name(name) => Some(name),
             _ => None,
         }
     }
 
-    fn get_mut(value: &mut VcardValueNode) -> Option<&mut Self::Target> {
+    fn get_mut<'t, 'a>(value: &'t mut VcardValueNode<'a>) -> Option<&'t mut VcardNameNode<'a>> {
         match value {
             VcardValueNode::Name(name) => Some(name),
             _ => None,
@@ -85,16 +87,19 @@ impl VcardPropLens for N {
     }
 }
 
-impl<'a> VcardDecode<'a> for VcardNameNode {
-    type Output = VcardName<'a>;
+impl VcardDecode for VcardNameNode<'_> {
+    type Output<'o>
+        = VcardName<'o>
+    where
+        Self: 'o;
 
-    fn decode(&'a self, input: &'a str) -> VcardName<'a> {
+    fn decode(&self) -> VcardName<'_> {
         VcardName {
-            family: decode_values(&self.family, input),
-            given: decode_values(&self.given, input),
-            additional: decode_values(&self.additional, input),
-            prefixes: decode_values(&self.prefixes, input),
-            suffixes: decode_values(&self.suffixes, input),
+            family: decode_values(&self.family),
+            given: decode_values(&self.given),
+            additional: decode_values(&self.additional),
+            prefixes: decode_values(&self.prefixes),
+            suffixes: decode_values(&self.suffixes),
         }
     }
 }

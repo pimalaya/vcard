@@ -1,6 +1,6 @@
 //! The KIND property: its marker type, parsed value and decoding.
 
-use core::ops::Range;
+use core::fmt::{self, Display, Formatter};
 
 use crate::{
     parser::{
@@ -15,36 +15,38 @@ pub struct KIND {}
 
 /// The KIND property as its single value leaf.
 #[derive(Clone, Debug)]
-pub struct VcardKindNode {
+pub struct VcardKindNode<'a> {
     /// The kind value leaf.
-    pub value: VcardLeaf,
+    pub value: VcardLeaf<'a>,
 }
 
-impl VcardKindNode {
-    pub(crate) fn parse(value: Range<usize>) -> Self {
+impl<'a> VcardKindNode<'a> {
+    pub(crate) fn parse(value: &'a str) -> Self {
         Self {
-            value: VcardLeaf::new(value),
+            value: VcardLeaf::from(value),
         }
     }
+}
 
-    pub(crate) fn leaf(&self) -> &VcardLeaf {
-        &self.value
+impl Display for VcardKindNode<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.value.text())
     }
 }
 
 impl VcardPropLens for KIND {
     const NAME: &'static str = KIND;
 
-    type Target = VcardKindNode;
+    type Target<'a> = VcardKindNode<'a>;
 
-    fn get(value: &VcardValueNode) -> Option<&Self::Target> {
+    fn get<'t, 'a>(value: &'t VcardValueNode<'a>) -> Option<&'t VcardKindNode<'a>> {
         match value {
             VcardValueNode::Kind(kind) => Some(kind),
             _ => None,
         }
     }
 
-    fn get_mut(value: &mut VcardValueNode) -> Option<&mut Self::Target> {
+    fn get_mut<'t, 'a>(value: &'t mut VcardValueNode<'a>) -> Option<&'t mut VcardKindNode<'a>> {
         match value {
             VcardValueNode::Kind(kind) => Some(kind),
             _ => None,
@@ -52,11 +54,14 @@ impl VcardPropLens for KIND {
     }
 }
 
-impl<'a> VcardDecode<'a> for VcardKindNode {
-    type Output = VcardKind<'a>;
+impl VcardDecode for VcardKindNode<'_> {
+    type Output<'o>
+        = VcardKind<'o>
+    where
+        Self: 'o;
 
-    fn decode(&'a self, input: &'a str) -> VcardKind<'a> {
-        let text = self.value.text(input);
+    fn decode(&self) -> VcardKind<'_> {
+        let text = self.value.text();
 
         if text.eq_ignore_ascii_case("individual") {
             VcardKind::Individual
