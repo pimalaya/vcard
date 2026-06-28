@@ -23,10 +23,6 @@ const EXPECTED_PARSE_FAILURES: &[&str] = &[
     "outlook-2003.vcf",
     "outlook-2007.vcf",
     "John_Doe_MS_OUTLOOK.vcf",
-    // A bare blank line inside the card (after the BASE64 PHOTO) has no colon.
-    "John_Doe_BLACK_BERRY.vcf",
-    // No trailing line break after the final `END:VCARD`.
-    "John_Doe_EVOLUTION.vcf",
 ];
 
 fn corpus_dir() -> PathBuf {

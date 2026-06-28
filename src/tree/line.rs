@@ -11,9 +11,10 @@
 //! decoding of the value belong to the lens markers and the
 //! [`decode`](crate::tree::decode) / [`encode`](crate::tree::encode) bridges.
 //!
-//! Folding is normalised away on parse, not preserved: a folded line unfolds to
-//! its logical content and serializes unfolded. An already-unfolded card still
-//! round-trips byte for byte.
+//! Folding and stray blank lines are normalised away on parse, not preserved: a
+//! folded line unfolds to its logical content, blank lines are dropped, and the
+//! final line needs no trailing break. A clean, unfolded card still round-trips
+//! byte for byte.
 
 use core::fmt;
 
@@ -62,7 +63,19 @@ impl<'a> VcardLine<'a> {
     /// unfolding drops them. A line with no folds borrows the source; a folded
     /// line is rebuilt owned, since its bytes are no longer contiguous.
     pub fn take(rest: &'a str) -> Result<(Self, &'a str), VcardParseError> {
-        let (first, eol, mut tail) = physical_line(rest)?;
+        // Skip blank lines: real-world exports sometimes emit them.
+        let mut head = rest;
+        let (first, eol, mut tail) = loop {
+            if head.is_empty() {
+                return Err(VcardParseError::MissingCrlf(rest.to_string()));
+            }
+            let (content, eol, next) = physical_line(head);
+            if content.is_empty() {
+                head = next;
+                continue;
+            }
+            break (content, eol, next);
+        };
 
         if !starts_with_wsp(tail) {
             return Ok((Self::parse(first, eol)?, tail));
@@ -72,10 +85,10 @@ impl<'a> VcardLine<'a> {
         let mut last_eol = eol;
 
         while starts_with_wsp(tail) {
-            let (continuation, eol, rest) = physical_line(&tail[1..])?;
+            let (continuation, eol, next) = physical_line(&tail[1..]);
             logical.push_str(continuation);
             last_eol = eol;
-            tail = rest;
+            tail = next;
         }
 
         let mut line = Self::parse(&logical, "")?.into_static();
@@ -176,12 +189,13 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
 }
 
 /// Split the first physical line off `rest`: its content (without the line
-/// ending), its line ending, and the remaining input.
-fn physical_line(rest: &str) -> Result<(&str, &str, &str), VcardParseError> {
+/// ending), its line ending, and the remaining input. A final line with no
+/// trailing break is taken whole, with an empty ending.
+fn physical_line(rest: &str) -> (&str, &str, &str) {
     let bytes = rest.as_bytes();
 
     let Some(lf) = memchr::memchr(b'\n', bytes) else {
-        return Err(VcardParseError::MissingCrlf(rest.to_string()));
+        return (rest, "", "");
     };
 
     let tail = &rest[lf + 1..];
@@ -192,7 +206,7 @@ fn physical_line(rest: &str) -> Result<(&str, &str, &str), VcardParseError> {
         (&rest[..lf], &rest[lf..lf + 1])
     };
 
-    Ok((content, eol, tail))
+    (content, eol, tail)
 }
 
 /// Whether `rest` begins with a folding whitespace (space or tab).
@@ -246,5 +260,20 @@ mod tests {
         // only the first space is the fold marker; the rest is value content.
         let (line, _) = VcardLine::take("NOTE:foo\r\n  bar\r\n").unwrap();
         assert_eq!(line.raw_value(), "foo bar");
+    }
+
+    #[test]
+    fn skips_blank_lines_before_the_next_line() {
+        let (line, rest) = VcardLine::take("\r\n\r\nFN:John\r\nEND:VCARD\r\n").unwrap();
+        assert_eq!(line.name.get(), "FN");
+        assert_eq!(rest, "END:VCARD\r\n");
+    }
+
+    #[test]
+    fn tolerates_a_missing_final_line_break() {
+        let (line, rest) = VcardLine::take("END:VCARD").unwrap();
+        assert_eq!(line.name.get(), "END");
+        assert_eq!(line.to_string(), "END:VCARD");
+        assert_eq!(rest, "");
     }
 }

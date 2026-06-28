@@ -271,4 +271,18 @@ mod tests {
         let reparsed = VcardCst::parse(&output).unwrap();
         assert_eq!(reparsed.to_string(), output);
     }
+
+    #[test]
+    fn tolerates_blank_lines_and_a_missing_final_break() {
+        // a stray blank line after VERSION, and no trailing break after END.
+        let input = "BEGIN:VCARD\r\nVERSION:4.0\r\n\r\nFN:John\r\nEND:VCARD";
+        let card = VcardCst::parse(input).unwrap();
+
+        assert_eq!(card.decode().properties.len(), 1);
+        // the blank line is dropped; the missing final break is preserved.
+        assert_eq!(
+            card.to_string(),
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John\r\nEND:VCARD",
+        );
+    }
 }
