@@ -57,11 +57,13 @@
 //! [`VcardParamLens`](tree::lens::VcardParamLens)): a marker
 //! ([`tree::prop::n::N`], [`tree::param::PID`]) is a zero-sized type pinning a
 //! wire name to the decoded value it produces, plus the `decode`/`encode`
-//! projections. Most properties share a value kind
+//! projections. Each property has its own hand-written module under
+//! [`tree::prop`]; most share a value kind
 //! ([`VcardText`](value::text::VcardText), [`VcardUri`](value::uri::VcardUri),
-//! ...), so their markers are macro-generated; the few structured values
-//! ([`N`](value::n::VcardN), [`ADR`](value::adr::VcardAdr), ...) get bespoke
-//! types. The wire names have a single source of truth: the `VCARD_*` consts in
+//! ...) and the generic [`VcardValueCursor`](tree::cursor::VcardValueCursor),
+//! while the structured ones ([`N`](value::n::VcardN),
+//! [`ADR`](value::adr::VcardAdr), ...) carry a cursor that names their
+//! components. The wire names have a single source of truth: the `VCARD_*` consts in
 //! [`prop`] and [`param`].
 //!
 //! ## Invariants

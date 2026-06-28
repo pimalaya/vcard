@@ -66,7 +66,7 @@ mod tests {
 
     use crate::tree::{
         cst::VcardCst,
-        prop::{ADR, FN},
+        prop::{adr::ADR, r#fn::FN},
     };
 
     #[test]
@@ -82,9 +82,7 @@ mod tests {
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nADR:;;Old St;;;;\r\nEND:VCARD\r\n")
                 .unwrap();
-        card.prop_mut::<ADR>()
-            .unwrap()
-            .set_component(2, &["New St"]);
+        card.prop_mut::<ADR>().unwrap().set_street(&["New St"]);
         assert!(card.to_string().contains("ADR:;;New St;;;;\r\n"));
     }
 }
