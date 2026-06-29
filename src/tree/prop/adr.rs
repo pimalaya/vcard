@@ -9,11 +9,7 @@ use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
     prop::VCARD_ADR,
-    tree::{
-        lens::{VcardParamLens, VcardPropLens},
-        line::VcardLine,
-        value::VcardValueNode,
-    },
+    tree::{line::VcardLine, param::VcardParamLens, prop::VcardPropLens, value::VcardValueNode},
     value::adr::VcardAdr,
 };
 

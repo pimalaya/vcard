@@ -30,6 +30,22 @@ use alloc::vec::Vec;
 
 use crate::tree::leaf::VcardLeaf;
 
+/// A parameter identified by type, projecting a generic syntax parameter onto a
+/// decoded value type and back.
+pub trait VcardParamLens {
+    /// The wire name to look up by.
+    const NAME: &'static str;
+
+    /// The decoded value type, borrowing the syntax node for reads.
+    type Target<'v>;
+
+    /// Project the generic syntax parameter onto the decoded type.
+    fn decode<'v>(param: &'v VcardParamNode<'_>) -> Self::Target<'v>;
+
+    /// Encode a decoded value back into a generic syntax parameter (owned).
+    fn encode(decoded: &Self::Target<'_>) -> VcardParamNode<'static>;
+}
+
 /// One raw parameter: a name and its `,`-separated raw values (empty when the
 /// parameter has no `=` list). The syntactic peer of the decoded
 /// [`VcardParam`](crate::param::VcardParam).
@@ -114,7 +130,7 @@ mod tests {
     use alloc::{borrow::Cow, string::ToString, vec};
 
     use crate::tree::{
-        lens::VcardParamLens,
+        param::VcardParamLens,
         param::{VcardParamNode, language::LANGUAGE, pid::PID},
     };
 

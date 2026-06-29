@@ -7,11 +7,7 @@ use alloc::borrow::Cow;
 
 use crate::{
     prop::VCARD_CLIENTPIDMAP,
-    tree::{
-        lens::{VcardParamLens, VcardPropLens},
-        line::VcardLine,
-        value::VcardValueNode,
-    },
+    tree::{line::VcardLine, param::VcardParamLens, prop::VcardPropLens, value::VcardValueNode},
     value::client_pid_map::VcardClientPidMap,
 };
 

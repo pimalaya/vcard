@@ -25,9 +25,9 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::{
-    error::VcardParseError,
-    tree::{leaf::VcardLeaf, lens::VcardParamLens, param::VcardParamNode, value::VcardValueNode},
+use crate::tree::{
+    error::VcardParseError, leaf::VcardLeaf, param::VcardParamLens, param::VcardParamNode,
+    value::VcardValueNode,
 };
 
 /// One raw content line: a name, parameters, a value and the line ending.

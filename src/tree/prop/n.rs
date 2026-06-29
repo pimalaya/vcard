@@ -2,8 +2,8 @@
 //!
 //! The `N` property lens and its bespoke edit cursor.
 //!
-//! `N` is the showcase of the structured-value path: unlike the macro-generated
-//! lenses in the parent module, it pairs [`VcardN`] with a dedicated
+//! `N` is the showcase of the structured-value path: unlike the scalar/list
+//! lenses that use the generic cursor, it pairs [`VcardN`] with a dedicated
 //! [`NCursor`] that names the five components, so callers write
 //! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. The
 //! decode/encode projections still delegate to [`VcardN`]'s inherent methods (in
@@ -15,11 +15,7 @@ use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
     prop::VCARD_N,
-    tree::{
-        lens::{VcardParamLens, VcardPropLens},
-        line::VcardLine,
-        value::VcardValueNode,
-    },
+    tree::{line::VcardLine, param::VcardParamLens, prop::VcardPropLens, value::VcardValueNode},
     value::n::VcardN,
 };
 

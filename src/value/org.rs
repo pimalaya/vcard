@@ -13,3 +13,9 @@ use alloc::{borrow::Cow, vec::Vec};
 /// The decoded ORG value: organization units, broadest first.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VcardOrg<'a>(pub Vec<Cow<'a, str>>);
+
+impl<'a> From<Vec<Cow<'a, str>>> for VcardOrg<'a> {
+    fn from(units: Vec<Cow<'a, str>>) -> Self {
+        Self(units)
+    }
+}

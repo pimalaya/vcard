@@ -18,9 +18,8 @@ use core::fmt;
 use alloc::{string::ToString, vec::Vec};
 
 use crate::{
-    error::VcardParseError,
     prop::VcardProp,
-    tree::{lens::VcardPropLens, line::VcardLine},
+    tree::{error::VcardParseError, line::VcardLine, prop::VcardPropLens},
     vcard::{VCARD, VCARD_BEGIN, VCARD_END},
     version::{VCARD_VERSION, VCARD_VERSION_40},
 };

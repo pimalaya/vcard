@@ -9,8 +9,26 @@
 //! knowledge, like every other type in [`crate::value`]; the owning property's
 //! wire name lives on [`crate::prop::VcardProp::name`].
 
-use alloc::borrow::Cow;
+use alloc::{borrow::Cow, string::String};
 
 /// A decoded URI value, kept verbatim.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VcardUri<'a>(pub Cow<'a, str>);
+
+impl<'a> From<&'a str> for VcardUri<'a> {
+    fn from(value: &'a str) -> Self {
+        Self(Cow::Borrowed(value))
+    }
+}
+
+impl From<String> for VcardUri<'_> {
+    fn from(value: String) -> Self {
+        Self(Cow::Owned(value))
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for VcardUri<'a> {
+    fn from(value: Cow<'a, str>) -> Self {
+        Self(value)
+    }
+}

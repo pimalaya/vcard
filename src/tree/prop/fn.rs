@@ -4,7 +4,7 @@
 
 use crate::{
     prop::VCARD_FN,
-    tree::{cursor::VcardValueCursor, lens::VcardPropLens, line::VcardLine, value::VcardValueNode},
+    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
     value::text::VcardText,
 };
 

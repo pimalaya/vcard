@@ -11,18 +11,14 @@
 
 use alloc::borrow::Cow;
 
-/// The VERSION line name.
 pub const VCARD_VERSION: &str = "VERSION";
-/// The vCard 2.1 wire string.
 pub const VCARD_VERSION_21: &str = "2.1";
-/// The vCard 3.0 wire string.
 pub const VCARD_VERSION_30: &str = "3.0";
-/// The vCard 4.0 wire string.
 pub const VCARD_VERSION_40: &str = "4.0";
 
 /// The card version: a known value, or `Unknown` for anything else. The known
-/// variants are backed by the `VCARD_VERSION_*` consts, so the wire strings have
-/// a single source of truth in both directions.
+/// variants are backed by the `VCARD_VERSION_*` consts, so the wire strings
+/// have a single source of truth in both directions.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum VcardVersion<'a> {
     /// vCard 2.1.

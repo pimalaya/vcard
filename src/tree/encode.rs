@@ -23,7 +23,7 @@ use alloc::{
 };
 
 use crate::{
-    param::{self, VcardParam},
+    param::VcardParam,
     prop::VcardProp,
     tree::{
         cst::VcardCst, leaf::VcardLeaf, line::VcardLine, param::VcardParamNode,
@@ -89,19 +89,22 @@ impl VcardProp<'_> {
 impl VcardParam<'_> {
     /// Encode the parameter into a raw parameter node, dispatching on its kind.
     pub fn encode(&self) -> VcardParamNode<'static> {
+        use crate::param::*;
+
         match self {
-            VcardParam::Language(v) => param_scalar(param::VCARD_LANGUAGE, v),
-            VcardParam::Value(v) => param_scalar(param::VCARD_VALUE, v),
-            VcardParam::Pref(v) => param_scalar(param::VCARD_PREF, v),
-            VcardParam::AltId(v) => param_scalar(param::VCARD_ALTID, v),
-            VcardParam::Pid(vs) => param_list(param::VCARD_PID, vs),
-            VcardParam::Type(vs) => param_list(param::VCARD_TYPE, vs),
-            VcardParam::MediaType(v) => param_scalar(param::VCARD_MEDIATYPE, v),
-            VcardParam::CalScale(v) => param_scalar(param::VCARD_CALSCALE, v),
-            VcardParam::SortAs(vs) => param_list(param::VCARD_SORT_AS, vs),
-            VcardParam::Geo(v) => param_scalar(param::VCARD_GEO, v),
-            VcardParam::Tz(v) => param_scalar(param::VCARD_TZ, v),
-            VcardParam::Label(v) => param_scalar(param::VCARD_LABEL, v),
+            VcardParam::Language(v) => param_scalar(VCARD_LANGUAGE, v),
+            VcardParam::Value(v) => param_scalar(VCARD_VALUE, v),
+            VcardParam::Pref(v) => param_scalar(VCARD_PREF, v),
+            VcardParam::AltId(v) => param_scalar(VCARD_ALTID, v),
+            VcardParam::Pid(vs) => param_list(VCARD_PID, vs),
+            VcardParam::Type(vs) => param_list(VCARD_TYPE, vs),
+            VcardParam::MediaType(v) => param_scalar(VCARD_MEDIATYPE, v),
+            VcardParam::CalScale(v) => param_scalar(VCARD_CALSCALE, v),
+            VcardParam::SortAs(vs) => param_list(VCARD_SORT_AS, vs),
+            VcardParam::Geo(v) => param_scalar(VCARD_GEO, v),
+            VcardParam::Tz(v) => param_scalar(VCARD_TZ, v),
+            VcardParam::Label(v) => param_scalar(VCARD_LABEL, v),
+
             VcardParam::Unknown { name, values } => VcardParamNode {
                 name: VcardLeaf::from(name.to_string()),
                 values: values

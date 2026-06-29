@@ -10,12 +10,36 @@
 //! through any property that shares the kind. The wire name that distinguishes
 //! those properties is carried by [`crate::prop::VcardProp::name`], not here.
 
-use alloc::{borrow::Cow, vec::Vec};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 
 /// A single decoded text value (unescaped).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VcardText<'a>(pub Cow<'a, str>);
 
+impl<'a> From<&'a str> for VcardText<'a> {
+    fn from(value: &'a str) -> Self {
+        Self(Cow::Borrowed(value))
+    }
+}
+
+impl From<String> for VcardText<'_> {
+    fn from(value: String) -> Self {
+        Self(Cow::Owned(value))
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for VcardText<'a> {
+    fn from(value: Cow<'a, str>) -> Self {
+        Self(value)
+    }
+}
+
 /// A decoded comma-separated text list (each item unescaped).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VcardTextList<'a>(pub Vec<Cow<'a, str>>);
+
+impl<'a> From<Vec<Cow<'a, str>>> for VcardTextList<'a> {
+    fn from(values: Vec<Cow<'a, str>>) -> Self {
+        Self(values)
+    }
+}

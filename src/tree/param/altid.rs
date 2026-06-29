@@ -7,7 +7,7 @@ use alloc::{borrow::Cow, string::ToString, vec};
 
 use crate::{
     param::VCARD_ALTID,
-    tree::{decode::unescape, leaf::VcardLeaf, lens::VcardParamLens, param::VcardParamNode},
+    tree::{decode::unescape, leaf::VcardLeaf, param::VcardParamLens, param::VcardParamNode},
 };
 
 /// The `ALTID` parameter lens.

@@ -14,11 +14,8 @@ use alloc::vec::Vec;
 
 use crate::{prop::VcardProp, version::VcardVersion};
 
-/// The component name, used in `BEGIN:VCARD` / `END:VCARD`.
 pub const VCARD: &str = "VCARD";
-/// The BEGIN line name.
 pub const VCARD_BEGIN: &str = "BEGIN";
-/// The END line name.
 pub const VCARD_END: &str = "END";
 
 /// A decoded card: its version and its properties, in source order.

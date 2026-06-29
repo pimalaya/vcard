@@ -16,8 +16,8 @@
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::{
-    param::{self, VcardParam},
-    prop::{self, VcardProp},
+    param::VcardParam,
+    prop::VcardProp,
     tree::{cst::VcardCst, line::VcardLine, param::VcardParamNode, value::VcardValueNode},
     value::{
         VcardUnknownValue, VcardValue,
@@ -52,51 +52,41 @@ impl VcardLine<'_> {
         let params = self.params.iter().map(VcardParamNode::decode).collect();
         let node = &self.value;
 
-        let value = match name.to_ascii_uppercase().as_str() {
-            prop::VCARD_FN
-            | prop::VCARD_KIND
-            | prop::VCARD_XML
-            | prop::VCARD_TEL
-            | prop::VCARD_EMAIL
-            | prop::VCARD_TITLE
-            | prop::VCARD_ROLE
-            | prop::VCARD_NOTE
-            | prop::VCARD_PRODID
-            | prop::VCARD_TZ => VcardValue::Text(VcardText::decode(node)),
-            prop::VCARD_NICKNAME | prop::VCARD_CATEGORIES => {
-                VcardValue::TextList(VcardTextList::decode(node))
+        let value = {
+            use crate::prop::*;
+
+            match name.to_ascii_uppercase().as_str() {
+                VCARD_FN | VCARD_KIND | VCARD_XML | VCARD_TEL | VCARD_EMAIL | VCARD_TITLE
+                | VCARD_ROLE | VCARD_NOTE | VCARD_PRODID | VCARD_TZ => {
+                    VcardValue::Text(VcardText::decode(node))
+                }
+                VCARD_NICKNAME | VCARD_CATEGORIES => {
+                    VcardValue::TextList(VcardTextList::decode(node))
+                }
+                VCARD_SOURCE | VCARD_PHOTO | VCARD_IMPP | VCARD_LOGO | VCARD_MEMBER
+                | VCARD_RELATED | VCARD_SOUND | VCARD_UID | VCARD_GEO | VCARD_URL | VCARD_KEY
+                | VCARD_FBURL | VCARD_CALADRURI | VCARD_CALURI => {
+                    VcardValue::Uri(VcardUri::decode(node))
+                }
+                VCARD_BDAY | VCARD_ANNIVERSARY => {
+                    VcardValue::DateAndOrTime(VcardDateAndOrTime::decode(node))
+                }
+                VCARD_REV => VcardValue::Timestamp(VcardTimestamp::decode(node)),
+                VCARD_LANG => VcardValue::LanguageTag(VcardLanguageTag::decode(node)),
+                VCARD_N => VcardValue::N(VcardN::decode(node)),
+                VCARD_ADR => VcardValue::Adr(VcardAdr::decode(node)),
+                VCARD_GENDER => VcardValue::Gender(VcardGender::decode(node)),
+                VCARD_ORG => VcardValue::Org(VcardOrg::decode(node)),
+                VCARD_CLIENTPIDMAP => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
+
+                _ => VcardValue::Unknown(VcardUnknownValue {
+                    components: node
+                        .components
+                        .iter()
+                        .map(|component| component.iter().map(|v| unescape(v.get())).collect())
+                        .collect(),
+                }),
             }
-            prop::VCARD_SOURCE
-            | prop::VCARD_PHOTO
-            | prop::VCARD_IMPP
-            | prop::VCARD_LOGO
-            | prop::VCARD_MEMBER
-            | prop::VCARD_RELATED
-            | prop::VCARD_SOUND
-            | prop::VCARD_UID
-            | prop::VCARD_GEO
-            | prop::VCARD_URL
-            | prop::VCARD_KEY
-            | prop::VCARD_FBURL
-            | prop::VCARD_CALADRURI
-            | prop::VCARD_CALURI => VcardValue::Uri(VcardUri::decode(node)),
-            prop::VCARD_BDAY | prop::VCARD_ANNIVERSARY => {
-                VcardValue::DateAndOrTime(VcardDateAndOrTime::decode(node))
-            }
-            prop::VCARD_REV => VcardValue::Timestamp(VcardTimestamp::decode(node)),
-            prop::VCARD_LANG => VcardValue::LanguageTag(VcardLanguageTag::decode(node)),
-            prop::VCARD_N => VcardValue::N(VcardN::decode(node)),
-            prop::VCARD_ADR => VcardValue::Adr(VcardAdr::decode(node)),
-            prop::VCARD_GENDER => VcardValue::Gender(VcardGender::decode(node)),
-            prop::VCARD_ORG => VcardValue::Org(VcardOrg::decode(node)),
-            prop::VCARD_CLIENTPIDMAP => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
-            _ => VcardValue::Unknown(VcardUnknownValue {
-                components: node
-                    .components
-                    .iter()
-                    .map(|component| component.iter().map(|v| unescape(v.get())).collect())
-                    .collect(),
-            }),
         };
 
         VcardProp {
@@ -110,19 +100,22 @@ impl VcardLine<'_> {
 impl VcardParamNode<'_> {
     /// Decode the parameter into a typed parameter, dispatching on the name.
     pub fn decode(&self) -> VcardParam<'_> {
+        use crate::param::*;
+
         match self.name.get().to_ascii_uppercase().as_str() {
-            param::VCARD_LANGUAGE => VcardParam::Language(self.scalar()),
-            param::VCARD_VALUE => VcardParam::Value(self.scalar()),
-            param::VCARD_PREF => VcardParam::Pref(self.scalar()),
-            param::VCARD_ALTID => VcardParam::AltId(self.scalar()),
-            param::VCARD_PID => VcardParam::Pid(self.list()),
-            param::VCARD_TYPE => VcardParam::Type(self.list()),
-            param::VCARD_MEDIATYPE => VcardParam::MediaType(self.scalar()),
-            param::VCARD_CALSCALE => VcardParam::CalScale(self.scalar()),
-            param::VCARD_SORT_AS => VcardParam::SortAs(self.list()),
-            param::VCARD_GEO => VcardParam::Geo(self.scalar()),
-            param::VCARD_TZ => VcardParam::Tz(self.scalar()),
-            param::VCARD_LABEL => VcardParam::Label(self.scalar()),
+            VCARD_LANGUAGE => VcardParam::Language(self.scalar()),
+            VCARD_VALUE => VcardParam::Value(self.scalar()),
+            VCARD_PREF => VcardParam::Pref(self.scalar()),
+            VCARD_ALTID => VcardParam::AltId(self.scalar()),
+            VCARD_PID => VcardParam::Pid(self.list()),
+            VCARD_TYPE => VcardParam::Type(self.list()),
+            VCARD_MEDIATYPE => VcardParam::MediaType(self.scalar()),
+            VCARD_CALSCALE => VcardParam::CalScale(self.scalar()),
+            VCARD_SORT_AS => VcardParam::SortAs(self.list()),
+            VCARD_GEO => VcardParam::Geo(self.scalar()),
+            VCARD_TZ => VcardParam::Tz(self.scalar()),
+            VCARD_LABEL => VcardParam::Label(self.scalar()),
+
             _ => VcardParam::Unknown {
                 name: unescape(self.name.get()),
                 values: self.list(),

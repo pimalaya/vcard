@@ -29,7 +29,7 @@ pub mod text;
 pub mod uri;
 pub mod utc_offset;
 
-use alloc::{borrow::Cow, string::String, vec::Vec};
+use alloc::{borrow::Cow, vec::Vec};
 
 use crate::value::{
     adr::VcardAdr,
@@ -48,30 +48,31 @@ use crate::value::{
 /// the model does not decode.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VcardValue<'a> {
+    /// The structured `ADR` value.
+    Adr(VcardAdr<'a>),
+    /// The structured `CLIENTPIDMAP` value.
+    ClientPidMap(VcardClientPidMap<'a>),
+    /// A date-and-or-time (`BDAY`, `ANNIVERSARY`).
+    DateAndOrTime(VcardDateAndOrTime<'a>),
+    /// The structured `GENDER` value.
+    Gender(VcardGender<'a>),
+    /// A language tag (`LANG`).
+    LanguageTag(VcardLanguageTag<'a>),
+    /// The structured `N` value.
+    N(VcardN<'a>),
+    /// The structured `ORG` value.
+    Org(VcardOrg<'a>),
     /// A single text value (`FN`, `TITLE`, `NOTE`, ...).
     Text(VcardText<'a>),
     /// A comma-separated text list (`NICKNAME`, `CATEGORIES`).
     TextList(VcardTextList<'a>),
-    /// A URI (`PHOTO`, `URL`, `KEY`, ...).
-    Uri(VcardUri<'a>),
-    /// A date-and-or-time (`BDAY`, `ANNIVERSARY`).
-    DateAndOrTime(VcardDateAndOrTime<'a>),
     /// A timestamp (`REV`).
     Timestamp(VcardTimestamp<'a>),
-    /// A language tag (`LANG`).
-    LanguageTag(VcardLanguageTag<'a>),
+    /// A URI (`PHOTO`, `URL`, `KEY`, ...).
+    Uri(VcardUri<'a>),
     /// A UTC offset (one form of `TZ`).
     UtcOffset(VcardUtcOffset<'a>),
-    /// The structured `N` value.
-    N(VcardN<'a>),
-    /// The structured `ADR` value.
-    Adr(VcardAdr<'a>),
-    /// The structured `GENDER` value.
-    Gender(VcardGender<'a>),
-    /// The structured `ORG` value.
-    Org(VcardOrg<'a>),
-    /// The structured `CLIENTPIDMAP` value.
-    ClientPidMap(VcardClientPidMap<'a>),
+
     /// Any value the model does not decode, kept as its raw components so it
     /// round-trips.
     Unknown(VcardUnknownValue<'a>),
@@ -84,48 +85,3 @@ pub struct VcardUnknownValue<'a> {
     /// The value, as components of values.
     pub components: Vec<Vec<Cow<'a, str>>>,
 }
-
-/// Generate `From<&str>` / `From<String>` / `From<Cow>` for a single-field `Cow`
-/// value newtype, so values build with `.into()`.
-macro_rules! cow_value_from {
-    ($ty:ident) => {
-        impl<'a> From<&'a str> for $ty<'a> {
-            fn from(value: &'a str) -> Self {
-                Self(Cow::Borrowed(value))
-            }
-        }
-
-        impl<'a> From<String> for $ty<'a> {
-            fn from(value: String) -> Self {
-                Self(Cow::Owned(value))
-            }
-        }
-
-        impl<'a> From<Cow<'a, str>> for $ty<'a> {
-            fn from(value: Cow<'a, str>) -> Self {
-                Self(value)
-            }
-        }
-    };
-}
-
-cow_value_from!(VcardText);
-cow_value_from!(VcardUri);
-cow_value_from!(VcardDateAndOrTime);
-cow_value_from!(VcardTimestamp);
-cow_value_from!(VcardLanguageTag);
-cow_value_from!(VcardUtcOffset);
-
-/// Generate `From<Vec<Cow>>` for a list value newtype.
-macro_rules! list_value_from {
-    ($ty:ident) => {
-        impl<'a> From<Vec<Cow<'a, str>>> for $ty<'a> {
-            fn from(values: Vec<Cow<'a, str>>) -> Self {
-                Self(values)
-            }
-        }
-    };
-}
-
-list_value_from!(VcardTextList);
-list_value_from!(VcardOrg);
