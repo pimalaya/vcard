@@ -139,7 +139,7 @@ impl<'a> VcardLine<'a> {
     /// Split one logical line into a typed line at the colon, separating the
     /// name, its parameters and the value.
     fn parse<'b>(content: &'b str, eol: &'b str) -> Result<VcardLine<'b>, VcardParseError> {
-        let Some(colon) = memchr::memchr(b':', content.as_bytes()) else {
+        let Some(colon) = content.find(':') else {
             return Err(VcardParseError::MissingPropertyColon(content.to_string()));
         };
 
@@ -194,7 +194,7 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
 fn physical_line(rest: &str) -> (&str, &str, &str) {
     let bytes = rest.as_bytes();
 
-    let Some(lf) = memchr::memchr(b'\n', bytes) else {
+    let Some(lf) = rest.find('\n') else {
         return (rest, "", "");
     };
 

@@ -183,7 +183,7 @@ impl<'a> VcardLine<'a> {
     /// Split one logical line into a typed line at the colon, separating the
     /// name, its parameters and the value.
     fn parse<'b>(content: &'b str, eol: &'b str) -> Result<VcardLine<'b>, VcardParseError> {
-        let Some(colon) = memchr::memchr(b':', content.as_bytes()) else {
+        let Some(colon) = content.find(':') else {
             return Err(VcardParseError::MissingPropertyColon(content.to_string()));
         };
 
@@ -258,7 +258,7 @@ fn find_unescaped(text: &str, target: u8) -> Option<usize> {
 fn physical_line(rest: &str) -> (&str, &str, &str) {
     let bytes = rest.as_bytes();
 
-    let Some(lf) = memchr::memchr(b'\n', bytes) else {
+    let Some(lf) = rest.find('\n') else {
         return (rest, "", "");
     };
 
@@ -283,7 +283,7 @@ fn starts_with_wsp(rest: &str) -> bool {
 /// 2.1 token. The raw-string peer of `VcardLine::is_quoted_printable` (in the
 /// `decode` module), run before the line is split into parameters.
 fn head_is_quoted_printable(line: &str) -> bool {
-    let head = match memchr::memchr(b':', line.as_bytes()) {
+    let head = match line.find(':') {
         Some(colon) => &line[..colon],
         None => return false,
     };

@@ -21,11 +21,10 @@ default = ["v2_1", "v3_0", "v4_0", "parser"]
 v4_0 = []
 v3_0 = []
 v2_1 = []
-parser = ["dep:memchr"]
+parser = []
 
 [lib]
 name = "vcard"
 path = "src/lib.rs"
 
 [dependencies]
-memchr = { version = "2.8", default-features = false, optional = true }
