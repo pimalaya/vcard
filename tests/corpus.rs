@@ -1,3 +1,5 @@
+#![cfg(all(feature = "v4_0", feature = "parser"))]
+
 //! Real-world vCard corpus, imported from the ez-vcard project (see
 //! `tests/corpus/ATTRIBUTION.md` for provenance and licensing).
 //!
@@ -13,7 +15,7 @@
 
 use std::{fs, path::PathBuf};
 
-use vcard::tree::cst::VcardCst;
+use vcard::v4_0::tree::cst::VcardCst;
 
 /// Fixtures the parser does not yet accept, with the reason. Each must fail to
 /// parse (without panicking); everything else must parse and round-trip.

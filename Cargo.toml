@@ -17,7 +17,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["parser"]
+default = ["v4_0", "parser"]
+v4_0 = []
 parser = ["dep:memchr"]
 
 [lib]
