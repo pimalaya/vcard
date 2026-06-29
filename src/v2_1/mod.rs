@@ -26,8 +26,8 @@
 //!
 //! - **parse** — [`VcardCst::parse`](tree::cst::VcardCst::parse) borrows the
 //!   source; leaves point into it, so an unfolded card round-trips byte for
-//!   byte. RFC 6350 line folding is normalised away: a folded line is unfolded
-//!   into an owned line and serialized unfolded.
+//!   byte. Line folding is normalised away: a folded line is unfolded into an
+//!   owned line and serialized unfolded.
 //! - **to_string** — [`Display`](core::fmt::Display) on `VcardCst` emits the
 //!   bytes verbatim (parsed) or canonically (built).
 //! - **decode** — [`VcardCst::decode`](tree::cst::VcardCst::decode) projects
@@ -53,8 +53,8 @@
 //! knowledge lives in the lens markers
 //! ([`VcardPropLens`](tree::prop::VcardPropLens) /
 //! [`VcardParamLens`](tree::param::VcardParamLens)): a marker
-//! ([`tree::prop::n::N`], [`tree::param::pid::PID`]) is a zero-sized type pinning a
-//! wire name to the decoded value it produces, plus the `decode`/`encode`
+//! ([`tree::prop::n::N`], [`tree::param::encoding::ENCODING`]) is a zero-sized type
+//! pinning a wire name to the decoded value it produces, plus the `decode`/`encode`
 //! projections. Each property has its own hand-written module under
 //! [`tree::prop`]; most share a value kind
 //! ([`VcardText`](value::text::VcardText), [`VcardUri`](value::uri::VcardUri),
@@ -90,11 +90,19 @@
 //!
 //! ## Status
 //!
-//! Every RFC 6350 property and parameter is modelled. Simple values share a
-//! small set of value kinds; the genuinely structured ones (`N`, `ADR`,
-//! `GENDER`, `ORG`, `CLIENTPIDMAP`) get bespoke types; anything unrecognised
-//! round-trips through the `Unknown` arms. [`tree`] is gated behind the `parser`
-//! feature, so the decoded model can be depended on without the syntax layer.
+//! Every vCard 2.1 property and parameter is modelled. Simple values share a
+//! small set of value kinds; the structured ones (`N`, `ADR`, `ORG`, `GEO`) and
+//! the binary ones (`PHOTO`, `LOGO`, `SOUND`, `KEY`, via
+//! [`VcardBinary`](value::binary::VcardBinary)) get bespoke types; anything
+//! unrecognised round-trips through the `Unknown` arms. [`tree`] is gated behind
+//! the `parser` feature, so the decoded model can be depended on without the
+//! syntax layer.
+//!
+//! ## Limitations
+//!
+//! Input is parsed as UTF-8. The `CHARSET` parameter is preserved on the syntax
+//! side but not used to transcode, so a non-UTF-8 2.1 card (e.g. latin-1 plus
+//! `QUOTED-PRINTABLE`) is not yet fully supported.
 
 pub mod param;
 pub mod prop;

@@ -22,11 +22,11 @@ pub const VCARD_VERSION_40: &str = "4.0";
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum VcardVersion<'a> {
     /// vCard 2.1.
+    #[default]
     V2_1,
     /// vCard 3.0.
     V3_0,
     /// vCard 4.0.
-    #[default]
     V4_0,
     /// Any version the model does not recognise.
     Unknown(Cow<'a, str>),

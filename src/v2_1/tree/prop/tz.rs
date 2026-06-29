@@ -1,7 +1,6 @@
 //! # TZ lens
 //!
-//! The `TZ` (time zone) property lens: decoded as a text value (its default
-//! form; the UTC-offset and URI forms round-trip as text).
+//! The `TZ` (time zone) property lens: a single text value.
 
 use crate::v2_1::{
     prop::VCARD_TZ,
@@ -22,8 +21,8 @@ impl VcardPropLens for TZ {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardText<'v> {
-        VcardText::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardText<'v> {
+        VcardText::decode(line)
     }
 
     fn encode(decoded: &VcardText<'_>) -> VcardValueNode<'static> {

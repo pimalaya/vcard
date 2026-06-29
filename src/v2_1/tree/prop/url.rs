@@ -21,8 +21,8 @@ impl VcardPropLens for URL {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardUri<'v> {
-        VcardUri::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardUri<'v> {
+        VcardUri::decode(line)
     }
 
     fn encode(decoded: &VcardUri<'_>) -> VcardValueNode<'static> {

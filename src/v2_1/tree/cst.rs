@@ -21,7 +21,7 @@ use crate::v2_1::{
     prop::VcardProp,
     tree::{error::VcardParseError, line::VcardLine, prop::VcardPropLens},
     vcard::{VCARD, VCARD_BEGIN, VCARD_END},
-    version::{VCARD_VERSION, VCARD_VERSION_40},
+    version::{VCARD_VERSION, VCARD_VERSION_21},
 };
 
 /// A whole card as raw syntax: BEGIN, VERSION, the property lines, END. All four
@@ -39,11 +39,11 @@ pub struct VcardCst<'a> {
 }
 
 impl<'a> VcardCst<'a> {
-    /// Start an empty vCard 4.0, BEGIN/VERSION/END seeded, ready for properties.
-    pub fn v4() -> Self {
+    /// Start an empty vCard 2.1, BEGIN/VERSION/END seeded, ready for properties.
+    pub fn v21() -> Self {
         Self {
             begin: VcardLine::text(VCARD_BEGIN, VCARD),
-            version: VcardLine::text(VCARD_VERSION, VCARD_VERSION_40),
+            version: VcardLine::text(VCARD_VERSION, VCARD_VERSION_21),
             props: Vec::new(),
             end: VcardLine::text(VCARD_END, VCARD),
         }
@@ -110,7 +110,7 @@ impl<'a> VcardCst<'a> {
         self.props
             .iter()
             .find(|line| line.name.get().eq_ignore_ascii_case(L::NAME))
-            .map(|line| L::decode(&line.value))
+            .map(|line| L::decode(line))
     }
 
     /// The first property of type `L`, as a typed cursor for in-place editing.
@@ -139,7 +139,6 @@ mod tests {
     use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
 
     use crate::v2_1::{
-        param::VcardParam,
         prop::VcardProp,
         tree::{cst::VcardCst, prop::n::N},
         value::{VcardUnknownValue, VcardValue, n::VcardN, text::VcardText},
@@ -149,8 +148,8 @@ mod tests {
 
     const CARD: &str = concat!(
         "BEGIN:VCARD\r\n",
-        "VERSION:4.0\r\n",
-        "N;PID=1:Doe;John;;Dr.;\r\n",
+        "VERSION:2.1\r\n",
+        "N:Doe;John;;Dr.;\r\n",
         "FN:John Doe\r\n",
         "END:VCARD\r\n",
     );
@@ -166,9 +165,9 @@ mod tests {
         let card = VcardCst::parse(CARD).unwrap();
         let name = card.prop::<N>().expect("an N property");
 
-        assert_eq!(name.family, vec![Cow::Borrowed("Doe")]);
-        assert_eq!(name.given, vec![Cow::Borrowed("John")]);
-        assert_eq!(name.prefixes, vec![Cow::Borrowed("Dr.")]);
+        assert_eq!(name.family, "Doe");
+        assert_eq!(name.given, "John");
+        assert_eq!(name.prefix, "Dr.");
     }
 
     #[test]
@@ -178,7 +177,7 @@ mod tests {
 
         let out = card.to_string();
         // existing lines kept verbatim; only the appended one is canonical.
-        assert!(out.contains("N;PID=1:Doe;John;;Dr.;\r\n"), "{out}");
+        assert!(out.contains("N:Doe;John;;Dr.;\r\n"), "{out}");
         assert!(out.contains("EMAIL:john@doe.example\r\n"), "{out}");
     }
 
@@ -188,30 +187,29 @@ mod tests {
         card.remove::<N>();
         assert_eq!(
             card.to_string(),
-            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n",
+            "BEGIN:VCARD\r\nVERSION:2.1\r\nFN:John Doe\r\nEND:VCARD\r\n",
         );
     }
 
     #[test]
     fn builds_a_card_from_decoded_types() {
         let card = Vcard {
-            version: VcardVersion::V4_0,
+            version: VcardVersion::V2_1,
             properties: vec![VcardProp {
                 name: Cow::Borrowed("N"),
                 params: Vec::new(),
                 value: VcardValue::N(VcardN {
-                    family: vec![Cow::Borrowed("Doe")],
-                    given: vec![Cow::Borrowed("John")],
-                    additional: Vec::new(),
-                    prefixes: vec![Cow::Borrowed("Dr.")],
-                    suffixes: Vec::new(),
+                    family: "Doe".into(),
+                    given: "John".into(),
+                    prefix: "Dr.".into(),
+                    ..Default::default()
                 }),
             }],
         };
 
         assert_eq!(
             card.to_string(),
-            "BEGIN:VCARD\r\nVERSION:4.0\r\nN:Doe;John;;Dr.;\r\nEND:VCARD\r\n",
+            "BEGIN:VCARD\r\nVERSION:2.1\r\nN:Doe;John;;Dr.;\r\nEND:VCARD\r\n",
         );
     }
 
@@ -220,12 +218,12 @@ mod tests {
         let cst = VcardCst::parse(CARD).unwrap();
         let vcard = cst.decode();
 
-        assert_eq!(vcard.version, VcardVersion::V4_0);
+        assert_eq!(vcard.version, VcardVersion::V2_1);
         assert_eq!(vcard.properties.len(), 2);
 
         let n = &vcard.properties[0];
         assert_eq!(n.name, "N");
-        assert_eq!(n.params, vec![VcardParam::Pid(vec![Cow::Borrowed("1")])]);
+        assert!(n.params.is_empty());
         assert!(matches!(n.value, VcardValue::N(_)));
 
         let fnn = &vcard.properties[1];
@@ -241,14 +239,15 @@ mod tests {
 
     #[test]
     fn keeps_an_unknown_property_round_tripping() {
-        let card = "BEGIN:VCARD\r\nVERSION:4.0\r\nX-CUSTOM:a;b,c\r\nEND:VCARD\r\n";
+        let card = "BEGIN:VCARD\r\nVERSION:2.1\r\nX-CUSTOM:a;b\r\nEND:VCARD\r\n";
         let cst = VcardCst::parse(card).unwrap();
         let vcard = cst.decode();
 
         match &vcard.properties[0].value {
             VcardValue::Unknown(VcardUnknownValue { components }) => {
                 assert_eq!(components.len(), 2);
-                assert_eq!(components[1], vec![Cow::Borrowed("b"), Cow::Borrowed("c")]);
+                assert_eq!(components[0], Cow::Borrowed("a"));
+                assert_eq!(components[1], Cow::Borrowed("b"));
             }
             other => panic!("expected Unknown, got {other:?}"),
         }
@@ -257,13 +256,13 @@ mod tests {
 
     #[test]
     fn unfolds_folded_lines_across_the_card() {
-        let folded = "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long\r\n  note\r\nEND:VCARD\r\n";
+        let folded = "BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE:a long\r\n  note\r\nEND:VCARD\r\n";
         let card = VcardCst::parse(folded).unwrap();
 
         // the folded value is unfolded on parse, and serialized unfolded.
         assert_eq!(
             card.to_string(),
-            "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long note\r\nEND:VCARD\r\n",
+            "BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE:a long note\r\nEND:VCARD\r\n",
         );
         // re-parsing the output is then byte-stable (a fixpoint).
         let output = card.to_string();
@@ -274,14 +273,14 @@ mod tests {
     #[test]
     fn tolerates_blank_lines_and_a_missing_final_break() {
         // a stray blank line after VERSION, and no trailing break after END.
-        let input = "BEGIN:VCARD\r\nVERSION:4.0\r\n\r\nFN:John\r\nEND:VCARD";
+        let input = "BEGIN:VCARD\r\nVERSION:2.1\r\n\r\nFN:John\r\nEND:VCARD";
         let card = VcardCst::parse(input).unwrap();
 
         assert_eq!(card.decode().properties.len(), 1);
         // the blank line is dropped; the missing final break is preserved.
         assert_eq!(
             card.to_string(),
-            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John\r\nEND:VCARD",
+            "BEGIN:VCARD\r\nVERSION:2.1\r\nFN:John\r\nEND:VCARD",
         );
     }
 }

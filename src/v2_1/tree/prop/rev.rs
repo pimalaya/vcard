@@ -21,8 +21,8 @@ impl VcardPropLens for REV {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardTimestamp<'v> {
-        VcardTimestamp::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardTimestamp<'v> {
+        VcardTimestamp::decode(line)
     }
 
     fn encode(decoded: &VcardTimestamp<'_>) -> VcardValueNode<'static> {

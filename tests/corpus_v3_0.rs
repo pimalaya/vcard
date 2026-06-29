@@ -1,0 +1,28 @@
+#![cfg(all(feature = "v3_0", feature = "parser"))]
+
+//! The vCard 3.0 slice of the shared ez-vcard corpus, parsed through the
+//! [`crate::v3_0`](vcard::v3_0) tree. See tests/common/mod.rs for the harness
+//! and tests/corpus/ATTRIBUTION.md for provenance.
+
+mod common;
+
+use vcard::v3_0::tree::cst::VcardCst;
+
+#[test]
+fn corpus_parses_and_round_trips() {
+    common::each_fixture("3.0", 10, |name, input| {
+        let card = VcardCst::parse(input).unwrap_or_else(|e| panic!("parse {name}: {e}"));
+
+        // Anything we parse must serialize to a fixpoint (stable under reparse).
+        let output = card.to_string();
+        let reparsed = VcardCst::parse(&output).unwrap_or_else(|e| panic!("reparse {name}: {e}"));
+        assert_eq!(
+            reparsed.to_string(),
+            output,
+            "not a serialize fixpoint: {name}"
+        );
+
+        // Decoding the whole card must not panic.
+        let _ = card.decode();
+    });
+}

@@ -21,8 +21,8 @@ impl VcardPropLens for BDAY {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardDateAndOrTime<'v> {
-        VcardDateAndOrTime::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardDateAndOrTime<'v> {
+        VcardDateAndOrTime::decode(line)
     }
 
     fn encode(decoded: &VcardDateAndOrTime<'_>) -> VcardValueNode<'static> {

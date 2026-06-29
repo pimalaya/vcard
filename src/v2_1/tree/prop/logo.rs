@@ -1,11 +1,11 @@
 //! # LOGO lens
 //!
-//! The `LOGO` property lens: a URI to a logo image.
+//! The `LOGO` property lens: a logo image, inline or by URI.
 
 use crate::v2_1::{
     prop::VCARD_LOGO,
     tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::uri::VcardUri,
+    value::binary::VcardBinary,
 };
 
 /// The `LOGO` property lens.
@@ -14,18 +14,18 @@ pub struct LOGO;
 impl VcardPropLens for LOGO {
     const NAME: &'static str = VCARD_LOGO;
 
-    type Target<'v> = VcardUri<'v>;
+    type Target<'v> = VcardBinary<'v>;
 
     type Cursor<'c, 'a>
         = VcardValueCursor<'c, 'a>
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardUri<'v> {
-        VcardUri::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardBinary<'v> {
+        VcardBinary::decode(line)
     }
 
-    fn encode(decoded: &VcardUri<'_>) -> VcardValueNode<'static> {
+    fn encode(decoded: &VcardBinary<'_>) -> VcardValueNode<'static> {
         decoded.encode()
     }
 

@@ -4,24 +4,17 @@
 //!
 //! [`VcardParamNode`] is the syntactic peer of the decoded
 //! [`VcardParam`](crate::v2_1::param::VcardParam): a name leaf and its raw value
-//! leaves, parsed from and serialized back to the wire verbatim. Each RFC 6350
+//! leaves, parsed from and serialized back to the wire verbatim. Each vCard 2.1
 //! parameter then has its own hand-written lens marker in a submodule here, tying
 //! a wire name to the decoded shape (a single value, or a list); those markers
 //! are the type-level keys for
 //! [`VcardLine::param`](crate::v2_1::tree::line::VcardLine::param). The name dispatch
 //! for whole-line decoding lives in [`crate::v2_1::tree::decode`].
 
-pub mod altid;
-pub mod calscale;
-pub mod geo;
-pub mod label;
+pub mod charset;
+pub mod encoding;
 pub mod language;
-pub mod mediatype;
-pub mod pid;
-pub mod pref;
-pub mod sort_as;
 pub mod r#type;
-pub mod tz;
 pub mod value;
 
 use core::fmt;
@@ -131,7 +124,7 @@ mod tests {
 
     use crate::v2_1::tree::{
         param::VcardParamLens,
-        param::{VcardParamNode, language::LANGUAGE, pid::PID},
+        param::{VcardParamNode, language::LANGUAGE, r#type::TYPE},
     };
 
     #[test]
@@ -143,10 +136,10 @@ mod tests {
 
     #[test]
     fn decodes_a_list_parameter_through_its_lens() {
-        let node = VcardParamNode::parse("PID=1,2");
+        let node = VcardParamNode::parse("TYPE=work,home");
         assert_eq!(
-            PID::decode(&node),
-            vec![Cow::Borrowed("1"), Cow::Borrowed("2")],
+            TYPE::decode(&node),
+            vec![Cow::Borrowed("work"), Cow::Borrowed("home")],
         );
     }
 

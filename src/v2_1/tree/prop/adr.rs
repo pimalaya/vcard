@@ -1,11 +1,11 @@
 //! # ADR lens
 //!
 //! The `ADR` (structured address) property lens, with a cursor naming its seven
-//! components. Like [`NCursor`](crate::v2_1::tree::prop::n::NCursor), getters decode
-//! and setters encode in place, leaving the other components (and every
-//! parameter) byte for byte intact.
+//! single-valued components. Like [`NCursor`](crate::v2_1::tree::prop::n::NCursor),
+//! getters decode and setters encode in place, leaving the other components (and
+//! every parameter) byte for byte intact.
 
-use alloc::{borrow::Cow, vec::Vec};
+use alloc::borrow::Cow;
 
 use crate::v2_1::{
     prop::VCARD_ADR,
@@ -26,8 +26,8 @@ impl VcardPropLens for ADR {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardAdr<'v> {
-        VcardAdr::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardAdr<'v> {
+        VcardAdr::decode(line)
     }
 
     fn encode(decoded: &VcardAdr<'_>) -> VcardValueNode<'static> {
@@ -39,7 +39,7 @@ impl VcardPropLens for ADR {
     }
 }
 
-/// A typed cursor over an ADR line, naming its seven components.
+/// A typed cursor over an ADR line, naming its seven single-valued components.
 pub struct AdrCursor<'c, 'a> {
     /// The borrowed content line.
     pub line: &'c mut VcardLine<'a>,
@@ -48,77 +48,77 @@ pub struct AdrCursor<'c, 'a> {
 impl AdrCursor<'_, '_> {
     /// The whole decoded value.
     pub fn get(&self) -> VcardAdr<'_> {
-        VcardAdr::decode(&self.line.value)
+        VcardAdr::decode(self.line)
     }
 
-    /// The post office box (deprecated), decoded.
-    pub fn po_box(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(0)
+    /// The post office box, decoded.
+    pub fn po_box(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().next().unwrap_or_default()
     }
 
     /// Set the post office box.
-    pub fn set_po_box<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(0, values);
+    pub fn set_po_box(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(0, value.as_ref());
     }
 
-    /// The extended address (deprecated), decoded.
-    pub fn extended(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(1)
+    /// The extended address, decoded.
+    pub fn extended(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(1).unwrap_or_default()
     }
 
     /// Set the extended address.
-    pub fn set_extended<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(1, values);
+    pub fn set_extended(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(1, value.as_ref());
     }
 
     /// The street address, decoded.
-    pub fn street(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(2)
+    pub fn street(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(2).unwrap_or_default()
     }
 
     /// Set the street address.
-    pub fn set_street<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(2, values);
+    pub fn set_street(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(2, value.as_ref());
     }
 
     /// The locality (city), decoded.
-    pub fn locality(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(3)
+    pub fn locality(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(3).unwrap_or_default()
     }
 
     /// Set the locality.
-    pub fn set_locality<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(3, values);
+    pub fn set_locality(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(3, value.as_ref());
     }
 
     /// The region (state or province), decoded.
-    pub fn region(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(4)
+    pub fn region(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(4).unwrap_or_default()
     }
 
     /// Set the region.
-    pub fn set_region<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(4, values);
+    pub fn set_region(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(4, value.as_ref());
     }
 
     /// The postal code, decoded.
-    pub fn postal_code(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(5)
+    pub fn postal_code(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(5).unwrap_or_default()
     }
 
     /// Set the postal code.
-    pub fn set_postal_code<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(5, values);
+    pub fn set_postal_code(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(5, value.as_ref());
     }
 
     /// The country name, decoded.
-    pub fn country(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(6)
+    pub fn country(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(6).unwrap_or_default()
     }
 
     /// Set the country name.
-    pub fn set_country<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(6, values);
+    pub fn set_country(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(6, value.as_ref());
     }
 
     /// The first parameter of type `P` on this line, decoded.

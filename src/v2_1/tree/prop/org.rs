@@ -23,8 +23,8 @@ impl VcardPropLens for ORG {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardOrg<'v> {
-        VcardOrg::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardOrg<'v> {
+        VcardOrg::decode(line)
     }
 
     fn encode(decoded: &VcardOrg<'_>) -> VcardValueNode<'static> {

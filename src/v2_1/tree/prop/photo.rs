@@ -1,11 +1,11 @@
 //! # PHOTO lens
 //!
-//! The `PHOTO` property lens: a URI to an image (a `data:` URI in 4.0).
+//! The `PHOTO` property lens: an image, inline or by URI.
 
 use crate::v2_1::{
     prop::VCARD_PHOTO,
     tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::uri::VcardUri,
+    value::binary::VcardBinary,
 };
 
 /// The `PHOTO` property lens.
@@ -14,18 +14,18 @@ pub struct PHOTO;
 impl VcardPropLens for PHOTO {
     const NAME: &'static str = VCARD_PHOTO;
 
-    type Target<'v> = VcardUri<'v>;
+    type Target<'v> = VcardBinary<'v>;
 
     type Cursor<'c, 'a>
         = VcardValueCursor<'c, 'a>
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardUri<'v> {
-        VcardUri::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardBinary<'v> {
+        VcardBinary::decode(line)
     }
 
-    fn encode(decoded: &VcardUri<'_>) -> VcardValueNode<'static> {
+    fn encode(decoded: &VcardBinary<'_>) -> VcardValueNode<'static> {
         decoded.encode()
     }
 

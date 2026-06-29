@@ -1,13 +1,14 @@
 //! # GEO lens
 //!
-//! The `GEO` property lens: decoded as a URI (its 4.0 form, a `geo:` URI). In
-//! 2.1 / 3.0 the value is instead a `lat;long` pair; that round-trips as a URI
-//! string but is not semantically split here.
+//! The `GEO` (geographic position) property lens. Its value is a `lat;long`
+//! pair, two single-valued components that map cleanly onto the generic
+//! [`VcardValueCursor`]'s positional component access, so it needs no bespoke
+//! cursor.
 
 use crate::v2_1::{
     prop::VCARD_GEO,
     tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::uri::VcardUri,
+    value::geo::VcardGeo,
 };
 
 /// The `GEO` property lens.
@@ -16,18 +17,18 @@ pub struct GEO;
 impl VcardPropLens for GEO {
     const NAME: &'static str = VCARD_GEO;
 
-    type Target<'v> = VcardUri<'v>;
+    type Target<'v> = VcardGeo<'v>;
 
     type Cursor<'c, 'a>
         = VcardValueCursor<'c, 'a>
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardUri<'v> {
-        VcardUri::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardGeo<'v> {
+        VcardGeo::decode(line)
     }
 
-    fn encode(decoded: &VcardUri<'_>) -> VcardValueNode<'static> {
+    fn encode(decoded: &VcardGeo<'_>) -> VcardValueNode<'static> {
         decoded.encode()
     }
 

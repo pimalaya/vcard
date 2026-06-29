@@ -28,14 +28,21 @@ pub struct VcardValueNode<'a> {
 impl<'a> VcardValueNode<'a> {
     /// Split a raw value into its `;`-separated components (escape-aware).
     pub fn parse(value: &'a str) -> Self {
-        let components = split_components(value).into_iter().map(VcardLeaf::from).collect();
+        let components = split_components(value)
+            .into_iter()
+            .map(VcardLeaf::from)
+            .collect();
         Self { components }
     }
 
     /// Convert into an owned value node (`'static`).
     pub(crate) fn into_static(self) -> VcardValueNode<'static> {
         VcardValueNode {
-            components: self.components.into_iter().map(VcardLeaf::into_static).collect(),
+            components: self
+                .components
+                .into_iter()
+                .map(VcardLeaf::into_static)
+                .collect(),
         }
     }
 }

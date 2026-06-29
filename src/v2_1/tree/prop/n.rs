@@ -2,16 +2,16 @@
 //!
 //! The `N` property lens and its bespoke edit cursor.
 //!
-//! `N` is the showcase of the structured-value path: unlike the scalar/list
-//! lenses that use the generic cursor, it pairs [`VcardN`] with a dedicated
-//! [`NCursor`] that names the five components, so callers write
+//! `N` is the showcase of the structured-value path: unlike the scalar lenses
+//! that use the generic cursor, it pairs [`VcardN`] with a dedicated [`NCursor`]
+//! that names the five single-valued components, so callers write
 //! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. The
 //! decode/encode projections still delegate to [`VcardN`]'s inherent methods (in
-//! [`crate::v2_1::tree::decode`] / [`crate::v2_1::tree::encode`]); only the cursor is
-//! bespoke. Edits are byte preserving: writing one component leaves the others,
-//! and every parameter, untouched.
+//! [`crate::v2_1::tree::decode`] / [`crate::v2_1::tree::encode`]); only the cursor
+//! is bespoke. Edits are byte preserving: writing one component leaves the
+//! others, and every parameter, untouched.
 
-use alloc::{borrow::Cow, vec::Vec};
+use alloc::borrow::Cow;
 
 use crate::v2_1::{
     prop::VCARD_N,
@@ -32,8 +32,8 @@ impl VcardPropLens for N {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardN<'v> {
-        VcardN::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardN<'v> {
+        VcardN::decode(line)
     }
 
     fn encode(decoded: &VcardN<'_>) -> VcardValueNode<'static> {
@@ -56,57 +56,57 @@ pub struct NCursor<'c, 'a> {
 impl NCursor<'_, '_> {
     /// The whole decoded value.
     pub fn get(&self) -> VcardN<'_> {
-        VcardN::decode(&self.line.value)
+        VcardN::decode(self.line)
     }
 
-    /// The family names, decoded.
-    pub fn family(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(0)
+    /// The family name, decoded.
+    pub fn family(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().next().unwrap_or_default()
     }
 
-    /// The given names, decoded.
-    pub fn given(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(1)
+    /// The given name, decoded.
+    pub fn given(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(1).unwrap_or_default()
     }
 
-    /// The additional names, decoded.
-    pub fn additional(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(2)
+    /// The additional name, decoded.
+    pub fn additional(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(2).unwrap_or_default()
     }
 
-    /// The honorific prefixes, decoded.
-    pub fn prefixes(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(3)
+    /// The honorific prefix, decoded.
+    pub fn prefix(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(3).unwrap_or_default()
     }
 
-    /// The honorific suffixes, decoded.
-    pub fn suffixes(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(4)
+    /// The honorific suffix, decoded.
+    pub fn suffix(&self) -> Cow<'_, str> {
+        self.line.cooked().into_iter().nth(4).unwrap_or_default()
     }
 
-    /// Set the family names, escaping and preserving the rest of the line.
-    pub fn set_family<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(0, values);
+    /// Set the family name, escaping and preserving the rest of the line.
+    pub fn set_family(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(0, value.as_ref());
     }
 
-    /// Set the given names, escaping and preserving the rest of the line.
-    pub fn set_given<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(1, values);
+    /// Set the given name, escaping and preserving the rest of the line.
+    pub fn set_given(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(1, value.as_ref());
     }
 
-    /// Set the additional names, escaping and preserving the rest of the line.
-    pub fn set_additional<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(2, values);
+    /// Set the additional name, escaping and preserving the rest of the line.
+    pub fn set_additional(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(2, value.as_ref());
     }
 
-    /// Set the honorific prefixes, escaping and preserving the rest of the line.
-    pub fn set_prefixes<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(3, values);
+    /// Set the honorific prefix, escaping and preserving the rest of the line.
+    pub fn set_prefix(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(3, value.as_ref());
     }
 
-    /// Set the honorific suffixes, escaping and preserving the rest of the line.
-    pub fn set_suffixes<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(4, values);
+    /// Set the honorific suffix, escaping and preserving the rest of the line.
+    pub fn set_suffix(&mut self, value: impl AsRef<str>) {
+        self.line.value.set_at(4, value.as_ref());
     }
 
     /// The first parameter of type `P` on this line, decoded.
@@ -117,22 +117,19 @@ impl NCursor<'_, '_> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{borrow::Cow, string::ToString, vec};
+    use alloc::string::ToString;
 
     use crate::v2_1::tree::{cst::VcardCst, prop::n::N};
 
     #[test]
     fn names_components_and_sets_them_preserving_the_rest() {
         let mut card =
-            VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nN:Doe;John;;;\r\nEND:VCARD\r\n")
+            VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nN:Doe;John;;;\r\nEND:VCARD\r\n")
                 .unwrap();
 
-        assert_eq!(
-            card.prop_mut::<N>().unwrap().family(),
-            vec![Cow::Borrowed("Doe")],
-        );
+        assert_eq!(card.prop_mut::<N>().unwrap().family(), "Doe");
 
-        card.prop_mut::<N>().unwrap().set_given(&["Jane"]);
+        card.prop_mut::<N>().unwrap().set_given("Jane");
         assert!(card.to_string().contains("N:Doe;Jane;;;\r\n"));
     }
 }

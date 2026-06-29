@@ -21,8 +21,8 @@ impl VcardPropLens for TEL {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardText<'v> {
-        VcardText::decode(value)
+    fn decode<'v>(line: &'v VcardLine<'_>) -> VcardText<'v> {
+        VcardText::decode(line)
     }
 
     fn encode(decoded: &VcardText<'_>) -> VcardValueNode<'static> {

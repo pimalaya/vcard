@@ -5,7 +5,7 @@
 //! [`VcardLine`] is the syntactic unit a property occupies. It owns the line
 //! tokeniser ([`take`](VcardLine::take), which splits one logical line off the
 //! remaining input for [`VcardCst::parse`](crate::v2_1::tree::cst::VcardCst::parse),
-//! unfolding any RFC 6350 folded continuation lines) and the head splitter that
+//! unfolding any folded continuation lines) and the head splitter that
 //! separates the name from its parameters. It exposes its raw value and typed
 //! parameter access by lens, but stays generic: the meaning of the name and the
 //! decoding of the value belong to the lens markers and the
@@ -51,14 +51,14 @@ impl<'a> VcardLine<'a> {
             name: VcardLeaf(name.into()),
             params: Vec::new(),
             value: VcardValueNode {
-                components: vec![vec![VcardLeaf(value.into())]],
+                components: vec![VcardLeaf(value.into())],
             },
             eol: VcardLeaf(Cow::Borrowed("\r\n")),
         }
     }
 
     /// Tokenise the logical line at the start of `rest`, unfolding any folded
-    /// continuation lines, and return it with the remaining input. RFC 6350
+    /// continuation lines, and return it with the remaining input. vCard 2.1
     /// folds a long line by inserting a CRLF and a single leading space or tab;
     /// unfolding drops them. A line with no folds borrows the source; a folded
     /// line is rebuilt owned, since its bytes are no longer contiguous.
@@ -76,6 +76,29 @@ impl<'a> VcardLine<'a> {
             }
             break (content, eol, next);
         };
+
+        if first.ends_with('=') && head_is_quoted_printable(first) {
+            let mut logical = String::from(&first[..first.len() - 1]);
+            let mut last_eol;
+            loop {
+                let (continuation, eol, next) = physical_line(tail);
+                last_eol = eol;
+                tail = next;
+                match continuation.strip_suffix('=') {
+                    Some(head) => logical.push_str(head),
+                    None => {
+                        logical.push_str(continuation);
+                        break;
+                    }
+                }
+                if tail.is_empty() {
+                    break;
+                }
+            }
+            let mut line = Self::parse(&logical, "")?.into_static();
+            line.eol = VcardLeaf::from(last_eol.to_string());
+            return Ok((line, tail));
+        }
 
         if !starts_with_wsp(tail) {
             return Ok((Self::parse(first, eol)?, tail));
@@ -116,9 +139,30 @@ impl<'a> VcardLine<'a> {
         self.value
             .components
             .first()
-            .and_then(|component| component.first())
             .map(|leaf| leaf.get())
             .unwrap_or("")
+    }
+
+    /// The whole raw value: all `;`-components rejoined verbatim (no unescaping).
+    /// For non-compound values, whose `;` is a literal character rather than a
+    /// component separator (text, URIs, base64).
+    pub fn raw_value_full(&self) -> Cow<'_, str> {
+        match self.value.components.as_slice() {
+            [] => Cow::Borrowed(""),
+            [one] => Cow::Borrowed(one.get()),
+            many => {
+                let mut joined = String::new();
+
+                for (i, leaf) in many.iter().enumerate() {
+                    if i > 0 {
+                        joined.push(';');
+                    }
+                    joined.push_str(leaf.get());
+                }
+
+                Cow::Owned(joined)
+            }
+        }
     }
 
     /// The first parameter of type `P`, decoded.
@@ -166,9 +210,10 @@ impl fmt::Display for VcardLine<'_> {
     }
 }
 
-/// Split a head into its name and its `;`-separated parameters.
+/// Split a head into its name and its `;`-separated parameters, treating `\;` as
+/// an escaped literal rather than a separator.
 fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
-    let (name, mut rest) = match head.find(';') {
+    let (name, mut rest) = match find_unescaped(head, b';') {
         Some(semi) => (&head[..semi], &head[semi..]),
         None => return (head, Vec::new()),
     };
@@ -176,7 +221,7 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
     let mut params = Vec::new();
 
     while let Some(after) = rest.strip_prefix(';') {
-        let (param, tail) = match after.find(';') {
+        let (param, tail) = match find_unescaped(after, b';') {
             Some(semi) => (&after[..semi], &after[semi..]),
             None => (after, ""),
         };
@@ -186,6 +231,25 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
     }
 
     (name, params)
+}
+
+/// The index of the first unescaped `target` byte, where a `\` escapes the byte
+/// that follows it.
+fn find_unescaped(text: &str, target: u8) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut escaped = false;
+
+    for (i, &byte) in bytes.iter().enumerate() {
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == target {
+            return Some(i);
+        }
+    }
+
+    None
 }
 
 /// Split the first physical line off `rest`: its content (without the line
@@ -214,6 +278,22 @@ fn starts_with_wsp(rest: &str) -> bool {
     matches!(rest.as_bytes().first(), Some(b' ' | b'\t'))
 }
 
+/// Whether a physical line's head (before the colon) declares
+/// `QUOTED-PRINTABLE`, written either as an `ENCODING=` parameter or as a bare
+/// 2.1 token. The raw-string peer of `VcardLine::is_quoted_printable` (in the
+/// `decode` module), run before the line is split into parameters.
+fn head_is_quoted_printable(line: &str) -> bool {
+    let head = match memchr::memchr(b':', line.as_bytes()) {
+        Some(colon) => &line[..colon],
+        None => return false,
+    };
+
+    head.split(';').any(|token| {
+        token.eq_ignore_ascii_case("QUOTED-PRINTABLE")
+            || token.eq_ignore_ascii_case("ENCODING=QUOTED-PRINTABLE")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::string::ToString;
@@ -233,6 +313,13 @@ mod tests {
         let (line, _) = VcardLine::take("TEL;TYPE=work,home:123\r\n").unwrap();
         assert_eq!(line.params.len(), 1);
         assert_eq!(line.to_string(), "TEL;TYPE=work,home:123\r\n");
+    }
+
+    #[test]
+    fn keeps_an_escaped_semicolon_inside_a_parameter_value() {
+        let (line, _) = VcardLine::take("TEL;TYPE=a\\;b:123\r\n").unwrap();
+        assert_eq!(line.params.len(), 1);
+        assert_eq!(line.to_string(), "TEL;TYPE=a\\;b:123\r\n");
     }
 
     #[test]
@@ -260,6 +347,15 @@ mod tests {
         // only the first space is the fold marker; the rest is value content.
         let (line, _) = VcardLine::take("NOTE:foo\r\n  bar\r\n").unwrap();
         assert_eq!(line.raw_value(), "foo bar");
+    }
+
+    #[test]
+    fn joins_quoted_printable_soft_line_breaks() {
+        let (line, rest) =
+            VcardLine::take("NOTE;ENCODING=QUOTED-PRINTABLE:Hello=\r\nWorld\r\nEND:VCARD\r\n")
+                .unwrap();
+        assert_eq!(line.raw_value(), "HelloWorld");
+        assert_eq!(rest, "END:VCARD\r\n");
     }
 
     #[test]
