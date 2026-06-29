@@ -17,8 +17,11 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+# v2_1 is temporarily out of default while its internals are rebuilt to the 2.1
+# spec; re-add once it compiles again.
 default = ["v4_0", "parser"]
 v4_0 = []
+v2_1 = []
 parser = ["dep:memchr"]
 
 [lib]
