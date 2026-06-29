@@ -22,13 +22,11 @@ use alloc::{
     vec::Vec,
 };
 
+use crate::tree::leaf::VcardLeaf;
 use crate::v30::{
     param::VcardParam,
     prop::VcardProp,
-    tree::{
-        cst::VcardCst, leaf::VcardLeaf, line::VcardLine, param::VcardParamNode,
-        value::VcardValueNode,
-    },
+    tree::{cst::VcardCst, line::VcardLine, param::VcardParamNode, value::VcardValueNode},
     value::{
         VcardUnknownValue, VcardValue,
         adr::VcardAdr,
@@ -42,8 +40,8 @@ use crate::v30::{
         utc_offset::VcardUtcOffset,
     },
     vcard::Vcard,
-    version::VCARD_VERSION,
 };
+use crate::version::VCARD_VERSION;
 
 impl Vcard<'_> {
     /// Encode the whole card into a canonical CST.

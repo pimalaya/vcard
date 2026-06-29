@@ -4,9 +4,10 @@
 
 use alloc::{borrow::Cow, string::ToString, vec};
 
+use crate::tree::leaf::VcardLeaf;
 use crate::v21::{
     param::VCARD_CHARSET,
-    tree::{decode::unescape, leaf::VcardLeaf, param::VcardParamLens, param::VcardParamNode},
+    tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
 /// The `CHARSET` parameter lens.

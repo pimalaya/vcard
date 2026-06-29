@@ -6,7 +6,7 @@
 //! `BEGIN` / `VERSION` envelope, the property lines, the `END`), made of the
 //! nodes in the sibling modules ([`line`](crate::v30::tree::line),
 //! [`param`](crate::v30::tree::param), [`value`](crate::v30::tree::value),
-//! [`leaf`](crate::v30::tree::leaf)). It knows nothing about what a property *means*.
+//! [`leaf`](crate::tree::leaf)). It knows nothing about what a property *means*.
 //! It is filled from bytes (`parse`) or from typed properties (`push`), exports
 //! raw contents ([`Display`](core::fmt::Display) / `to_string`), and offers typed
 //! access by lens (`prop`, `prop_mut`, `remove`). The semantic projection
@@ -17,12 +17,14 @@ use core::fmt;
 
 use alloc::{string::ToString, vec::Vec};
 
+use crate::tree::error::VcardParseError;
 use crate::v30::{
     prop::VcardProp,
-    tree::{error::VcardParseError, line::VcardLine, prop::VcardPropLens},
-    vcard::{VCARD, VCARD_BEGIN, VCARD_END},
-    version::{VCARD_VERSION, VCARD_VERSION_30},
+    tree::{line::VcardLine, prop::VcardPropLens},
+    vcard::VCARD_VERSION_30,
 };
+use crate::vcard::{VCARD, VCARD_BEGIN, VCARD_END};
+use crate::version::VCARD_VERSION;
 
 /// A whole card as raw syntax: BEGIN, VERSION, the property lines, END. All four
 /// are real lines so nothing is reconstructed by rule.
@@ -144,8 +146,8 @@ mod tests {
         tree::{cst::VcardCst, prop::n::N},
         value::{VcardUnknownValue, VcardValue, n::VcardN, text::VcardText},
         vcard::Vcard,
-        version::VcardVersion,
     };
+    use crate::version::VcardVersion;
 
     const CARD: &str = concat!(
         "BEGIN:VCARD\r\n",

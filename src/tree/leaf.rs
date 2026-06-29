@@ -6,8 +6,7 @@
 //! value, a single component value, a line ending. It is a [`Cow`], so a parsed
 //! leaf borrows the source (the basis of byte-faithful round-trips) and only
 //! becomes owned when a build or an edit replaces it. Every other syntax node
-//! ([`line`](crate::v30::tree::line), [`param`](crate::v30::tree::param),
-//! [`value`](crate::v30::tree::value)) is ultimately a tree of these.
+//! (`line`, `param`, `value`) is ultimately a tree of these.
 
 use alloc::{borrow::Cow, string::String};
 

@@ -17,7 +17,7 @@ use core::fmt;
 
 use alloc::vec::Vec;
 
-use crate::v40::tree::leaf::VcardLeaf;
+use crate::tree::leaf::VcardLeaf;
 
 /// A raw value: `;`-separated components, each a list of `,`-separated raw value
 /// leaves. Splitting is generic; joining on serialize restores the bytes.

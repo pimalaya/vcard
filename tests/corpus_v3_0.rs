@@ -1,12 +1,12 @@
-#![cfg(all(feature = "v3_0", feature = "parser"))]
+#![cfg(feature = "parser")]
 
 //! The vCard 3.0 slice of the shared ez-vcard corpus, parsed through the
-//! [`crate::v3_0`](vcard::v3_0) tree. See tests/common/mod.rs for the harness
+//! [`crate::v30`](vcard::v30) tree. See tests/common/mod.rs for the harness
 //! and tests/corpus/ATTRIBUTION.md for provenance.
 
 mod common;
 
-use vcard::v3_0::tree::cst::VcardCst;
+use vcard::v30::tree::cst::VcardCst;
 
 #[test]
 fn corpus_parses_and_round_trips() {

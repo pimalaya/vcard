@@ -32,8 +32,8 @@ use crate::v21::{
         uri::VcardUri,
     },
     vcard::Vcard,
-    version::VcardVersion,
 };
+use crate::version::VcardVersion;
 
 const QUOTED_PRINTABLE: &str = "QUOTED-PRINTABLE";
 

@@ -4,20 +4,20 @@
 //!
 //! A [`Vcard`] is just a version and an ordered list of properties; the
 //! property, value, parameter and version types each live in their own sibling
-//! module.  This module also owns the card-framing name vocabulary ([`VCARD`],
-//! [`VCARD_BEGIN`], [`VCARD_END`]) used to recognise and emit the `BEGIN:VCARD`
-//! / `END:VCARD` envelope. Like the rest of the decoded model it has no
-//! dependency on [`crate::v21::tree`]; rendering a `Vcard` back to bytes is
-//! provided by a [`Display`](core::fmt::Display) impl that lives on the syntax
-//! side.
+//! module. This module owns [`VCARD_VERSION_21`], the wire string this version
+//! emits in its `VERSION` line; the shared `BEGIN:VCARD` / `END:VCARD` framing
+//! vocabulary lives at the crate root in [`crate::vcard`]. Like the rest of the
+//! decoded model it has no dependency on [`crate::v21::tree`]; rendering a
+//! `Vcard` back to bytes is provided by a [`Display`](core::fmt::Display) impl
+//! that lives on the syntax side.
 
 use alloc::vec::Vec;
 
-use crate::v21::{prop::VcardProp, version::VcardVersion};
+use crate::v21::prop::VcardProp;
+use crate::version::VcardVersion;
 
-pub const VCARD: &str = "VCARD";
-pub const VCARD_BEGIN: &str = "BEGIN";
-pub const VCARD_END: &str = "END";
+/// The vCard 2.1 wire string, emitted in this version's `VERSION` line.
+pub const VCARD_VERSION_21: &str = "2.1";
 
 /// A decoded card: its version and its properties, in source order.
 #[derive(Clone, Debug, PartialEq, Eq)]

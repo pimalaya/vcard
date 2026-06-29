@@ -20,7 +20,7 @@ use core::fmt;
 
 use alloc::vec::Vec;
 
-use crate::v30::tree::leaf::VcardLeaf;
+use crate::tree::leaf::VcardLeaf;
 
 /// A parameter identified by type, projecting a generic syntax parameter onto a
 /// decoded value type and back.

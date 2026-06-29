@@ -4,9 +4,10 @@
 
 use alloc::{borrow::Cow, string::ToString, vec::Vec};
 
+use crate::tree::leaf::VcardLeaf;
 use crate::v40::{
     param::VCARD_PID,
-    tree::{decode::unescape, leaf::VcardLeaf, param::VcardParamLens, param::VcardParamNode},
+    tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
 /// The `PID` parameter lens.

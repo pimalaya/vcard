@@ -18,7 +18,8 @@
 
 use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
 
-use crate::v21::tree::{encode::escape, leaf::VcardLeaf, line::VcardLine, param::VcardParamLens};
+use crate::tree::leaf::VcardLeaf;
+use crate::v21::tree::{encode::escape, line::VcardLine, param::VcardParamLens};
 
 /// A typed cursor over a content line's value, editing in place and byte
 /// preserving for the components it does not touch.

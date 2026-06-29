@@ -1,12 +1,12 @@
-#![cfg(all(feature = "v2_1", feature = "parser"))]
+#![cfg(feature = "parser")]
 
 //! The vCard 2.1 slice of the shared ez-vcard corpus, parsed through the
-//! [`crate::v2_1`](vcard::v2_1) tree. See tests/common/mod.rs for the harness
+//! [`crate::v21`](vcard::v21) tree. See tests/common/mod.rs for the harness
 //! and tests/corpus/ATTRIBUTION.md for provenance.
 
 mod common;
 
-use vcard::v2_1::tree::cst::VcardCst;
+use vcard::v21::tree::cst::VcardCst;
 
 #[test]
 fn corpus_parses_and_round_trips() {

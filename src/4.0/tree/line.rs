@@ -25,10 +25,9 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::v40::tree::{
-    error::VcardParseError, leaf::VcardLeaf, param::VcardParamLens, param::VcardParamNode,
-    value::VcardValueNode,
-};
+use crate::tree::error::VcardParseError;
+use crate::tree::leaf::VcardLeaf;
+use crate::v40::tree::{param::VcardParamLens, param::VcardParamNode, value::VcardValueNode};
 
 /// One raw content line: a name, parameters, a value and the line ending.
 #[derive(Clone, Debug)]

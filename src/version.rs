@@ -3,26 +3,20 @@
 //! The card version value and its name vocabulary.
 //!
 //! [`VcardVersion`] is the decoded `VERSION` line: a known 2.1 / 3.0 / 4.0
-//! value, or `Unknown` for anything else, with the wire strings backed by the
-//! `VCARD_VERSION_*` consts so they have a single source of truth in both
-//! directions. The version sits apart from the other properties because the
-//! syntax tree treats it as a required, fixed part of the card envelope rather
-//! than a free property. Pure model, no dependency on [`crate::v21::tree`].
+//! value, or `Unknown` for anything else. The version sits apart from the other
+//! properties because the syntax tree treats it as a required, fixed part of the
+//! card envelope rather than a free property. Shared by every version module;
+//! pure model, no syntax dependency. The per-version wire-string consts
+//! (`VCARD_VERSION_21` and friends) live in their own version modules.
 
 use alloc::borrow::Cow;
 
 pub const VCARD_VERSION: &str = "VERSION";
-pub const VCARD_VERSION_21: &str = "2.1";
-pub const VCARD_VERSION_30: &str = "3.0";
-pub const VCARD_VERSION_40: &str = "4.0";
 
-/// The card version: a known value, or `Unknown` for anything else. The known
-/// variants are backed by the `VCARD_VERSION_*` consts, so the wire strings
-/// have a single source of truth in both directions.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// The card version: a known value, or `Unknown` for anything else.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VcardVersion<'a> {
     /// vCard 2.1.
-    #[default]
     V21,
     /// vCard 3.0.
     V30,
@@ -36,9 +30,9 @@ impl VcardVersion<'_> {
     /// The version's wire string.
     pub fn as_str(&self) -> &str {
         match self {
-            Self::V21 => VCARD_VERSION_21,
-            Self::V30 => VCARD_VERSION_30,
-            Self::V40 => VCARD_VERSION_40,
+            Self::V21 => "2.1",
+            Self::V30 => "3.0",
+            Self::V40 => "4.0",
             Self::Unknown(version) => version,
         }
     }
@@ -47,9 +41,9 @@ impl VcardVersion<'_> {
 impl<'a> From<Cow<'a, str>> for VcardVersion<'a> {
     fn from(version: Cow<'a, str>) -> Self {
         match version.as_ref() {
-            VCARD_VERSION_21 => Self::V21,
-            VCARD_VERSION_30 => Self::V30,
-            VCARD_VERSION_40 => Self::V40,
+            "2.1" => Self::V21,
+            "3.0" => Self::V30,
+            "4.0" => Self::V40,
             _ => Self::Unknown(version),
         }
     }
@@ -65,7 +59,7 @@ impl<'a> From<&'a str> for VcardVersion<'a> {
 mod tests {
     use alloc::borrow::Cow;
 
-    use crate::v21::version::VcardVersion;
+    use crate::version::VcardVersion;
 
     #[test]
     fn maps_known_wire_strings_both_ways() {

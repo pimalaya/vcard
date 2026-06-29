@@ -77,16 +77,16 @@
 //! ## Module map
 //!
 //! - the decoded model (no syntax dependency): [`vcard`] (the card),
-//!   [`version`], [`prop`] (property + names), [`param`] (parameter + names),
+//!   [`version`](crate::version), [`prop`] (property + names), [`param`] (parameter + names),
 //!   [`value`] (the value kinds, one per submodule).
 //! - [`tree`] — everything syntactic, gated behind the `parser` feature:
 //!   [`cst`](tree::cst) (the tree, parse, serialize, typed access),
-//!   [`leaf`](tree::leaf) / [`line`](tree::line) / [`value`](tree::value) /
+//!   [`leaf`](crate::tree::leaf) / [`line`](tree::line) / [`value`](tree::value) /
 //!   [`param`](tree::param) (the nodes), [`prop`](tree::prop) /
 //!   [`param`](tree::param) (per-name lens markers and their `VcardPropLens` /
 //!   `VcardParamLens` contracts), [`cursor`](tree::cursor) (in-place editing),
 //!   [`decode`](tree::decode) / [`encode`](tree::encode) (the model bridge and
-//!   value codec), and [`error`](tree::error) (the parse errors).
+//!   value codec), and [`error`](crate::tree::error) (the parse errors).
 //!
 //! ## Status
 //!
@@ -103,7 +103,6 @@ pub mod param;
 pub mod prop;
 pub mod value;
 pub mod vcard;
-pub mod version;
 
 #[cfg(feature = "parser")]
 pub mod tree;

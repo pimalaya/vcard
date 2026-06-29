@@ -17,11 +17,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["parser", "v21", "v30", "v40"]
+default = ["parser"]
 parser = []
-v21 = []
-v30 = []
-v40 = []
 
 [lib]
 name = "vcard"

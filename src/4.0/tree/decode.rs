@@ -32,8 +32,8 @@ use crate::v40::{
         uri::VcardUri,
     },
     vcard::Vcard,
-    version::VcardVersion,
 };
+use crate::version::VcardVersion;
 
 impl VcardCst<'_> {
     /// Decode the whole card into the semantic [`Vcard`] model.
