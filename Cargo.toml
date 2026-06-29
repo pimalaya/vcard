@@ -17,14 +17,12 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["v2_1", "v3_0", "v4_0", "parser"]
-v4_0 = []
-v3_0 = []
-v2_1 = []
+default = ["parser", "v21", "v30", "v40"]
 parser = []
+v21 = []
+v30 = []
+v40 = []
 
 [lib]
 name = "vcard"
 path = "src/lib.rs"
-
-[dependencies]

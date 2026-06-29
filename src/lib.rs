@@ -8,17 +8,18 @@
 //! tree, and codec); shared pieces will be factored out once more than one
 //! version exists.
 //!
-//! - [`v4_0`] — vCard 4.0 (RFC 6350). Enabled by the `v4_0` feature (default).
-//! - [`v3_0`] — vCard 3.0 (RFC 2426). Enabled by the `v3_0` feature (default).
-//! - [`v2_1`] — vCard 2.1 (versitcard). Enabled by the `v2_1` feature.
+//! - [`v40`] — vCard 4.0 (RFC 6350). Enabled by the `v40` feature (default).
+//! - [`v30`] — vCard 3.0 (RFC 2426). Enabled by the `v30` feature (default).
+//! - [`v21`] — vCard 2.1 (versitcard). Enabled by the `v21` feature.
 
 extern crate alloc;
 
-#[cfg(feature = "v2_1")]
-pub mod v2_1;
-
-#[cfg(feature = "v3_0")]
-pub mod v3_0;
-
-#[cfg(feature = "v4_0")]
-pub mod v4_0;
+#[cfg(feature = "v21")]
+#[path = "2.1/mod.rs"]
+pub mod v21;
+#[cfg(feature = "v30")]
+#[path = "3.0/mod.rs"]
+pub mod v30;
+#[cfg(feature = "v40")]
+#[path = "4.0/mod.rs"]
+pub mod v40;
