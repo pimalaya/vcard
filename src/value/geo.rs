@@ -1,0 +1,20 @@
+//! # Geo value
+//!
+//! The decoded geographic-position value kind.
+//!
+//! Backs the `GEO` property in vCard 2.1 (a `,`-separated pair) and 3.0 (a
+//! `;`-separated pair). vCard 4.0 instead carries `GEO` as a `geo:` URI, decoded
+//! to [`VcardUri`](crate::value::uri::VcardUri). The latitude and longitude are
+//! kept as raw text; pure data with no escaping knowledge, like every other type
+//! in [`crate::value`].
+
+use alloc::borrow::Cow;
+
+/// A decoded `GEO` value: a latitude/longitude pair, kept as raw text.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct VcardGeo<'a> {
+    /// The latitude, as raw text.
+    pub latitude: Cow<'a, str>,
+    /// The longitude, as raw text.
+    pub longitude: Cow<'a, str>,
+}

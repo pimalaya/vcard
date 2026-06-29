@@ -12,6 +12,9 @@
 use alloc::borrow::Cow;
 
 pub const VCARD_VERSION: &str = "VERSION";
+pub const VCARD_VERSION_21: &str = "2.1";
+pub const VCARD_VERSION_30: &str = "3.0";
+pub const VCARD_VERSION_40: &str = "4.0";
 
 /// The card version: a known value, or `Unknown` for anything else.
 #[derive(Clone, Debug, PartialEq, Eq)]

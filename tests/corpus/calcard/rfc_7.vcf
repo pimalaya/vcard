@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:4.0
+KIND:group
+FN:Funky distribution list
+MEMBER:mailto:subscriber1@example.com
+MEMBER:xmpp:subscriber2@example.com
+MEMBER:sip:subscriber3@example.com
+MEMBER:tel:+1-418-555-5555
+END:VCARD

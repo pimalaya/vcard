@@ -1,0 +1,10 @@
+BEGIN:VCARD
+VERSION:2.1
+N:Mustermann;Max
+FN:Max Mustermann
+ORG:xxx
+ADR;HOME:;;xxxx;xxxx;;1234;xxxx
+LABEL;HOME;ENCODING=QUOTED-PRINTABLE:xxxx
+URL;HOME:http://www.example.com
+REV:20201015T094901Z
+END:VCARD

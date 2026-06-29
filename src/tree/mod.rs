@@ -1,10 +1,25 @@
-//! # Shared syntax-tree primitives
+//! # Syntax tree
 //!
-//! The version-agnostic atoms of the syntax tree, shared by every version
-//! module's own `tree`: [`leaf`] (the raw string atom every node is built from)
-//! and [`error`] (the single parse error type). Both are pure structure with no
-//! property or version semantics, so they live once at the crate root. Gated
-//! behind the `parser` feature, like the per-version trees that depend on them.
+//! Everything syntactic: the byte-faithful representation of a card and the
+//! bridges to and from the decoded model.
+//!
+//! The hub is [`cst::VcardCst`], a tree of generic nodes ([`line`](mod@line),
+//! [`param`], [`value`], [`leaf`]) that round-trips the wire bytes exactly. On
+//! top of the generic tree sit the per-name lens markers, each carrying the
+//! `VcardPropLens` / `VcardParamLens` contract defined in [`prop`] / [`param`],
+//! the in-place edit [`cursor`], and the [`decode`] / [`encode`] bridges that
+//! project between the tree and the decoded model. Parsing is the only fallible
+//! step, so its [`error`] type lives here too. This whole layer is gated behind
+//! the `parser` feature, so the decoded model can be depended on without it.
 
+pub mod codec;
+pub mod cst;
+pub mod cursor;
+pub mod decode;
+pub mod encode;
 pub mod error;
 pub mod leaf;
+pub mod line;
+pub mod param;
+pub mod prop;
+pub mod value;

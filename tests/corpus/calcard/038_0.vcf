@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Arnold Smith
+N:Smith;Arnold;;;
+EMAIL;TYPE=INTERNET:asmithk@gmail.com
+END:VCARD

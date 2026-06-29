@@ -1,0 +1,5 @@
+BEGIN:VCARD
+VERSION:2.1
+EMAIL;PREF:john.doe@company.com
+CATEGORIES:My Contacts
+END:VCARD
