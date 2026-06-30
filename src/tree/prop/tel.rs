@@ -1,6 +1,7 @@
 //! # TEL lens
 //!
-//! The `TEL` (telephone) property lens: a single text value.
+//! The `TEL` (telephone) property lens: a telephone number for the object,
+//! decoded as a single `VcardText` (RFC 6350 6.4.1).
 
 use crate::{
     param::VcardParamKind,

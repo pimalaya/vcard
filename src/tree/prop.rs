@@ -1,10 +1,11 @@
 //! # Property lenses
 //!
-//! The property lens contract and one hand-written module per RFC 6350 property.
+//! The property lens contract and one hand-written module per RFC 6350
+//! property.
 //!
 //! [`VcardPropLens`] ties a wire name to a decoded value type plus the
-//! `decode`/`encode` projections and an edit cursor; each property implements it
-//! in its own submodule, where the marker is the type-level key for
+//! `decode`/`encode` projections and an edit cursor; each property implements
+//! it in its own submodule, where the marker is the type-level key for
 //! [`VcardCst::prop`](crate::tree::cst::VcardCst::prop). Scalar, list and URI
 //! properties share the generic
 //! [`VcardValueCursor`](crate::tree::cursor::VcardValueCursor); the structured
@@ -62,8 +63,9 @@ use crate::value::VcardValueKind;
 use crate::version::VcardVersion;
 
 /// A property identified by type: its decoded value type, edit cursor, and the
-/// projections between the generic syntax node and the type. The wire name comes
-/// from its [`VcardPropSpec::PROP`] (a supertrait), so the two stay in sync.
+/// projections between the generic syntax node and the type. The wire name
+/// comes from its [`VcardPropSpec::PROP`] (a supertrait), so the two stay in
+/// sync.
 pub trait VcardPropLens: VcardPropSpec {
     /// The decoded value type, borrowing the syntax node for reads.
     type Target<'v>;
@@ -76,14 +78,16 @@ pub trait VcardPropLens: VcardPropSpec {
     /// Project the generic syntax node onto the decoded type (unescaping).
     fn decode<'v>(value: &'v VcardValueNode<'_>) -> Self::Target<'v>;
 
-    /// Project a content line onto the decoded type, consulting the card version
-    /// where the value's shape is version-specific (`GEO`, the binary props).
-    /// The default ignores the version and decodes the value node alone.
+    /// Project a content line onto the decoded type, consulting the card
+    /// version where the value's shape is version-specific (`GEO`, the binary
+    /// props). The default ignores the version and decodes the value node
+    /// alone.
     fn decode_versioned<'v>(line: &'v VcardLine<'_>, _version: VcardVersion) -> Self::Target<'v> {
         Self::decode(&line.value)
     }
 
-    /// Encode a decoded value back into a generic syntax node (escaping, owned).
+    /// Encode a decoded value back into a generic syntax node (escaping,
+    /// owned).
     fn encode(decoded: &Self::Target<'_>) -> VcardValueNode<'static>;
 
     /// Wrap a content line in the typed cursor for in-place editing.
@@ -105,8 +109,9 @@ pub enum VcardPropCardinality {
     Any,
 }
 
-/// The default parameters a property may carry, used by the spec for the uniform
-/// majority. Per-property sets refine this where a property allows more or fewer.
+/// The default parameters a property may carry, used by the spec for the
+/// uniform majority. Per-property sets refine this where a property allows more
+/// or fewer.
 const COMMON_PARAMS: &[VcardParamKind] = &[
     VcardParamKind::Value,
     VcardParamKind::Language,
@@ -117,14 +122,15 @@ const COMMON_PARAMS: &[VcardParamKind] = &[
 ];
 
 /// The per-property contract: the versions it lives in, its multiplicity, the
-/// value-types and parameters it may carry (all per version), and the value-type
-/// in force for a given version and optionally declared `VALUE`.
+/// value-types and parameters it may carry (all per version), and the
+/// value-type in force for a given version and optionally declared `VALUE`.
 ///
 /// Implemented on the zero-sized lens markers. The defaults cover the uniform
 /// majority (a single text value, valid in every version), so a property
-/// overrides only where it diverges; the only required item is [`PROP`](Self::PROP).
-/// The value axis and the `VALUE` axis resolve together in [`value`](Self::value),
-/// which is what the decoder consults to pick a value kind.
+/// overrides only where it diverges; the only required item is
+/// [`PROP`](Self::PROP). The value axis and the `VALUE` axis resolve together
+/// in [`value`](Self::value), which is what the decoder consults to pick a
+/// value kind.
 pub trait VcardPropSpec {
     /// The property this spec describes.
     const PROP: VcardPropKind;
@@ -162,10 +168,10 @@ pub trait VcardPropSpec {
     }
 }
 
-/// The spec of a property as function pointers, the runtime bridge from the open
-/// [`VcardPropKind`] back to the static per-marker [`VcardPropSpec`] impls. The
-/// decoder and the validator dispatch a prop kind through [`prop_spec`] and then
-/// call these, instead of each owning a 42-arm match.
+/// The spec of a property as function pointers, the runtime bridge from the
+/// open [`VcardPropKind`] back to the static per-marker [`VcardPropSpec`]
+/// impls. The decoder and the validator dispatch a prop kind through
+/// [`prop_spec`] and then call these, instead of each owning a 42-arm match.
 pub(crate) struct VcardPropSpecFns {
     /// See [`VcardPropSpec::allowed_versions`].
     pub allowed_versions: fn() -> &'static [VcardVersion],

@@ -1,6 +1,7 @@
 //! # SORT-AS parameter lens
 //!
-//! The `SORT-AS` parameter lens: a list of components to sort the property by.
+//! The `SORT-AS` parameter lens: a list of components to sort the property by
+//! (RFC 6350 5.9).
 
 use alloc::{borrow::Cow, string::ToString, vec::Vec};
 

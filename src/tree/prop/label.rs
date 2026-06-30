@@ -1,6 +1,9 @@
 //! # LABEL lens
 //!
-//! The `LABEL` property lens: a formatted delivery-address label, as a single text value.
+//! The `LABEL` property lens: a formatted delivery-address label, decoded as a
+//! single text value.
+//!
+//! See RFC 2426 3.2.2 (vCard 2.1/3.0; a parameter in 4.0).
 
 use crate::{
     param::VcardParamKind,

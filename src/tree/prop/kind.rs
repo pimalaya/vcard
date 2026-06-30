@@ -1,6 +1,9 @@
 //! # KIND lens
 //!
-//! The `KIND` property lens: the kind of entity, as a text value.
+//! The `KIND` property lens: the kind of entity the card represents, such as an
+//! individual or an organization, decoded as a text value.
+//!
+//! See RFC 6350 6.1.4.
 
 use crate::{
     param::VcardParamKind,

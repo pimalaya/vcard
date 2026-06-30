@@ -1,6 +1,7 @@
 //! # N lens
 //!
-//! The `N` property lens and its bespoke edit cursor.
+//! The `N` (structured name) property lens and its bespoke edit cursor: the
+//! components of the name of the object the card represents (RFC 6350 6.2.2).
 //!
 //! `N` is the showcase of the structured-value path: unlike the scalar/list
 //! lenses that use the generic cursor, it pairs [`VcardN`] with a dedicated

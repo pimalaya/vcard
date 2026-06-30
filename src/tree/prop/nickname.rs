@@ -1,6 +1,7 @@
 //! # NICKNAME lens
 //!
-//! The `NICKNAME` property lens: a comma-separated text list.
+//! The `NICKNAME` property lens: the familiar or informal name(s) of the
+//! object, decoded as a comma-separated `VcardTextList` (RFC 6350 6.2.3).
 
 use crate::{
     param::VcardParamKind,

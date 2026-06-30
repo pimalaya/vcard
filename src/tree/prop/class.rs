@@ -1,6 +1,9 @@
 //! # CLASS lens
 //!
-//! The `CLASS` property lens: the access classification (vCard 3.0), as a single text value.
+//! The `CLASS` property lens: the access classification of the card, decoded as
+//! a single text value.
+//!
+//! See RFC 2426 3.7.1 (vCard 3.0; removed in 4.0).
 
 use crate::{
     param::VcardParamKind,

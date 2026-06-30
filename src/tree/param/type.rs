@@ -1,6 +1,7 @@
 //! # TYPE parameter lens
 //!
-//! The `TYPE` parameter lens: a list of kinds or contexts (e.g. `work`, `home`).
+//! The `TYPE` parameter lens: a list of kinds or contexts (e.g. `work`, `home`)
+//! (RFC 6350 5.6).
 
 use alloc::{borrow::Cow, string::ToString, vec::Vec};
 

@@ -1,6 +1,9 @@
 //! # CALADRURI lens
 //!
-//! The `CALADRURI` property lens: a URI to a calendar scheduling address.
+//! The `CALADRURI` property lens: the URI to use when sending a scheduling
+//! request to the contact, decoded as a URI.
+//!
+//! See RFC 6350 6.9.2.
 
 use crate::{
     param::VcardParamKind,

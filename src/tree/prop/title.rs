@@ -1,6 +1,7 @@
 //! # TITLE lens
 //!
-//! The `TITLE` (job title) property lens: a single text value.
+//! The `TITLE` (job title) property lens: the position or job of the object,
+//! decoded as a single `VcardText` (RFC 6350 6.6.1).
 
 use crate::{
     param::VcardParamKind,

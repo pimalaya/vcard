@@ -2,16 +2,16 @@
 //!
 //! Strict, version-aware construction of a single property.
 //!
-//! [`VcardPropBuilder`] is the write-side counterpart of the lenses: keyed by the
-//! same zero-sized markers, it carries the card version and accumulates
-//! parameters, then emits an open [`VcardProp`]. Construction is the strict half
-//! of "liberal in, strict out": the name is pinned by the marker's
+//! [`VcardPropBuilder`] is the write-side counterpart of the lenses: keyed by
+//! the same zero-sized markers, it carries the card version and accumulates
+//! parameters, then emits an open [`VcardProp`]. Construction is the strict
+//! half of "liberal in, strict out": the name is pinned by the marker's
 //! [`VcardPropSpec`], and [`build`](VcardPropBuilder::build) runs the shared
 //! per-property check ([`validate_prop`](crate::tree::validate)) so the value
 //! kind and every known parameter must be allowed for the version (unknown,
-//! extension parameters pass). To emit something the spec forbids, construct the
-//! open [`VcardProp`] by hand. The version is a value the builder carries, never
-//! a type parameter.
+//! extension parameters pass). To emit something the spec forbids, construct
+//! the open [`VcardProp`] by hand. The version is a value the builder carries,
+//! never a type parameter.
 
 use core::marker::PhantomData;
 
@@ -54,9 +54,10 @@ impl<'a, L: VcardPropSpec> VcardPropBuilder<'a, L> {
     }
 
     /// Finish with a value, emitting the property; its name is taken from the
-    /// spec. Runs the same per-property check as [`Vcard::validate`](crate::vcard::Vcard::validate):
-    /// the value kind must be allowed and every known parameter must be allowed
-    /// for the version (unknown, i.e. extension, parameters pass).
+    /// spec. Runs the same per-property check as
+    /// [`Vcard::validate`](crate::vcard::Vcard::validate): the value kind must
+    /// be allowed and every known parameter must be allowed for the version
+    /// (unknown, i.e. extension, parameters pass).
     pub fn build(self, value: VcardValue<'a>) -> Result<VcardProp<'a>, Vec<VcardValidateError>> {
         let prop = VcardProp {
             name: VcardPropName::Kind(L::PROP),

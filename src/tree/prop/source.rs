@@ -1,6 +1,7 @@
 //! # SOURCE lens
 //!
-//! The `SOURCE` property lens: a URI to the source of the card.
+//! The `SOURCE` property lens: a URI from which the directory information of
+//! the card can be retrieved, decoded as a `VcardUri` (RFC 6350 6.1.3).
 
 use crate::{
     param::VcardParamKind,

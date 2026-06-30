@@ -1,6 +1,8 @@
 //! # NAME lens
 //!
-//! The `NAME` property lens: the display name (vCard 3.0), as a single text value.
+//! The `NAME` property lens: the displayable name of the source the card
+//! describes, a vCard 3.0 property removed in 4.0. The lens decodes the value
+//! as a single `VcardText` (RFC 2426 3.1.5).
 
 use crate::{
     param::VcardParamKind,

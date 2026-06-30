@@ -5,10 +5,10 @@
 //! [`VcardLine`] is the syntactic unit a property occupies. It owns the line
 //! tokeniser ([`take`](VcardLine::take), which splits one logical line off the
 //! remaining input for [`VcardCst::parse`](crate::tree::cst::VcardCst::parse),
-//! unfolding any RFC 6350 folded continuation lines) and the head splitter that
-//! separates the name from its parameters. It exposes its raw value and typed
-//! parameter access by lens, but stays generic: the meaning of the name and the
-//! decoding of the value belong to the lens markers and the
+//! unfolding any RFC 6350 3.2 folded continuation lines) and the head splitter
+//! that separates the name from its parameters. It exposes its raw value and
+//! typed parameter access by lens, but stays generic: the meaning of the name
+//! and the decoding of the value belong to the lens markers and the
 //! [`decode`](crate::tree::decode) / [`encode`](crate::tree::encode) bridges.
 //!
 //! Folding and stray blank lines are normalised away on parse, not preserved: a
@@ -59,12 +59,12 @@ impl<'a> VcardLine<'a> {
     }
 
     /// Tokenise the logical line at the start of `rest`, unfolding any folded
-    /// continuation lines, and return it with the remaining input. RFC 6350
+    /// continuation lines, and return it with the remaining input. RFC 6350 3.2
     /// folds a long line by inserting a CRLF and a single leading space or tab;
     /// unfolding drops them. A line with no folds borrows the source; a folded
     /// line is rebuilt owned, since its bytes are no longer contiguous.
     pub fn take(rest: &'a str) -> Result<(Self, &'a str), VcardParseError> {
-        // Skip blank lines: real-world exports sometimes emit them.
+        // NOTE: skip blank lines: real-world exports sometimes emit them.
         let mut head = rest;
         let (first, eol, mut tail) = loop {
             if head.is_empty() {
@@ -78,7 +78,7 @@ impl<'a> VcardLine<'a> {
             break (content, eol, next);
         };
 
-        // QUOTED-PRINTABLE soft line breaks: a line whose head declares
+        // NOTE: QUOTED-PRINTABLE soft line breaks: a line whose head declares
         // ENCODING=QUOTED-PRINTABLE and whose value ends with `=` continues on
         // the next physical line. Param-driven, so it applies to any version's
         // card that uses the encoding, not just 2.1.

@@ -1,6 +1,9 @@
 //! # AGENT lens
 //!
-//! The `AGENT` property lens: the associated agent, kept as opaque text, as a single text value.
+//! The `AGENT` property lens: another entity acting as the contact's agent,
+//! kept as opaque text and decoded as a single text value.
+//!
+//! See RFC 2426 3.5.4 (vCard 3.0; removed in 4.0).
 
 use crate::{
     param::VcardParamKind,

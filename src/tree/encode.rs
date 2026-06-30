@@ -3,15 +3,15 @@
 //! The write side of the bridge: project the decoded model onto a raw syntax
 //! tree.
 //!
-//! `escape` is the write codec (it applies the RFC 6350 value escapes). On top
-//! of it sit the `encode` methods, one per decoded type: each value type encodes
-//! into a [`VcardValueNode`], a [`VcardParam`] encodes into a [`VcardParamNode`],
-//! a [`VcardProp`] encodes into a [`VcardLine`] (its name taken verbatim from the
-//! property, its value dispatched on the value kind), and a [`Vcard`] encodes
-//! into a whole [`VcardCst`]. Encoding is always canonical; byte-preserving edits
-//! are the cursors' job, not this module's. [`Display`](core::fmt::Display) for
-//! [`Vcard`] renders a
-//! decoded card straight to its serialized bytes through here.
+//! `escape` is the write codec (it applies the RFC 6350 3.4 value escapes). On
+//! top of it sit the `encode` methods, one per decoded type: each value type
+//! encodes into a [`VcardValueNode`], a [`VcardParam`] encodes into a
+//! [`VcardParamNode`], a [`VcardProp`] encodes into a [`VcardLine`] (its name
+//! taken verbatim from the property, its value dispatched on the value kind),
+//! and a [`Vcard`] encodes into a whole [`VcardCst`]. Encoding is always
+//! canonical; byte-preserving edits are the cursors' job, not this module's.
+//! [`Display`](core::fmt::Display) for [`Vcard`] renders a decoded card
+//! straight to its serialized bytes through here.
 
 use core::fmt;
 
@@ -51,14 +51,16 @@ impl Vcard<'_> {
     /// Encode the whole card into a canonical CST.
     pub fn encode(&self) -> VcardCst<'static> {
         let mut cst = VcardCst::v4();
-        // v4() seeds a VERSION line as the first property; set it to this card's
-        // version, then append the rest. VERSION stays an ordinary property.
+        // NOTE: v4() seeds a VERSION line as the first property; set it to this
+        // card's version, then append the rest. VERSION stays an ordinary
+        // property.
         cst.props[0] = VcardLine::text("VERSION", self.version.to_string());
         cst.props
             .extend(self.properties.iter().map(VcardProp::encode));
 
-        // The value encoders escape canonically (modern rules); a 2.1 card needs
-        // its own escaping, so re-escape every value leaf with the card's mode.
+        // NOTE: the value encoders escape canonically (modern rules); a 2.1
+        // card needs its own escaping, so re-escape every value leaf with the
+        // card's mode.
         let escaper = Escaper::for_version(self.version);
         if escaper != Escaper::Modern {
             for line in &mut cst.props {
@@ -78,7 +80,8 @@ impl<'a> From<Vcard<'a>> for VcardCst<'static> {
 
 /// Re-escape a canonically-encoded line's value with `escaper`, undoing the
 /// modern escaping the value encoders produced, and stamp the mode. The modern
-/// unescape is the exact inverse of the modern escape, so no information is lost.
+/// unescape is the exact inverse of the modern escape, so no information is
+/// lost.
 pub(crate) fn reescape_line(line: &mut VcardLine<'_>, escaper: Escaper) {
     for component in &mut line.value.components {
         for leaf in component.iter_mut() {
@@ -385,9 +388,9 @@ fn param_list(name: &str, values: &[Cow<'_, str>]) -> VcardParamNode<'static> {
     }
 }
 
-/// Escape a value for a single value position: the separators `,` `;`, the
-/// escape `\\` and newlines. Borrows when nothing needs escaping.
-/// Apply the value escapes by the card's escaping mode.
+/// Apply the value escapes by the card's escaping mode (RFC 6350 3.4 for the
+/// modern rules; vCard 2.1 escapes only `;`). Borrows when nothing needs
+/// escaping.
 pub(crate) fn escape_with(text: &str, escaper: Escaper) -> Cow<'_, str> {
     match escaper {
         Escaper::Modern => escape_modern(text),
@@ -395,7 +398,7 @@ pub(crate) fn escape_with(text: &str, escaper: Escaper) -> Cow<'_, str> {
     }
 }
 
-/// Apply the RFC 2426 / 6350 value escapes `\\` `\,` `\;` `\n`.
+/// Apply the RFC 2426 / 6350 3.4 value escapes `\\` `\,` `\;` `\n`.
 fn escape_modern(text: &str) -> Cow<'_, str> {
     if !text
         .bytes()

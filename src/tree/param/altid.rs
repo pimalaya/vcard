@@ -1,7 +1,7 @@
 //! # ALTID parameter lens
 //!
 //! The `ALTID` parameter lens: a single value tying alternative representations
-//! of the same logical property.
+//! of the same logical property (RFC 6350 5.4).
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

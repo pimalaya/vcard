@@ -41,19 +41,33 @@ impl error::Error for ParseVcardParamKindError {}
 /// counterpart that carries the value (and unknown names) is [`VcardParam`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VcardParamKind {
+    /// `ALTID`: ties alternative representations together (RFC 6350 5.4).
     AltId,
+    /// `CALSCALE`: calendar scale of a date/time value (RFC 6350 5.8).
     CalScale,
+    /// `CHARSET`: character set of the value (vCard 2.1).
     Charset,
+    /// `ENCODING`: inline encoding of the value (vCard 2.1 / 3.0).
     Encoding,
+    /// `GEO`: global position of the property (RFC 6350 5.10).
     Geo,
+    /// `LABEL`: formatted delivery-address label (RFC 6350 6.3.1).
     Label,
+    /// `LANGUAGE`: language of the value (RFC 6350 5.1).
     Language,
+    /// `MEDIATYPE`: media type of the referenced resource (RFC 6350 5.7).
     MediaType,
+    /// `PID`: source identifiers of the property instance (RFC 6350 5.5).
     Pid,
+    /// `PREF`: preference among a set of instances (RFC 6350 5.3).
     Pref,
+    /// `SORT-AS`: components to sort the property by (RFC 6350 5.9).
     SortAs,
+    /// `TYPE`: kinds or contexts of the property (RFC 6350 5.6).
     Type,
+    /// `TZ`: time zone of the property (RFC 6350 5.11).
     Tz,
+    /// `VALUE`: value type the value is to be read as (RFC 6350 5.2).
     Value,
 }
 

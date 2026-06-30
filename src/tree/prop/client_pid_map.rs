@@ -1,7 +1,9 @@
 //! # CLIENTPIDMAP lens
 //!
-//! The `CLIENTPIDMAP` property lens, with a cursor naming its two components (a
-//! source id and the URI of the client that produced it).
+//! The `CLIENTPIDMAP` property lens, mapping a PID source identifier to the URI
+//! of the client that produced it, with a cursor naming those two components.
+//!
+//! See RFC 6350 6.7.7.
 
 use alloc::borrow::Cow;
 

@@ -5,6 +5,8 @@
 //! ([`VcardValue::Uri`]), a `lat;long` coordinate pair in 2.1 / 3.0
 //! ([`VcardValue::Geo`]). The version-blind [`decode`](VcardPropLens::decode)
 //! assumes the 4.0 URI form.
+//!
+//! See RFC 6350 6.5.2.
 
 use crate::{
     param::VcardParamKind,

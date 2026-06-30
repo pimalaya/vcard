@@ -2,13 +2,13 @@
 //!
 //! The decoded time-related value kinds: a date-and-or-time, and a timestamp.
 //!
-//! [`VcardDateAndOrTime`] backs `BDAY` and `ANNIVERSARY`; [`VcardTimestamp`]
-//! backs `REV`. RFC 6350 date/time values have an intricate reduced-precision
-//! grammar (omitted components, truncated forms); rather than decode into broken
-//! calendar fields and risk a lossy round-trip, the value is kept as its raw
-//! text. Callers that need calendar semantics parse the string themselves. Pure
-//! data, no escaping; the owning property's wire name lives on
-//! [`crate::prop::VcardProp::name`].
+//! [`VcardDateAndOrTime`] (RFC 6350 4.3.4) backs `BDAY` and `ANNIVERSARY`;
+//! [`VcardTimestamp`] (RFC 6350 4.3.5) backs `REV`. RFC 6350 date/time values
+//! have an intricate reduced-precision grammar (omitted components, truncated
+//! forms); rather than decode into broken calendar fields and risk a lossy
+//! round-trip, the value is kept as its raw text. Callers that need calendar
+//! semantics parse the string themselves. Pure data, no escaping; the owning
+//! property's wire name lives on [`crate::prop::VcardProp::name`].
 
 use alloc::{borrow::Cow, string::String};
 

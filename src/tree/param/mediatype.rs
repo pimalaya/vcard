@@ -1,7 +1,7 @@
 //! # MEDIATYPE parameter lens
 //!
 //! The `MEDIATYPE` parameter lens: a single value (the media type of a
-//! referenced resource).
+//! referenced resource) (RFC 6350 5.7).
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

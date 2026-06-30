@@ -1,6 +1,9 @@
 //! # LANG lens
 //!
-//! The `LANG` property lens: an RFC 5646 language tag.
+//! The `LANG` property lens: a language the contact may be contacted in,
+//! decoded as an RFC 5646 language tag.
+//!
+//! See RFC 6350 6.4.4.
 
 use crate::{
     param::VcardParamKind,

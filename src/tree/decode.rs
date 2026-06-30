@@ -3,16 +3,17 @@
 //! The read side of the bridge: project a raw syntax tree onto the decoded
 //! model.
 //!
-//! `unescape` is the read codec (it resolves the RFC 6350 value escapes). On top
-//! of it sit the `decode` methods, one per syntactic node: a
-//! [`VcardValueNode`] decodes its components, a [`VcardParamNode`] decodes into a
-//! [`VcardParam`], a [`VcardLine`] decodes into a [`VcardProp`], and a
+//! `unescape` is the read codec (it resolves the RFC 6350 3.4 value escapes).
+//! On top of it sit the `decode` methods, one per syntactic node: a
+//! [`VcardValueNode`] decodes its components, a [`VcardParamNode`] decodes into
+//! a [`VcardParam`], a [`VcardLine`] decodes into a [`VcardProp`], and a
 //! [`VcardCst`] decodes into a whole [`Vcard`]. A property's value kind is no
-//! longer chosen by a name match: [`VcardLine::decode`] resolves the prop name to
-//! a [`VcardPropKind`], asks its spec for the in-force value kind (version plus
-//! any declared `VALUE`), then routes to that kind's decoder. The parameter name
-//! dispatch is still the match in [`VcardParamNode::decode`]. Each decoded value
-//! type gets an inherent `decode` that both paths delegate to.
+//! longer chosen by a name match: [`VcardLine::decode`] resolves the prop name
+//! to a [`VcardPropKind`], asks its spec for the in-force value kind (version
+//! plus any declared `VALUE`), then routes to that kind's decoder. The
+//! parameter name dispatch is still the match in [`VcardParamNode::decode`].
+//! Each decoded value type gets an inherent `decode` that both paths delegate
+//! to.
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
@@ -47,7 +48,8 @@ impl VcardCst<'_> {
     pub fn decode(&self) -> Vcard<'_> {
         let version = self.version();
 
-        // VERSION is held as the card's indicator, not as a free property.
+        // NOTE: VERSION is held as the card's indicator, not as a free
+        // property.
         let properties = self
             .props
             .iter()
@@ -64,8 +66,8 @@ impl VcardCst<'_> {
 
 impl VcardLine<'_> {
     /// Decode the line into a typed property. A known property dispatches its
-    /// value through the spec (see `decode_value`); an unknown one keeps its raw
-    /// components so it round-trips.
+    /// value through the spec (see `decode_value`); an unknown one keeps its
+    /// raw components so it round-trips.
     pub fn decode(&self, version: VcardVersion) -> VcardProp<'_> {
         let name = self.name.get();
         let qp = self.is_quoted_printable();
@@ -93,9 +95,10 @@ impl VcardLine<'_> {
             }),
         };
 
-        // QUOTED-PRINTABLE values carry their octets in the wire text; decode
-        // them on read so the model holds clean text, and drop the now-stale
-        // encoding parameter (filtered above). Param-driven, version-agnostic.
+        // NOTE: QUOTED-PRINTABLE values carry their octets in the wire text;
+        // decode them on read so the model holds clean text, and drop the
+        // now-stale encoding parameter (filtered above). Param-driven,
+        // version-agnostic.
         let value = if qp { qp_decode_value(value) } else { value };
 
         VcardProp {
@@ -120,8 +123,8 @@ impl VcardLine<'_> {
     }
 
     /// The value kind named by this line's `VALUE` parameter, if any. Only the
-    /// declared kind selects the value type; `ENCODING` / `CHARSET` transform the
-    /// text and stay in the codec.
+    /// declared kind selects the value type; `ENCODING` / `CHARSET` transform
+    /// the text and stay in the codec.
     fn declared_value_kind(&self) -> Option<VcardValueKind> {
         self.params
             .iter()
@@ -160,13 +163,14 @@ fn decode_value_kind<'v>(
         VcardValueKind::Org => VcardValue::Org(VcardOrg::decode(node)),
         VcardValueKind::ClientPidMap => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
         VcardValueKind::Geo => VcardValue::Geo(decode_geo_pair(node, version)),
-        // base64 kept verbatim; a 2.1 / 3.0 URI reference is reached via
+        // NOTE: base64 kept verbatim; a 2.1 / 3.0 URI reference is reached via
         // `VALUE=uri`, which resolves to the `Uri` kind above, not here.
         VcardValueKind::Binary => VcardValue::Binary(VcardBinary::Base64(node.decode_scalar_at(0))),
     }
 }
 
-/// Decode a `GEO` coordinate pair: `,`-separated in 2.1, `;`-separated otherwise.
+/// Decode a `GEO` coordinate pair: `,`-separated in 2.1, `;`-separated
+/// otherwise.
 fn decode_geo_pair<'v>(node: &'v VcardValueNode<'_>, version: VcardVersion) -> VcardGeo<'v> {
     match version {
         VcardVersion::V2_1 => VcardGeo::decode_comma(node),
@@ -386,8 +390,6 @@ impl VcardClientPidMap<'_> {
     }
 }
 
-/// Resolve the RFC 6350 value escapes `\\` `\,` `\;` `\n`, borrowing when there
-/// is nothing to unescape.
 /// Whether a parameter is `ENCODING=QUOTED-PRINTABLE` or the bare 2.1 token.
 fn param_is_quoted_printable(param: &VcardParamNode<'_>) -> bool {
     let name = param.name.get();
@@ -485,8 +487,8 @@ pub(crate) fn unescape(text: &str) -> Cow<'_, str> {
     unescape_modern(text)
 }
 
-/// Resolve the RFC 2426 / 6350 value escapes `\\` `\,` `\;` `\n`, borrowing when
-/// there is nothing to unescape.
+/// Resolve the RFC 2426 / 6350 3.4 value escapes `\\` `\,` `\;` `\n`, borrowing
+/// when there is nothing to unescape.
 fn unescape_modern(text: &str) -> Cow<'_, str> {
     if !text.contains('\\') {
         return Cow::Borrowed(text);
@@ -581,8 +583,9 @@ mod tests {
             VcardValue::Text(VcardText(Cow::Borrowed("circa 1800"))),
         );
 
-        // A 2.1 PHOTO is inline base64 by default, but a plain URI when the line
-        // declares VALUE=uri (the old is_uri_reference path, now spec-derived).
+        // A 2.1 PHOTO is inline base64 by default, but a plain URI when the
+        // line declares VALUE=uri (the old is_uri_reference path, now
+        // spec-derived).
         let cst = VcardCst::parse(
             "BEGIN:VCARD\r\nVERSION:2.1\r\nPHOTO;VALUE=URI:http://x/p.png\r\nEND:VCARD\r\n",
         )
@@ -643,8 +646,8 @@ mod tests {
     fn geo_and_binary_lenses_agree_with_whole_card_decode() {
         use crate::tree::prop::{geo::GEO, photo::PHOTO};
 
-        // The version-specific value shapes that decode() resolves must come back
-        // identically through the typed lens, not as a version-blind URI.
+        // The version-specific value shapes that decode() resolves must come
+        // back identically through the typed lens, not as a version-blind URI.
         for input in [
             concat!(
                 "BEGIN:VCARD\r\n",

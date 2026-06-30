@@ -1,6 +1,7 @@
 //! # PREF parameter lens
 //!
-//! The `PREF` parameter lens: a single value (a preference, 1-100).
+//! The `PREF` parameter lens: a single value (a preference, 1-100)
+//! (RFC 6350 5.3).
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

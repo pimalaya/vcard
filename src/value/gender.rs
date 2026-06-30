@@ -2,8 +2,8 @@
 //!
 //! The decoded `GENDER` value.
 //!
-//! `GENDER` is a structured RFC 6350 value of two `;`-ordered components: a
-//! single-letter sex code (`M`, `F`, `O`, `N`, `U`, or empty) and a free-text
+//! `GENDER` is a structured RFC 6350 6.2.7 value of two `;`-ordered components:
+//! a single-letter sex code (`M`, `F`, `O`, `N`, `U`, or empty) and a free-text
 //! gender identity. This bespoke type names the two parts. Pure,
 //! always-unescaped data; framing and escaping live on the syntax side
 //! ([`crate::tree`]). The wire name lives on [`crate::prop::VcardProp::name`].

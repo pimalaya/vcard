@@ -1,6 +1,7 @@
 //! # LANGUAGE parameter lens
 //!
-//! The `LANGUAGE` parameter lens: a single value (an RFC 5646 language tag).
+//! The `LANGUAGE` parameter lens: a single value (an RFC 5646 language tag)
+//! (RFC 6350 5.1).
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

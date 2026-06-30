@@ -1,7 +1,7 @@
 //! # TZ parameter lens
 //!
-//! The `TZ` parameter lens: a single value (the time zone of the property).
-//! Distinct from the `TZ` property.
+//! The `TZ` parameter lens: a single value (the time zone of the property)
+//! (RFC 6350 5.11). Distinct from the `TZ` property.
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

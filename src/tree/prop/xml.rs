@@ -1,6 +1,7 @@
 //! # XML lens
 //!
-//! The `XML` property lens: embedded XML, as a text value.
+//! The `XML` property lens: extended XML-encoded vCard data that fits no other
+//! property, decoded as a single `VcardText` (RFC 6350 6.1.5).
 
 use crate::{
     param::VcardParamKind,

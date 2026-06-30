@@ -5,6 +5,8 @@
 //! ([`VcardValue::Uri`]), inline base64 or a URI reference in 2.1 / 3.0
 //! ([`VcardValue::Binary`]). The version-blind
 //! [`decode`](VcardPropLens::decode) assumes the 4.0 URI form.
+//!
+//! See RFC 6350 6.8.1.
 
 use crate::{
     param::VcardParamKind,

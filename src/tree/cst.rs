@@ -2,16 +2,17 @@
 //!
 //! The core representation: a whole vCard as generic, byte-faithful syntax.
 //!
-//! [`VcardCst`] is the hub of the crate. It models a card as four real lines (the
-//! `BEGIN` / `VERSION` envelope, the property lines, the `END`), made of the
-//! nodes in the sibling modules ([`line`](crate::tree::line),
+//! [`VcardCst`] is the hub of the crate. It models a card as four real lines
+//! (the `BEGIN` / `VERSION` envelope, the property lines, the `END`), made of
+//! the nodes in the sibling modules ([`line`](crate::tree::line),
 //! [`param`](crate::tree::param), [`value`](crate::tree::value),
-//! [`leaf`](crate::tree::leaf)). It knows nothing about what a property *means*.
-//! It is filled from bytes (`parse`) or from typed properties (`push`), exports
-//! raw contents ([`Display`](core::fmt::Display) / `to_string`), and offers typed
-//! access by lens (`prop`, `prop_mut`, `remove`). The semantic projection
-//! ([`decode`](VcardCst::decode)) and the codec live in the
-//! [`decode`](crate::tree::decode) / [`encode`](crate::tree::encode) siblings.
+//! [`leaf`](crate::tree::leaf)). It knows nothing about what a property
+//! *means*. It is filled from bytes (`parse`) or from typed properties
+//! (`push`), exports raw contents ([`Display`](core::fmt::Display) /
+//! `to_string`), and offers typed access by lens (`prop`, `prop_mut`,
+//! `remove`). The semantic projection ([`decode`](VcardCst::decode)) and the
+//! codec live in the [`decode`](crate::tree::decode) /
+//! [`encode`](crate::tree::encode) siblings.
 
 use core::fmt;
 
@@ -26,9 +27,10 @@ use crate::{
     version::VcardVersion,
 };
 
-/// A whole card as raw syntax: a `BEGIN` line, the property lines (the `VERSION`
-/// line among them, wherever it falls), and an `END` line. All are real lines so
-/// nothing is reconstructed by rule, and `VERSION` keeps its source position.
+/// A whole card as raw syntax: a `BEGIN` line, the property lines (the
+/// `VERSION` line among them, wherever it falls), and an `END` line. All are
+/// real lines so nothing is reconstructed by rule, and `VERSION` keeps its
+/// source position.
 #[derive(Clone, Debug)]
 pub struct VcardCst<'a> {
     /// The BEGIN line.
@@ -40,7 +42,8 @@ pub struct VcardCst<'a> {
 }
 
 impl<'a> VcardCst<'a> {
-    /// Start an empty vCard 4.0, BEGIN/VERSION/END seeded, ready for properties.
+    /// Start an empty vCard 4.0, BEGIN/VERSION/END seeded, ready for
+    /// properties.
     pub fn v4() -> Self {
         Self {
             begin: VcardLine::text("BEGIN", "VCARD"),
@@ -50,8 +53,9 @@ impl<'a> VcardCst<'a> {
     }
 
     /// Parse exactly one card from raw text, borrowing it for the Cst lifetime.
-    /// `VERSION` is taken as an ordinary property wherever it appears (or not at
-    /// all): the parser is liberal about its position, the way real cards are.
+    /// `VERSION` is taken as an ordinary property wherever it appears (or not
+    /// at all): the parser is liberal about its position, the way real cards
+    /// are.
     pub fn parse(input: &'a str) -> Result<Self, VcardParseError> {
         let (begin, mut rest) = VcardLine::take(input)?;
         if !begin.name.get().eq_ignore_ascii_case("BEGIN") {
@@ -69,8 +73,9 @@ impl<'a> VcardCst<'a> {
             rest = tail;
 
             if line.name.get().eq_ignore_ascii_case("END") {
-                // VERSION can sit anywhere, so the escaping mode is only known
-                // once the whole card is parsed: stamp every value node with it.
+                // NOTE: VERSION can sit anywhere, so the escaping mode is only
+                // known once the whole card is parsed: stamp every value node
+                // with it.
                 let escaper = props
                     .iter()
                     .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
@@ -99,7 +104,8 @@ impl<'a> VcardCst<'a> {
     }
 
     /// The card's version indicator, read from its `VERSION` line. An
-    /// unrecognised or missing version normalises to [`V4_0`](VcardVersion::V4_0).
+    /// unrecognised or missing version normalises to
+    /// [`V4_0`](VcardVersion::V4_0).
     pub fn version(&self) -> VcardVersion {
         self.version_line()
             .and_then(|line| line.raw_value().parse().ok())
@@ -134,10 +140,10 @@ impl<'a> VcardCst<'a> {
 
     // --- read: typed access
 
-    /// The first property of type `L`, decoded into a borrowed snapshot. The card
-    /// version is threaded through so version-specific value shapes (`GEO`, the
-    /// binary props) decode the same way the whole-card [`decode`](Self::decode)
-    /// does.
+    /// The first property of type `L`, decoded into a borrowed snapshot. The
+    /// card version is threaded through so version-specific value shapes
+    /// (`GEO`, the binary props) decode the same way the whole-card
+    /// [`decode`](Self::decode) does.
     pub fn prop<L: VcardPropLens>(&self) -> Option<L::Target<'_>> {
         let version = self.version();
         self.props

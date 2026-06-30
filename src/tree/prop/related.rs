@@ -1,6 +1,8 @@
 //! # RELATED lens
 //!
-//! The `RELATED` property lens: a URI to a related entity.
+//! The `RELATED` property lens: a relationship to another entity, qualified by
+//! the `TYPE` parameter. The lens decodes the value as a `VcardUri`
+//! (RFC 6350 6.6.6).
 
 use crate::{
     param::VcardParamKind,

@@ -1,6 +1,8 @@
 //! # MEMBER lens
 //!
-//! The `MEMBER` property lens: a URI identifying a member of the group.
+//! The `MEMBER` property lens: a URI naming a member of the group the card
+//! represents, meaningful only when `KIND` is `group`. The lens decodes the
+//! value as a `VcardUri` (RFC 6350 6.6.5).
 
 use crate::{
     param::VcardParamKind,

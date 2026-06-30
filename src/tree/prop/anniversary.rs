@@ -1,6 +1,9 @@
 //! # ANNIVERSARY lens
 //!
-//! The `ANNIVERSARY` property lens: a date-and-or-time value.
+//! The `ANNIVERSARY` property lens: the contact's anniversary, decoded as a
+//! date-and-or-time value.
+//!
+//! See RFC 6350 6.2.6.
 
 use crate::{
     param::VcardParamKind,

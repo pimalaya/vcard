@@ -1,6 +1,8 @@
 //! # SORTSTRING lens
 //!
-//! The `SORTSTRING` property lens: the sort string (vCard 3.0), as a single text value.
+//! The `SORTSTRING` property lens: the string a vCard 3.0 application should
+//! use when sorting the card, decoded as a single `VcardText`. Replaced by the
+//! `SORT-AS` parameter in 4.0 (RFC 2426 3.3.4).
 
 use crate::{
     param::VcardParamKind,

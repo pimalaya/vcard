@@ -4,13 +4,13 @@
 //! than a second data model.
 //!
 //! Validity and lossiness are orthogonal: a conformant card may still carry
-//! extensions (`X-`/IANA properties, unknown parameters), so "valid" cannot be a
-//! type with no `Unknown` arms. [`Vcard::validate`] therefore checks the *known*
-//! parts of the (lossy) model against the per-property
+//! extensions (`X-`/IANA properties, unknown parameters), so "valid" cannot be
+//! a type with no `Unknown` arms. [`Vcard::validate`] therefore checks the
+//! *known* parts of the (lossy) model against the per-property
 //! [`VcardPropSpec`](crate::tree::prop::VcardPropSpec) for the card version
-//! (existence, value kind, parameters, cardinality) and leaves the
-//! unknown parts alone. [`Valid`] is a marker a validated value earns; it is the
-//! only thing that can mint one, so holding a `Valid<Vcard>` is proof the check
+//! (existence, value kind, parameters, cardinality) and leaves the unknown
+//! parts alone. [`Valid`] is a marker a validated value earns; it is the only
+//! thing that can mint one, so holding a `Valid<Vcard>` is proof the check
 //! passed. The same per-property check backs the [`VcardPropBuilder`]'s
 //! strict construction.
 //!
@@ -111,10 +111,11 @@ impl fmt::Display for VcardValidateError {
 impl error::Error for VcardValidateError {}
 
 impl Vcard<'_> {
-    /// Check the card against RFC 6350 for its version: every known property must
-    /// exist in the version, carry an allowed value kind and allowed parameters,
-    /// and respect its multiplicity. Extensions (unknown properties and
-    /// parameters) are conformant and pass. Collects every violation.
+    /// Check the card against RFC 6350 for its version: every known property
+    /// must exist in the version, carry an allowed value kind and allowed
+    /// parameters, and respect its multiplicity. Extensions (unknown
+    /// properties and parameters) are conformant and pass. Collects every
+    /// violation.
     pub fn validate(&self) -> Result<(), Vec<VcardValidateError>> {
         let version = self.version;
         let mut errors = Vec::new();
@@ -130,8 +131,9 @@ impl Vcard<'_> {
             }
         }
 
-        // Scan every kind defined in this version, so a required property that is
-        // absent (count 0) is caught alongside one that appears too often.
+        // NOTE: scan every kind defined in this version, so a required property
+        // that is absent (count 0) is caught alongside one that appears too
+        // often.
         for prop in VcardPropKind::ALL {
             let spec = prop_spec(prop);
             if !(spec.allowed_versions)().contains(&version) {
@@ -197,9 +199,9 @@ pub(crate) fn validate_prop(
     }
 }
 
-/// Whether a known parameter is allowed on a property in a version. 4.0 uses the
-/// spec's set directly; 2.1 / 3.0 drop the parameters introduced in 4.0 and allow
-/// the legacy `ENCODING` / `CHARSET`.
+/// Whether a known parameter is allowed on a property in a version. 4.0 uses
+/// the spec's set directly; 2.1 / 3.0 drop the parameters introduced in 4.0 and
+/// allow the legacy `ENCODING` / `CHARSET`.
 fn param_allowed(spec: &VcardPropSpecFns, version: VcardVersion, kind: VcardParamKind) -> bool {
     let allowed = (spec.allowed_params)(version);
     match version {
@@ -233,7 +235,8 @@ fn cardinality_ok(cardinality: VcardPropCardinality, count: usize) -> bool {
 
 /// A value that has passed validation. The only way to mint one is a validating
 /// conversion, so holding a `Valid<T>` is proof the check passed; it derefs to
-/// the inner value for reads and yields it back with [`into_inner`](Self::into_inner).
+/// the inner value for reads and yields it back with
+/// [`into_inner`](Self::into_inner).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Valid<T>(T);
 

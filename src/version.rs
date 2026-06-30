@@ -14,7 +14,7 @@ use core::{error, fmt, ops, str};
 
 use alloc::string::{String, ToString};
 
-/// Parse vCard value kind error.
+/// Parse vCard version error.
 #[derive(Debug)]
 pub struct ParseVcardVersionError(
     /// The vCard version that cannot be parsed.
@@ -33,15 +33,18 @@ impl error::Error for ParseVcardVersionError {}
 /// missing version normalises to [`V4_0`](Self::V4_0) (see the module docs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VcardVersion {
+    /// vCard 2.1 (versitcard).
     V2_1,
+    /// vCard 3.0 (RFC 2426).
     V3_0,
+    /// vCard 4.0 (RFC 6350).
     V4_0,
 }
 
 impl str::FromStr for VcardVersion {
     type Err = ParseVcardVersionError;
 
-    /// The known parameter for a wire name (case-insensitive).
+    /// The defined version for a wire string (`2.1`, `3.0`, `4.0`).
     fn from_str(version: &str) -> Result<Self, Self::Err> {
         match version {
             "2.1" => Ok(Self::V2_1),

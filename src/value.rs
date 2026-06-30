@@ -75,33 +75,33 @@ impl error::Error for ParseVcardValueKindError {}
 /// allowed-values sets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VcardValueKind {
-    /// The structured `ADR` value.
+    /// The structured `ADR` value (RFC 6350 6.3.1).
     Adr,
-    /// An inline-base64 or URI-reference binary value (2.1 / 3.0).
+    /// An inline-base64 or URI-reference binary value (vCard 2.1 / 3.0).
     Binary,
-    /// The structured `CLIENTPIDMAP` value.
+    /// The structured `CLIENTPIDMAP` value (RFC 6350 6.7.7).
     ClientPidMap,
-    /// A date-and-or-time value.
+    /// A date-and-or-time value (RFC 6350 4.3.4).
     DateAndOrTime,
-    /// The structured `GENDER` value.
+    /// The structured `GENDER` value (RFC 6350 6.2.7).
     Gender,
-    /// A latitude/longitude pair (2.1 / 3.0 `GEO`).
+    /// A latitude/longitude pair (vCard 2.1 / 3.0 `GEO`).
     Geo,
-    /// A language tag.
+    /// A language tag (RFC 6350 4.8).
     LanguageTag,
-    /// The structured `N` value.
+    /// The structured `N` value (RFC 6350 6.2.2).
     N,
-    /// The structured `ORG` value.
+    /// The structured `ORG` value (RFC 6350 6.6.4).
     Org,
-    /// A single text value.
+    /// A single text value (RFC 6350 4.1).
     Text,
-    /// A comma-separated text list.
+    /// A comma-separated text list (RFC 6350 4.1).
     TextList,
-    /// A timestamp.
+    /// A timestamp (RFC 6350 4.3.5).
     Timestamp,
-    /// A URI.
+    /// A URI (RFC 6350 4.2).
     Uri,
-    /// A UTC offset.
+    /// A UTC offset (RFC 6350 4.7).
     UtcOffset,
 }
 

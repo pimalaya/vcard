@@ -3,17 +3,63 @@
 
 //! # vcard-rs
 //!
-//! A single, version-agnostic vCard library: one model and one byte-faithful
-//! syntax tree that parse 2.1 (versitcard), 3.0 (RFC 2426) and 4.0 (RFC 6350)
-//! alike. The card's [`VERSION`](version) is a decoded indicator, not a
-//! separate dialect: the syntax tree never consults it, and only the codec
-//! branches on it where the escaping or a value's shape genuinely differ.
+//! A single, version-agnostic vCard library: one decoded model and one
+//! byte-faithful syntax tree that read and write vCard 2.1 (versitcard), 3.0
+//! (RFC 2426) and 4.0 (RFC 6350) alike. The card version is a decoded
+//! indicator, never a type parameter or a separate dialect: the syntax tree
+//! ignores it, and only the codec and the per-property spec branch on it where
+//! escaping or a value's shape genuinely differ. The crate is `no_std` (with
+//! `alloc`) and dependency-free.
 //!
-//! - the decoded model (no syntax dependency): [`vcard`] (the card), [`version`],
-//!   [`prop`] (property + names), [`param`] (parameter + names), [`value`] (the
-//!   value kinds).
-//! - [`tree`] — everything syntactic, gated behind the `parser` feature (on by
-//!   default; turn it off to depend on the decoded model alone).
+//! ## Postel's law
+//!
+//! The library is liberal in what it accepts and strict in what it sends.
+//! Parsing is maximally liberal: any real card, including properties,
+//! parameters and value types that no version officially defines, is accepted
+//! and round-trips byte for byte. The decoded model keeps that openness, with
+//! an `Unknown` arm on every open vocabulary. Strictness lives only on the way
+//! out, as two runtime steps: the builder, which refuses to construct a
+//! property the spec forbids, and [`validate`](tree::validate), which checks a
+//! decoded card against its version's RFC contract.
+//!
+//! ## The two layers
+//!
+//! The decoded model ([`vcard`], [`version`], [`prop`], [`param`], [`value`])
+//! is pure data with no dependency on the syntax side, so it can be depended on
+//! alone. Property names, parameter names and value types are closed identity
+//! enums ([`VcardPropKind`](prop::VcardPropKind),
+//! [`VcardParamKind`](param::VcardParamKind),
+//! [`VcardValueKind`](value::VcardValueKind)) whose wire spelling is reached
+//! through `FromStr` and `Deref`. A property is a [`VcardProp`](prop::VcardProp)
+//! struct of a name, parameters and one value; its parameters and value are
+//! open payload enums ([`VcardParam`](param::VcardParam),
+//! [`VcardValue`](value::VcardValue)) with an `Unknown` variant, so anything
+//! outside the model survives.
+//!
+//! The syntax tree ([`tree`], gated behind the `parser` feature, on by default)
+//! is everything byte-faithful. Its hub is [`VcardCst`](tree::cst::VcardCst), a
+//! tree of generic nodes that reproduces the wire bytes exactly. Parsing fills
+//! a CST; [`decode`](tree::decode) projects it onto the decoded
+//! [`Vcard`](vcard::Vcard); [`encode`](tree::encode) (and `From<Vcard>`)
+//! projects the model back to a canonical CST. Per-property lens markers
+//! ([`VcardPropLens`](tree::prop::VcardPropLens)) read or edit a single line
+//! through the byte-preserving [`cursor`](tree::cursor)s, so editing one
+//! property leaves every other byte intact.
+//!
+//! ## The spec layer
+//!
+//! Each property carries a [`VcardPropSpec`](tree::prop::VcardPropSpec) on its
+//! lens marker: the versions it lives in, its cardinality, the value types and
+//! parameters it may take per version, and the value type in force given a
+//! declared `VALUE`. A single vtable dispatch bridges the open
+//! [`VcardPropKind`](prop::VcardPropKind) back to those static specs, so the
+//! decoder consults it to pick a value kind, [`validate`](tree::validate)
+//! consults it to check conformance, and the builder consults it to reject
+//! illegal construction. Validity and lossiness are orthogonal: a conformant
+//! card may still carry extensions, so validity is that runtime predicate, not
+//! a second strict type. A card that passes earns a
+//! [`Valid`](tree::validate::Valid) marker, and both `Vcard` and `Valid<Vcard>`
+//! convert back into a [`VcardCst`](tree::cst::VcardCst).
 
 extern crate alloc;
 

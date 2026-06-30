@@ -2,8 +2,8 @@
 //!
 //! The decoded `ADR` (structured address) value.
 //!
-//! `ADR` is a structured RFC 6350 value of seven `;`-ordered components (post
-//! office box, extended address, street, locality, region, postal code,
+//! `ADR` is a structured RFC 6350 6.3.1 value of seven `;`-ordered components
+//! (post office box, extended address, street, locality, region, postal code,
 //! country), each a possibly multi-valued `,`-separated list. The first two are
 //! deprecated by the RFC but kept for round-tripping. This bespoke type names
 //! the components so callers read `adr.street` rather than indexing. Pure,

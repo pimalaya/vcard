@@ -1,6 +1,7 @@
 //! # NOTE lens
 //!
-//! The `NOTE` property lens: a free-text note, as a single text value.
+//! The `NOTE` property lens: supplemental free-form commentary about the
+//! object, decoded as a single `VcardText` (RFC 6350 6.7.2).
 
 use crate::{
     param::VcardParamKind,

@@ -1,6 +1,7 @@
 //! # PRODID lens
 //!
-//! The `PRODID` property lens: the producer id, as a text value.
+//! The `PRODID` property lens: the identifier of the product that created the
+//! card, decoded as a single `VcardText` (RFC 6350 6.7.3).
 
 use crate::{
     param::VcardParamKind,

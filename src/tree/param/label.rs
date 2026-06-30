@@ -1,7 +1,7 @@
 //! # LABEL parameter lens
 //!
 //! The `LABEL` parameter lens: a single value (the formatted text of a delivery
-//! address).
+//! address), carried on `ADR` (RFC 6350 6.3.1).
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

@@ -2,10 +2,10 @@
 //!
 //! The decoded language-tag value kind.
 //!
-//! Backs the `LANG` property, whose value is an RFC 5646 language tag (e.g.
-//! `en`, `fr-CA`). The tag is kept verbatim; the crate does not parse its
-//! subtags. Pure data with no escaping, like the rest of [`crate::value`]; the
-//! owning property's wire name lives on [`crate::prop::VcardProp::name`].
+//! Backs the `LANG` property (RFC 6350 4.8), whose value is an RFC 5646 language
+//! tag (e.g. `en`, `fr-CA`). The tag is kept verbatim; the crate does not parse
+//! its subtags. Pure data with no escaping, like the rest of [`crate::value`];
+//! the owning property's wire name lives on [`crate::prop::VcardProp::name`].
 
 use alloc::{borrow::Cow, string::String};
 

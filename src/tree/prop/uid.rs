@@ -1,6 +1,7 @@
 //! # UID lens
 //!
-//! The `UID` property lens: a URI uniquely identifying the entity.
+//! The `UID` property lens: a URI that globally and persistently identifies the
+//! object the card represents, decoded as a `VcardUri` (RFC 6350 6.7.6).
 
 use crate::{
     param::VcardParamKind,

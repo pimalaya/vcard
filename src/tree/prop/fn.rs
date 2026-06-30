@@ -1,6 +1,9 @@
 //! # FN lens
 //!
-//! The `FN` (formatted name) property lens: a single text value.
+//! The `FN` (formatted name) property lens: the contact's display name, decoded
+//! as a single text value.
+//!
+//! See RFC 6350 6.2.1.
 
 use crate::{
     param::VcardParamKind,

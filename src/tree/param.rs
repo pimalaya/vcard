@@ -5,9 +5,9 @@
 //! [`VcardParamNode`] is the syntactic peer of the decoded
 //! [`VcardParam`](crate::param::VcardParam): a name leaf and its raw value
 //! leaves, parsed from and serialized back to the wire verbatim. Each RFC 6350
-//! parameter then has its own hand-written lens marker in a submodule here, tying
-//! a wire name to the decoded shape (a single value, or a list); those markers
-//! are the type-level keys for
+//! parameter then has its own hand-written lens marker in a submodule here,
+//! tying a wire name to the decoded shape (a single value, or a list); those
+//! markers are the type-level keys for
 //! [`VcardLine::param`](crate::tree::line::VcardLine::param). The name dispatch
 //! for whole-line decoding lives in [`crate::tree::decode`].
 

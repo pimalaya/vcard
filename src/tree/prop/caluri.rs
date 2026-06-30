@@ -1,6 +1,9 @@
 //! # CALURI lens
 //!
-//! The `CALURI` property lens: a URI to a calendar.
+//! The `CALURI` property lens: the URI of the contact's calendar, decoded as a
+//! URI.
+//!
+//! See RFC 6350 6.9.3.
 
 use crate::{
     param::VcardParamKind,

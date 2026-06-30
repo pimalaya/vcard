@@ -1,6 +1,7 @@
 //! # REV lens
 //!
-//! The `REV` (revision) property lens: a timestamp value.
+//! The `REV` (revision) property lens: the timestamp of the card's latest
+//! revision, decoded as a `VcardTimestamp` (RFC 6350 6.7.4).
 
 use crate::{
     param::VcardParamKind,

@@ -1,6 +1,7 @@
 //! # URL lens
 //!
-//! The `URL` property lens: a URL.
+//! The `URL` property lens: a URL pointing to a resource representing the
+//! object, decoded as a `VcardUri` (RFC 6350 6.7.8).
 
 use crate::{
     param::VcardParamKind,

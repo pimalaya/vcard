@@ -1,6 +1,9 @@
 //! # MAILER lens
 //!
-//! The `MAILER` property lens: the mail-client identifier, as a single text value.
+//! The `MAILER` property lens: the identifier of the contact's mail client,
+//! decoded as a single text value.
+//!
+//! See RFC 2426 3.3.2 (vCard 2.1/3.0; removed in 4.0).
 
 use crate::{
     param::VcardParamKind,

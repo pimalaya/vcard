@@ -1,7 +1,9 @@
 //! # GENDER lens
 //!
-//! The `GENDER` property lens, with a cursor naming its two components (a sex
-//! code and a free-text identity).
+//! The `GENDER` property lens, pairing a sex code with a free-text identity,
+//! with a cursor naming those two components.
+//!
+//! See RFC 6350 6.2.7.
 
 use alloc::borrow::Cow;
 

@@ -1,6 +1,7 @@
 //! # ORG lens
 //!
-//! The `ORG` (organization) property lens. Its value is a `;`-ordered list of
+//! The `ORG` (organization) property lens (RFC 6350 6.6.4): the organizational
+//! name and units the object belongs to. Its value is a `;`-ordered list of
 //! units, which maps cleanly onto the generic [`VcardValueCursor`]'s positional
 //! component access, so it needs no bespoke cursor.
 

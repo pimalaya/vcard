@@ -1,6 +1,9 @@
 //! # BDAY lens
 //!
-//! The `BDAY` (birthday) property lens: a date-and-or-time value.
+//! The `BDAY` (birthday) property lens: the contact's birth date, decoded as a
+//! date-and-or-time value.
+//!
+//! See RFC 6350 6.2.5.
 
 use crate::{
     param::VcardParamKind,

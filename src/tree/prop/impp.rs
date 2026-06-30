@@ -1,6 +1,9 @@
 //! # IMPP lens
 //!
-//! The `IMPP` property lens: an instant-messaging URI.
+//! The `IMPP` property lens: a URI for instant messaging and presence with the
+//! contact, decoded as a URI.
+//!
+//! See RFC 6350 6.4.3.
 
 use crate::{
     param::VcardParamKind,

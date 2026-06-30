@@ -1,6 +1,7 @@
 //! # ROLE lens
 //!
-//! The `ROLE` property lens: a role, as a text value.
+//! The `ROLE` property lens: the function or part the object plays in its
+//! organization, decoded as a single `VcardText` (RFC 6350 6.6.2).
 
 use crate::{
     param::VcardParamKind,

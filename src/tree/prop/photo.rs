@@ -1,6 +1,7 @@
 //! # PHOTO lens
 //!
-//! The `PHOTO` property lens. Its value shape is version-specific, so the lens
+//! The `PHOTO` property lens: an image of the object (RFC 6350 6.2.4). Its
+//! value shape is version-specific, so the lens
 //! decodes through the card version: a `data:` URI in 4.0
 //! ([`VcardValue::Uri`]), inline base64 or a URI reference in 2.1 / 3.0
 //! ([`VcardValue::Binary`]). The version-blind

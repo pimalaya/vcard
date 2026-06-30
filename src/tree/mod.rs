@@ -8,8 +8,8 @@
 //! top of the generic tree sit the per-name lens markers, each carrying the
 //! `VcardPropLens` / `VcardParamLens` contract (plus the per-property
 //! `VcardPropSpec`) defined in [`prop`] / [`param`], the in-place edit
-//! [`cursor`], the [`decode`] / [`encode`] bridges that project between the tree
-//! and the decoded model, and the spec-driven [`build`] er for strict
+//! [`cursor`], the [`decode`] / [`encode`] bridges that project between the
+//! tree and the decoded model, and the spec-driven [`build`] er for strict
 //! construction. Parsing is the only fallible step, so its [`error`] type lives
 //! here too. This whole layer is gated behind the `parser` feature, so the
 //! decoded model can be depended on without it.

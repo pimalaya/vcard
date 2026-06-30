@@ -4,6 +4,8 @@
 //! components. Like [`NCursor`](crate::tree::prop::n::NCursor), getters decode
 //! and setters encode in place, leaving the other components (and every
 //! parameter) byte for byte intact.
+//!
+//! See RFC 6350 6.3.1.
 
 use alloc::{borrow::Cow, vec::Vec};
 

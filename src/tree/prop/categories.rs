@@ -1,6 +1,9 @@
 //! # CATEGORIES lens
 //!
-//! The `CATEGORIES` property lens: a comma-separated text list.
+//! The `CATEGORIES` property lens: the tags the contact belongs to, decoded as
+//! a comma-separated text list.
+//!
+//! See RFC 6350 6.7.1.
 
 use crate::{
     param::VcardParamKind,

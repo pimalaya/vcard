@@ -49,47 +49,91 @@ impl error::Error for ParseVcardPropKindError {}
 /// [`VcardPropName`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VcardPropKind {
+    /// `ADR`: structured delivery address (RFC 6350 6.3.1).
     Adr,
+    /// `AGENT`: an associated agent or assistant (RFC 2426 3.5.4).
     Agent,
+    /// `ANNIVERSARY`: date of marriage or equivalent (RFC 6350 6.2.6).
     Anniversary,
+    /// `BDAY`: date of birth (RFC 6350 6.2.5).
     Bday,
+    /// `CALADRURI`: URI for sending a scheduling request (RFC 6350 6.9.2).
     CalAdrUri,
+    /// `CALURI`: URI of the associated calendar (RFC 6350 6.9.3).
     CalUri,
+    /// `CATEGORIES`: tags or categories for the card (RFC 6350 6.7.1).
     Categories,
+    /// `CLASS`: access classification (RFC 2426 3.7.1).
     Class,
+    /// `CLIENTPIDMAP`: maps PID source ids to client URIs (RFC 6350 6.7.7).
     ClientPidMap,
+    /// `EMAIL`: email address (RFC 6350 6.4.2).
     Email,
+    /// `FBURL`: free/busy URL (RFC 6350 6.9.1).
     FbUrl,
+    /// `FN`: formatted display name (RFC 6350 6.2.1).
     Fn,
+    /// `GENDER`: sex and gender identity (RFC 6350 6.2.7).
     Gender,
+    /// `GEO`: geographic position (RFC 6350 6.5.2).
     Geo,
+    /// `IMPP`: instant-messaging and presence URI (RFC 6350 6.4.3).
     Impp,
+    /// `KEY`: public key or certificate (RFC 6350 6.8.1).
     Key,
+    /// `KIND`: kind of object the card describes (RFC 6350 6.1.4).
     Kind,
+    /// `LABEL`: formatted delivery-address label (RFC 2426 3.2.2; a parameter
+    /// in 4.0).
     Label,
+    /// `LANG`: language the contact may be addressed in (RFC 6350 6.4.4).
     Lang,
+    /// `LOGO`: graphic logo of the organization (RFC 6350 6.6.3).
     Logo,
+    /// `MAILER`: email program used (RFC 2426 3.3.2).
     Mailer,
+    /// `MEMBER`: member of the group this card represents (RFC 6350 6.6.5).
     Member,
+    /// `N`: structured name (RFC 6350 6.2.2).
     N,
+    /// `NAME`: displayable source name (RFC 2426 3.1.5).
     Name,
+    /// `NICKNAME`: nicknames (RFC 6350 6.2.3).
     Nickname,
+    /// `NOTE`: free-text note (RFC 6350 6.7.2).
     Note,
+    /// `ORG`: organization name and units (RFC 6350 6.6.4).
     Org,
+    /// `PHOTO`: photograph of the contact (RFC 6350 6.2.4).
     Photo,
+    /// `PRODID`: product that created the card (RFC 6350 6.7.3).
     ProdId,
+    /// `PROFILE`: declares the object a vCard profile (RFC 2426 3.1.4).
     Profile,
+    /// `RELATED`: relationship to another entity (RFC 6350 6.6.6).
     Related,
+    /// `REV`: revision timestamp (RFC 6350 6.7.4).
     Rev,
+    /// `ROLE`: role or occupation (RFC 6350 6.6.2).
     Role,
+    /// `SORT-STRING`: string to sort the card by (RFC 2426 3.3.4; the SORT-AS
+    /// parameter in 4.0).
     SortString,
+    /// `SOUND`: sound, e.g. name pronunciation (RFC 6350 6.7.5).
     Sound,
+    /// `SOURCE`: URI the card was fetched from (RFC 6350 6.1.3).
     Source,
+    /// `TEL`: telephone number (RFC 6350 6.4.1).
     Tel,
+    /// `TITLE`: job title or position (RFC 6350 6.6.1).
     Title,
+    /// `TZ`: time zone (RFC 6350 6.5.1).
     Tz,
+    /// `UID`: globally unique identifier (RFC 6350 6.7.6).
     Uid,
+    /// `URL`: associated URL (RFC 6350 6.7.8).
     Url,
+    /// `XML`: extended XML data (RFC 6350 6.1.5).
     Xml,
 }
 

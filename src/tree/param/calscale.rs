@@ -1,7 +1,7 @@
 //! # CALSCALE parameter lens
 //!
 //! The `CALSCALE` parameter lens: a single value (the calendar scale of a
-//! date/time value).
+//! date/time value) (RFC 6350 5.8).
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

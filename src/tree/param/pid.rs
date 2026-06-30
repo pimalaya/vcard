@@ -1,6 +1,6 @@
 //! # PID parameter lens
 //!
-//! The `PID` parameter lens: a list of source identifiers.
+//! The `PID` parameter lens: a list of source identifiers (RFC 6350 5.5).
 
 use alloc::{borrow::Cow, string::ToString, vec::Vec};
 

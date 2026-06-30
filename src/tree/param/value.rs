@@ -1,7 +1,7 @@
 //! # VALUE parameter lens
 //!
 //! The `VALUE` parameter lens: a single value naming the value type to read the
-//! property value as.
+//! property value as (RFC 6350 5.2).
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

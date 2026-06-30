@@ -35,7 +35,8 @@ impl VcardValueCursor<'_, '_> {
         self.line.value.set_at(0, &[value]);
     }
 
-    /// The value's first component as a decoded list (its `,`-separated values).
+    /// The value's first component as a decoded list (its `,`-separated
+    /// values).
     pub fn list(&self) -> Vec<Cow<'_, str>> {
         self.line.value.decode_at(0)
     }

@@ -1,6 +1,9 @@
 //! # EMAIL lens
 //!
-//! The `EMAIL` property lens: an email address, as a text value.
+//! The `EMAIL` property lens: an email address for the contact, decoded as a
+//! text value.
+//!
+//! See RFC 6350 6.4.2.
 
 use crate::{
     param::VcardParamKind,

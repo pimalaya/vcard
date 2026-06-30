@@ -1,7 +1,7 @@
 //! # GEO parameter lens
 //!
 //! The `GEO` parameter lens: a single value (a global positioning value for the
-//! property). Distinct from the `GEO` property.
+//! property) (RFC 6350 5.10). Distinct from the `GEO` property.
 
 use alloc::{borrow::Cow, string::ToString, vec};
 

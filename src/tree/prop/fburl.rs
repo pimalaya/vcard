@@ -1,6 +1,9 @@
 //! # FBURL lens
 //!
-//! The `FBURL` property lens: a URL to free/busy information.
+//! The `FBURL` property lens: the URL to the contact's free/busy information,
+//! decoded as a URI.
+//!
+//! See RFC 6350 6.9.1.
 
 use crate::{
     param::VcardParamKind,
