@@ -154,7 +154,10 @@ pub enum VcardParam<'a> {
     Value(Cow<'a, str>),
 
     /// Any parameter the model does not decode: its name and its values.
-    Unknown(Cow<'a, str>, Vec<Cow<'a, str>>),
+    Unknown {
+        name: Cow<'a, str>,
+        values: Vec<Cow<'a, str>>,
+    },
 }
 
 impl VcardParam<'_> {
@@ -176,7 +179,7 @@ impl VcardParam<'_> {
             Self::Type(_) => Some(VcardParamKind::Type),
             Self::Tz(_) => Some(VcardParamKind::Tz),
             Self::Value(_) => Some(VcardParamKind::Value),
-            Self::Unknown(..) => None,
+            Self::Unknown { .. } => None,
         }
     }
 }

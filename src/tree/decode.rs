@@ -202,7 +202,10 @@ impl VcardParamNode<'_> {
     /// Decode the parameter into a typed parameter, dispatching on the name.
     pub fn decode(&self) -> VcardParam<'_> {
         let Ok(kind) = self.name.get().parse::<VcardParamKind>() else {
-            return VcardParam::Unknown(unescape(self.name.get()), self.list());
+            return VcardParam::Unknown {
+                name: unescape(self.name.get()),
+                values: self.list(),
+            };
         };
 
         match kind {

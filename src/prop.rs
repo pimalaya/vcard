@@ -2,14 +2,14 @@
 //!
 //! A decoded property and the RFC 6350 property-name vocabulary.
 //!
-//! A [`VcardProp`] is a [`VcardPropName`], a list of parameters, and a
-//! decoded value. The name is stored explicitly because many properties share
-//! one [`VcardValue`] kind: `FN` and `TITLE` both decode to text, so the value
+//! A [`VcardProp`] is a [`VcardPropName`], a list of parameters, and a decoded
+//! value. The name is stored explicitly because many properties share one
+//! [`VcardValue`] kind: `FN` and `TITLE` both decode to text, so the value
 //! alone cannot say which property it is. A known name is held as the closed
 //! [`VcardPropKind`] identity (its wire spelling reached through `Deref` and
 //! `FromStr`); an unknown one keeps its verbatim bytes. The lens markers in
-//! [`crate::tree::prop`] carry the kind to match and build lines, and the decode
-//! registry parses a line name onto its value kind.
+//! [`crate::tree::prop`] carry the kind to match and build lines, and the
+//! decode registry parses a line name onto its value kind.
 //!
 //! Build a property directly from its public fields; strict, spec-checked
 //! construction lives in the syntax layer
@@ -42,6 +42,69 @@ impl fmt::Display for ParseVcardPropKindError {
 }
 
 impl error::Error for ParseVcardPropKindError {}
+
+/// A decoded property: its wire name, its parameters, and its decoded value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VcardProp<'a> {
+    /// The property name (a known kind, or an unknown name kept verbatim).
+    pub name: VcardPropName<'a>,
+    /// The parameters decorating the property.
+    pub params: Vec<VcardParam<'a>>,
+    /// The decoded value.
+    pub value: VcardValue<'a>,
+}
+
+/// A property name: a known RFC 6350 name, or an unknown one kept verbatim.
+///
+/// Known names normalise to their canonical [`VcardPropKind`] spelling; unknown
+/// names keep their exact bytes so they round-trip.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VcardPropName<'a> {
+    /// A name in the closed RFC 6350 vocabulary.
+    Kind(VcardPropKind),
+    /// Any other kind, kept as written.
+    Unknown(Cow<'a, str>),
+}
+
+impl ops::Deref for VcardPropName<'_> {
+    type Target = str;
+
+    /// The name's wire string: the canonical spelling of a known name, or the
+    /// verbatim text of an unknown one.
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Kind(kind) => kind,
+            Self::Unknown(name) => name,
+        }
+    }
+}
+
+impl From<VcardPropKind> for VcardPropName<'_> {
+    fn from(kind: VcardPropKind) -> Self {
+        Self::Kind(kind)
+    }
+}
+
+impl From<&VcardPropKind> for VcardPropName<'_> {
+    fn from(kind: &VcardPropKind) -> Self {
+        Self::Kind(*kind)
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for VcardPropName<'a> {
+    fn from(kind: Cow<'a, str>) -> Self {
+        match kind.parse().ok() {
+            Some(kind) => Self::Kind(kind),
+            None => Self::Unknown(kind),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for VcardPropName<'a> {
+    fn from(name: &'a str) -> Self {
+        Cow::Borrowed(name).into()
+    }
+}
 
 /// The closed RFC 6350 property-name vocabulary, one fieldless variant per
 /// known property. An identity for dispatch and allowed-sets; the
@@ -290,67 +353,6 @@ impl ops::Deref for VcardPropKind {
     }
 }
 
-/// A property name: a known RFC 6350 name, or an unknown one kept verbatim.
-///
-/// Known names normalise to their canonical [`VcardPropKind`] spelling; unknown
-/// names keep their exact bytes so they round-trip.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum VcardPropName<'a> {
-    /// A name in the closed RFC 6350 vocabulary.
-    Kind(VcardPropKind),
-    /// Any other kind, kept as written.
-    Unknown(Cow<'a, str>),
-}
-
-impl VcardPropName<'_> {
-    /// The name's wire string: the canonical spelling of a known name, or the
-    /// verbatim text of an unknown one.
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Kind(kind) => kind,
-            Self::Unknown(name) => name,
-        }
-    }
-}
-
-impl From<VcardPropKind> for VcardPropName<'_> {
-    fn from(kind: VcardPropKind) -> Self {
-        Self::Kind(kind)
-    }
-}
-
-impl From<&VcardPropKind> for VcardPropName<'_> {
-    fn from(kind: &VcardPropKind) -> Self {
-        Self::Kind(*kind)
-    }
-}
-
-impl<'a> From<Cow<'a, str>> for VcardPropName<'a> {
-    fn from(kind: Cow<'a, str>) -> Self {
-        match kind.parse().ok() {
-            Some(kind) => Self::Kind(kind),
-            None => Self::Unknown(kind),
-        }
-    }
-}
-
-impl<'a> From<&'a str> for VcardPropName<'a> {
-    fn from(name: &'a str) -> Self {
-        Cow::Borrowed(name).into()
-    }
-}
-
-/// A decoded property: its wire name, its parameters, and its decoded value.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VcardProp<'a> {
-    /// The property name (a known kind, or an unknown name kept verbatim).
-    pub name: VcardPropName<'a>,
-    /// The parameters decorating the property.
-    pub params: Vec<VcardParam<'a>>,
-    /// The decoded value.
-    pub value: VcardValue<'a>,
-}
-
 #[cfg(test)]
 mod tests {
     use core::str::FromStr;
@@ -371,7 +373,7 @@ mod tests {
             value: VcardValue::Text(VcardText(Cow::Borrowed("Developer"))),
         };
         assert_eq!(prop.name, VcardPropName::Kind(VcardPropKind::Title));
-        assert_eq!(prop.name.as_str(), "TITLE");
+        assert_eq!(&*prop.name, "TITLE");
         assert_eq!(
             prop.value,
             VcardValue::Text(VcardText(Cow::Borrowed("Developer"))),
@@ -386,7 +388,7 @@ mod tests {
             params: [VcardParam::Pref(Cow::Borrowed("1"))].into(),
             value: VcardValue::Text(VcardText(Cow::Borrowed("John"))),
         };
-        assert_eq!(prop.name.as_str(), "FN");
+        assert_eq!(&*prop.name, "FN");
         assert_eq!(prop.params, vec![VcardParam::Pref(Cow::Borrowed("1"))]);
     }
 
@@ -401,7 +403,7 @@ mod tests {
             assert_eq!(VcardPropKind::from_str(&kind).ok(), Some(kind));
         }
         // Case-insensitive on the way in; unknown names are not in the vocabulary.
-        assert_eq!(VcardPropKind::from_str("fn").ok(), Some(VcardPropKind::Fn),);
+        assert_eq!(VcardPropKind::from_str("fn").ok(), Some(VcardPropKind::Fn));
         assert!(VcardPropKind::from_str("X-CUSTOM").is_err());
     }
 }

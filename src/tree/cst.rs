@@ -305,12 +305,12 @@ mod tests {
         assert_eq!(vcard.properties.len(), 2);
 
         let n = &vcard.properties[0];
-        assert_eq!(n.name.as_str(), "N");
+        assert_eq!(&*n.name, "N");
         assert_eq!(n.params, vec![VcardParam::Pid(vec![Cow::Borrowed("1")])]);
         assert!(matches!(n.value, VcardValue::N(_)));
 
         let fnn = &vcard.properties[1];
-        assert_eq!(fnn.name.as_str(), "FN");
+        assert_eq!(&*fnn.name, "FN");
         assert_eq!(
             fnn.value,
             VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),

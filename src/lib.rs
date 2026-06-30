@@ -30,11 +30,11 @@
 //! enums ([`VcardPropKind`](prop::VcardPropKind),
 //! [`VcardParamKind`](param::VcardParamKind),
 //! [`VcardValueKind`](value::VcardValueKind)) whose wire spelling is reached
-//! through `FromStr` and `Deref`. A property is a [`VcardProp`](prop::VcardProp)
-//! struct of a name, parameters and one value; its parameters and value are
-//! open payload enums ([`VcardParam`](param::VcardParam),
-//! [`VcardValue`](value::VcardValue)) with an `Unknown` variant, so anything
-//! outside the model survives.
+//! through `FromStr` and `Deref`. A property is a
+//! [`VcardProp`](prop::VcardProp) struct of a name, parameters and one value;
+//! its parameters and value are open payload enums
+//! ([`VcardParam`](param::VcardParam), [`VcardValue`](value::VcardValue)) with
+//! an `Unknown` variant, so anything outside the model survives.
 //!
 //! The syntax tree ([`tree`], gated behind the `parser` feature, on by default)
 //! is everything byte-faithful. Its hub is [`VcardCst`](tree::cst::VcardCst), a

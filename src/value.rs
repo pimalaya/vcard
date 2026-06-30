@@ -112,30 +112,28 @@ impl str::FromStr for VcardValueKind {
     /// it maps every wire spelling (and a few aliases) onto a model kind, leaving
     /// membership checks to a later validation tier.
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
-        let kind = match kind {
-            kind if kind.eq_ignore_ascii_case("ADR") => Self::Adr,
-            kind if kind.eq_ignore_ascii_case("B") => Self::Binary,
-            kind if kind.eq_ignore_ascii_case("BINARY") => Self::Binary,
-            kind if kind.eq_ignore_ascii_case("CLIENTPIDMAP") => Self::ClientPidMap,
-            kind if kind.eq_ignore_ascii_case("DATE") => Self::DateAndOrTime,
-            kind if kind.eq_ignore_ascii_case("DATE-AND-OR-TIME") => Self::DateAndOrTime,
-            kind if kind.eq_ignore_ascii_case("DATE-TIME") => Self::DateAndOrTime,
-            kind if kind.eq_ignore_ascii_case("GENDER") => Self::Gender,
-            kind if kind.eq_ignore_ascii_case("GEO") => Self::Geo,
-            kind if kind.eq_ignore_ascii_case("LANGUAGE-TAG") => Self::LanguageTag,
-            kind if kind.eq_ignore_ascii_case("N") => Self::N,
-            kind if kind.eq_ignore_ascii_case("ORG") => Self::Org,
-            kind if kind.eq_ignore_ascii_case("TEXT") => Self::Text,
-            kind if kind.eq_ignore_ascii_case("TEXT-LIST") => Self::TextList,
-            kind if kind.eq_ignore_ascii_case("TIME") => Self::DateAndOrTime,
-            kind if kind.eq_ignore_ascii_case("TIMESTAMP") => Self::Timestamp,
-            kind if kind.eq_ignore_ascii_case("URI") => Self::Uri,
-            kind if kind.eq_ignore_ascii_case("URL") => Self::Uri,
-            kind if kind.eq_ignore_ascii_case("UTC-OFFSET") => Self::UtcOffset,
-            _ => return Err(ParseVcardValueKindError(kind.to_string())),
-        };
-
-        Ok(kind)
+        match kind {
+            kind if kind.eq_ignore_ascii_case("ADR") => Ok(Self::Adr),
+            kind if kind.eq_ignore_ascii_case("B") => Ok(Self::Binary),
+            kind if kind.eq_ignore_ascii_case("BINARY") => Ok(Self::Binary),
+            kind if kind.eq_ignore_ascii_case("CLIENTPIDMAP") => Ok(Self::ClientPidMap),
+            kind if kind.eq_ignore_ascii_case("DATE") => Ok(Self::DateAndOrTime),
+            kind if kind.eq_ignore_ascii_case("DATE-AND-OR-TIME") => Ok(Self::DateAndOrTime),
+            kind if kind.eq_ignore_ascii_case("DATE-TIME") => Ok(Self::DateAndOrTime),
+            kind if kind.eq_ignore_ascii_case("GENDER") => Ok(Self::Gender),
+            kind if kind.eq_ignore_ascii_case("GEO") => Ok(Self::Geo),
+            kind if kind.eq_ignore_ascii_case("LANGUAGE-TAG") => Ok(Self::LanguageTag),
+            kind if kind.eq_ignore_ascii_case("N") => Ok(Self::N),
+            kind if kind.eq_ignore_ascii_case("ORG") => Ok(Self::Org),
+            kind if kind.eq_ignore_ascii_case("TEXT") => Ok(Self::Text),
+            kind if kind.eq_ignore_ascii_case("TEXT-LIST") => Ok(Self::TextList),
+            kind if kind.eq_ignore_ascii_case("TIME") => Ok(Self::DateAndOrTime),
+            kind if kind.eq_ignore_ascii_case("TIMESTAMP") => Ok(Self::Timestamp),
+            kind if kind.eq_ignore_ascii_case("URI") => Ok(Self::Uri),
+            kind if kind.eq_ignore_ascii_case("URL") => Ok(Self::Uri),
+            kind if kind.eq_ignore_ascii_case("UTC-OFFSET") => Ok(Self::UtcOffset),
+            _ => Err(ParseVcardValueKindError(kind.to_string())),
+        }
     }
 }
 

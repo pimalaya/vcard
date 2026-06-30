@@ -94,7 +94,7 @@ mod tests {
             .build(VcardValue::Text(VcardText(Cow::Borrowed("John"))))
             .expect("FN takes text with a PREF param");
 
-        assert_eq!(prop.name.as_str(), "FN");
+        assert_eq!(&*prop.name, "FN");
         assert_eq!(prop.params, vec![VcardParam::Pref(Cow::Borrowed("1"))]);
         assert_eq!(
             prop.value,

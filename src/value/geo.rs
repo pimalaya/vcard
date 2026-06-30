@@ -2,11 +2,11 @@
 //!
 //! The decoded geographic-position value kind.
 //!
-//! Backs the `GEO` property (RFC 6350 6.5.2) in vCard 2.1 (a `,`-separated pair)
-//! and 3.0 (a `;`-separated pair). vCard 4.0 instead carries `GEO` as a `geo:`
-//! URI, decoded to [`VcardUri`](crate::value::uri::VcardUri). The latitude and
-//! longitude are kept as raw text; pure data with no escaping knowledge, like
-//! every other type in [`crate::value`].
+//! Backs the `GEO` property (RFC 6350 6.5.2) in vCard 2.1 (a `,`-separated
+//! pair) and 3.0 (a `;`-separated pair). vCard 4.0 instead carries `GEO` as a
+//! `geo:` URI, decoded to [`VcardUri`](crate::value::uri::VcardUri). The
+//! latitude and longitude are kept as raw text; pure data with no escaping
+//! knowledge, like every other type in [`crate::value`].
 
 use alloc::borrow::Cow;
 

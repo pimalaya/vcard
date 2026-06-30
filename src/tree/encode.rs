@@ -97,7 +97,7 @@ impl VcardProp<'_> {
     /// Encode the property into a raw content line, dispatching on its value.
     pub fn encode(&self) -> VcardLine<'static> {
         VcardLine {
-            name: VcardLeaf::from(self.name.as_str().to_string()),
+            name: VcardLeaf::from(self.name.to_string()),
             params: self.params.iter().map(VcardParam::encode).collect(),
             value: self.value.encode(),
             eol: VcardLeaf::from("\r\n".to_string()),
@@ -173,7 +173,7 @@ impl VcardParam<'_> {
             VcardParam::Tz(v) => param_scalar(&Tz, v),
             VcardParam::Label(v) => param_scalar(&Label, v),
 
-            VcardParam::Unknown(name, values) => VcardParamNode {
+            VcardParam::Unknown { name, values } => VcardParamNode {
                 name: VcardLeaf::from(name.to_string()),
                 values: values
                     .iter()

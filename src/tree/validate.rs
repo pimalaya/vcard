@@ -68,42 +68,37 @@ pub enum VcardValidateError {
 impl fmt::Display for VcardValidateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PropVersion { prop, version } => {
-                write!(
-                    f,
-                    "Property `{}` is not defined in vCard {version}",
-                    &**prop
-                )
+            Self::PropVersion {
+                prop: p,
+                version: v,
+            } => {
+                write!(f, "Property `{}` is not defined in vCard {}", &**p, &**v)
             }
             Self::ValueKind {
-                prop,
-                found: Some(kind),
+                prop: p,
+                found: Some(k),
             } => {
-                write!(
-                    f,
-                    "Value kind `{}` is not allowed for `{}`",
-                    &**kind, &**prop
-                )
+                write!(f, "Value kind `{}` is not allowed for `{}`", &**k, &**p)
             }
-            Self::ValueKind { prop, found: None } => {
-                write!(f, "An undecoded value is not allowed for `{}`", &**prop)
+            Self::ValueKind {
+                prop: p,
+                found: None,
+            } => {
+                write!(f, "An undecoded value is not allowed for `{}`", &**p)
             }
-            Self::Param { prop, param } => {
-                write!(
-                    f,
-                    "Parameter `{}` is not allowed for `{}`",
-                    &**param, &**prop
-                )
+            Self::Param {
+                prop: pp,
+                param: pm,
+            } => {
+                write!(f, "Parameter `{}` is not allowed for `{}`", &**pm, &**pp)
             }
             Self::Cardinality {
-                prop,
-                cardinality,
-                count,
-            } => write!(
-                f,
-                "Property `{}` appears {count} times but is {cardinality:?}",
-                &**prop,
-            ),
+                prop: p,
+                cardinality: cd,
+                count: cn,
+            } => {
+                write!(f, "Property `{}` appears {cn} times but is {cd:?}", &**p)
+            }
         }
     }
 }

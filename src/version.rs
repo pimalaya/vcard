@@ -67,12 +67,6 @@ impl ops::Deref for VcardVersion {
     }
 }
 
-impl fmt::Display for VcardVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &**self)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use alloc::string::ToString;
@@ -81,10 +75,9 @@ mod tests {
 
     #[test]
     fn maps_known_wire_strings_both_ways() {
-        assert_eq!("4.0".parse().ok(), Some(VcardVersion::V4_0));
         assert_eq!("2.1".parse().ok(), Some(VcardVersion::V2_1));
         assert_eq!(VcardVersion::V3_0.to_string(), "3.0");
-        assert_eq!(&*VcardVersion::V3_0, "3.0");
+        assert_eq!(&*VcardVersion::V4_0, "4.0");
     }
 
     #[test]
