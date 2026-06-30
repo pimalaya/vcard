@@ -3,17 +3,22 @@
 //! The `TEL` (telephone) property lens: a single text value.
 
 use crate::{
-    prop::VCARD_TEL,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::text::VcardText,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, text::VcardText},
+    version::VcardVersion,
 };
 
 /// The `TEL` property lens.
 pub struct TEL;
 
 impl VcardPropLens for TEL {
-    const NAME: &'static str = VCARD_TEL;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,24 @@ impl VcardPropLens for TEL {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for TEL {
+    const PROP: VcardPropKind = VcardPropKind::Tel;
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::Text, VcardValueKind::Uri]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Type,
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::AltId,
+            VcardParamKind::MediaType,
+            VcardParamKind::Value,
+        ]
     }
 }

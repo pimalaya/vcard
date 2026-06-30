@@ -3,17 +3,22 @@
 //! The `MEMBER` property lens: a URI identifying a member of the group.
 
 use crate::{
-    prop::VCARD_MEMBER,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::uri::VcardUri,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, uri::VcardUri},
+    version::VcardVersion,
 };
 
 /// The `MEMBER` property lens.
 pub struct MEMBER;
 
 impl VcardPropLens for MEMBER {
-    const NAME: &'static str = VCARD_MEMBER;
-
     type Target<'v> = VcardUri<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,27 @@ impl VcardPropLens for MEMBER {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for MEMBER {
+    const PROP: VcardPropKind = VcardPropKind::Member;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V4_0]
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::Uri]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::AltId,
+            VcardParamKind::MediaType,
+            VcardParamKind::Value,
+        ]
     }
 }

@@ -3,17 +3,22 @@
 //! The `ROLE` property lens: a role, as a text value.
 
 use crate::{
-    prop::VCARD_ROLE,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
     value::text::VcardText,
+    version::VcardVersion,
 };
 
 /// The `ROLE` property lens.
 pub struct ROLE;
 
 impl VcardPropLens for ROLE {
-    const NAME: &'static str = VCARD_ROLE;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,20 @@ impl VcardPropLens for ROLE {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for ROLE {
+    const PROP: VcardPropKind = VcardPropKind::Role;
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Language,
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::AltId,
+            VcardParamKind::Type,
+            VcardParamKind::Value,
+        ]
     }
 }

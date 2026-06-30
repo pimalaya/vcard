@@ -3,17 +3,22 @@
 //! The `NAME` property lens: the display name (vCard 3.0), as a single text value.
 
 use crate::{
-    prop::VCARD_NAME,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
     value::text::VcardText,
+    version::VcardVersion,
 };
 
 /// The `NAME` property lens.
 pub struct NAME;
 
 impl VcardPropLens for NAME {
-    const NAME: &'static str = VCARD_NAME;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,21 @@ impl VcardPropLens for NAME {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for NAME {
+    const PROP: VcardPropKind = VcardPropKind::Name;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V3_0]
+    }
+
+    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
+        VcardPropCardinality::AtMostOne
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[VcardParamKind::Value]
     }
 }

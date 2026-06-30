@@ -3,17 +3,22 @@
 //! The `SOURCE` property lens: a URI to the source of the card.
 
 use crate::{
-    prop::VCARD_SOURCE,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::uri::VcardUri,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, uri::VcardUri},
+    version::VcardVersion,
 };
 
 /// The `SOURCE` property lens.
 pub struct SOURCE;
 
 impl VcardPropLens for SOURCE {
-    const NAME: &'static str = VCARD_SOURCE;
-
     type Target<'v> = VcardUri<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,27 @@ impl VcardPropLens for SOURCE {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for SOURCE {
+    const PROP: VcardPropKind = VcardPropKind::Source;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V3_0, VcardVersion::V4_0]
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::Uri]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::AltId,
+            VcardParamKind::MediaType,
+            VcardParamKind::Value,
+        ]
     }
 }

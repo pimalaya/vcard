@@ -6,7 +6,7 @@ use alloc::{borrow::Cow, string::ToString, vec};
 
 use crate::tree::leaf::VcardLeaf;
 use crate::{
-    param::VCARD_LANGUAGE,
+    param::VcardParamKind,
     tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
@@ -14,7 +14,7 @@ use crate::{
 pub struct LANGUAGE;
 
 impl VcardParamLens for LANGUAGE {
-    const NAME: &'static str = VCARD_LANGUAGE;
+    const KIND: VcardParamKind = VcardParamKind::Language;
 
     type Target<'v> = Cow<'v, str>;
 
@@ -28,7 +28,7 @@ impl VcardParamLens for LANGUAGE {
 
     fn encode(decoded: &Cow<'_, str>) -> VcardParamNode<'static> {
         VcardParamNode {
-            name: VcardLeaf::from(VCARD_LANGUAGE.to_string()),
+            name: VcardLeaf::from(Self::KIND.to_string()),
             values: vec![VcardLeaf::from(decoded.to_string())],
         }
     }

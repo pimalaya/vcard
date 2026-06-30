@@ -28,13 +28,14 @@ use core::fmt;
 
 use alloc::vec::Vec;
 
+use crate::param::VcardParamKind;
 use crate::tree::leaf::VcardLeaf;
 
 /// A parameter identified by type, projecting a generic syntax parameter onto a
 /// decoded value type and back.
 pub trait VcardParamLens {
-    /// The wire name to look up by.
-    const NAME: &'static str;
+    /// The parameter kind to look up by (its wire name comes through `Deref`).
+    const KIND: VcardParamKind;
 
     /// The decoded value type, borrowing the syntax node for reads.
     type Target<'v>;

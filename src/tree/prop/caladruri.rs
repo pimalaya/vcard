@@ -3,17 +3,22 @@
 //! The `CALADRURI` property lens: a URI to a calendar scheduling address.
 
 use crate::{
-    prop::VCARD_CALADRURI,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::uri::VcardUri,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, uri::VcardUri},
+    version::VcardVersion,
 };
 
 /// The `CALADRURI` property lens.
 pub struct CALADRURI;
 
 impl VcardPropLens for CALADRURI {
-    const NAME: &'static str = VCARD_CALADRURI;
-
     type Target<'v> = VcardUri<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,28 @@ impl VcardPropLens for CALADRURI {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for CALADRURI {
+    const PROP: VcardPropKind = VcardPropKind::CalAdrUri;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V4_0]
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::Uri]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::Type,
+            VcardParamKind::MediaType,
+            VcardParamKind::AltId,
+            VcardParamKind::Value,
+        ]
     }
 }

@@ -3,17 +3,22 @@
 //! The `CATEGORIES` property lens: a comma-separated text list.
 
 use crate::{
-    prop::VCARD_CATEGORIES,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::text::VcardTextList,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, text::VcardTextList},
+    version::VcardVersion,
 };
 
 /// The `CATEGORIES` property lens.
 pub struct CATEGORIES;
 
 impl VcardPropLens for CATEGORIES {
-    const NAME: &'static str = VCARD_CATEGORIES;
-
     type Target<'v> = VcardTextList<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,27 @@ impl VcardPropLens for CATEGORIES {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for CATEGORIES {
+    const PROP: VcardPropKind = VcardPropKind::Categories;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V3_0, VcardVersion::V4_0]
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::TextList]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::Type,
+            VcardParamKind::AltId,
+            VcardParamKind::Value,
+        ]
     }
 }

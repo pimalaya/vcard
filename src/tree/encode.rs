@@ -22,14 +22,13 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::tree::codec::Escaper;
-use crate::tree::decode::unescape;
-use crate::tree::leaf::VcardLeaf;
-use crate::version::VCARD_VERSION;
 use crate::{
     param::VcardParam,
     prop::VcardProp,
-    tree::{cst::VcardCst, line::VcardLine, param::VcardParamNode, value::VcardValueNode},
+    tree::{
+        codec::Escaper, cst::VcardCst, decode::unescape, leaf::VcardLeaf, line::VcardLine,
+        param::VcardParamNode, value::VcardValueNode,
+    },
     value::{
         VcardUnknownValue, VcardValue,
         adr::VcardAdr,
@@ -54,13 +53,13 @@ impl Vcard<'_> {
         let mut cst = VcardCst::v4();
         // v4() seeds a VERSION line as the first property; set it to this card's
         // version, then append the rest. VERSION stays an ordinary property.
-        cst.props[0] = VcardLine::text(VCARD_VERSION, self.version.as_str().to_string());
+        cst.props[0] = VcardLine::text("VERSION", self.version.to_string());
         cst.props
             .extend(self.properties.iter().map(VcardProp::encode));
 
         // The value encoders escape canonically (modern rules); a 2.1 card needs
         // its own escaping, so re-escape every value leaf with the card's mode.
-        let escaper = Escaper::for_version(&self.version);
+        let escaper = Escaper::for_version(self.version);
         if escaper != Escaper::Modern {
             for line in &mut cst.props {
                 reescape_line(line, escaper);
@@ -68,6 +67,12 @@ impl Vcard<'_> {
         }
 
         cst
+    }
+}
+
+impl<'a> From<Vcard<'a>> for VcardCst<'static> {
+    fn from(card: Vcard<'a>) -> Self {
+        card.encode()
     }
 }
 
@@ -89,7 +94,7 @@ impl VcardProp<'_> {
     /// Encode the property into a raw content line, dispatching on its value.
     pub fn encode(&self) -> VcardLine<'static> {
         VcardLine {
-            name: VcardLeaf::from(self.name.to_string()),
+            name: VcardLeaf::from(self.name.as_str().to_string()),
             params: self.params.iter().map(VcardParam::encode).collect(),
             value: self.value.encode(),
             eol: VcardLeaf::from("\r\n".to_string()),
@@ -147,25 +152,25 @@ impl VcardBinary<'_> {
 impl VcardParam<'_> {
     /// Encode the parameter into a raw parameter node, dispatching on its kind.
     pub fn encode(&self) -> VcardParamNode<'static> {
-        use crate::param::*;
+        use crate::param::VcardParamKind::*;
 
         match self {
-            VcardParam::Language(v) => param_scalar(VCARD_LANGUAGE, v),
-            VcardParam::Charset(v) => param_scalar(VCARD_CHARSET, v),
-            VcardParam::Encoding(v) => param_scalar(VCARD_ENCODING, v),
-            VcardParam::Value(v) => param_scalar(VCARD_VALUE, v),
-            VcardParam::Pref(v) => param_scalar(VCARD_PREF, v),
-            VcardParam::AltId(v) => param_scalar(VCARD_ALTID, v),
-            VcardParam::Pid(vs) => param_list(VCARD_PID, vs),
-            VcardParam::Type(vs) => param_list(VCARD_TYPE, vs),
-            VcardParam::MediaType(v) => param_scalar(VCARD_MEDIATYPE, v),
-            VcardParam::CalScale(v) => param_scalar(VCARD_CALSCALE, v),
-            VcardParam::SortAs(vs) => param_list(VCARD_SORT_AS, vs),
-            VcardParam::Geo(v) => param_scalar(VCARD_GEO, v),
-            VcardParam::Tz(v) => param_scalar(VCARD_TZ, v),
-            VcardParam::Label(v) => param_scalar(VCARD_LABEL, v),
+            VcardParam::Language(v) => param_scalar(&Language, v),
+            VcardParam::Charset(v) => param_scalar(&Charset, v),
+            VcardParam::Encoding(v) => param_scalar(&Encoding, v),
+            VcardParam::Value(v) => param_scalar(&Value, v),
+            VcardParam::Pref(v) => param_scalar(&Pref, v),
+            VcardParam::AltId(v) => param_scalar(&AltId, v),
+            VcardParam::Pid(vs) => param_list(&Pid, vs),
+            VcardParam::Type(vs) => param_list(&Type, vs),
+            VcardParam::MediaType(v) => param_scalar(&MediaType, v),
+            VcardParam::CalScale(v) => param_scalar(&CalScale, v),
+            VcardParam::SortAs(vs) => param_list(&SortAs, vs),
+            VcardParam::Geo(v) => param_scalar(&Geo, v),
+            VcardParam::Tz(v) => param_scalar(&Tz, v),
+            VcardParam::Label(v) => param_scalar(&Label, v),
 
-            VcardParam::Unknown { name, values } => VcardParamNode {
+            VcardParam::Unknown(name, values) => VcardParamNode {
                 name: VcardLeaf::from(name.to_string()),
                 values: values
                     .iter()
@@ -386,7 +391,7 @@ fn param_list(name: &str, values: &[Cow<'_, str>]) -> VcardParamNode<'static> {
 pub(crate) fn escape_with(text: &str, escaper: Escaper) -> Cow<'_, str> {
     match escaper {
         Escaper::Modern => escape_modern(text),
-        Escaper::V21 => escape_v21(text),
+        Escaper::V2_1 => escape_v21(text),
     }
 }
 
@@ -449,7 +454,7 @@ mod tests {
             Cow::Borrowed("plain")
         ));
         // vCard 2.1 escapes only `;`.
-        assert_eq!(escape_with("a,b;c", Escaper::V21), r"a,b\;c");
+        assert_eq!(escape_with("a,b;c", Escaper::V2_1), r"a,b\;c");
     }
 
     #[test]

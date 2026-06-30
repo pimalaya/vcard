@@ -14,17 +14,22 @@
 use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
-    prop::VCARD_N,
-    tree::{line::VcardLine, param::VcardParamLens, prop::VcardPropLens, value::VcardValueNode},
-    value::n::VcardN,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        line::VcardLine,
+        param::VcardParamLens,
+        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, n::VcardN},
+    version::VcardVersion,
 };
 
 /// The `N` property lens.
 pub struct N;
 
 impl VcardPropLens for N {
-    const NAME: &'static str = VCARD_N;
-
     type Target<'v> = VcardN<'v>;
 
     type Cursor<'c, 'a>
@@ -42,6 +47,30 @@ impl VcardPropLens for N {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> NCursor<'c, 'a> {
         NCursor { line }
+    }
+}
+
+impl VcardPropSpec for N {
+    const PROP: VcardPropKind = VcardPropKind::N;
+
+    fn cardinality(version: VcardVersion) -> VcardPropCardinality {
+        match version {
+            VcardVersion::V4_0 => VcardPropCardinality::AtMostOne,
+            _ => VcardPropCardinality::ExactlyOne,
+        }
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::N]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::SortAs,
+            VcardParamKind::Language,
+            VcardParamKind::AltId,
+            VcardParamKind::Value,
+        ]
     }
 }
 

@@ -6,7 +6,7 @@ use alloc::{borrow::Cow, string::ToString, vec::Vec};
 
 use crate::tree::leaf::VcardLeaf;
 use crate::{
-    param::VCARD_SORT_AS,
+    param::VcardParamKind,
     tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
@@ -15,7 +15,7 @@ use crate::{
 pub struct SORT_AS;
 
 impl VcardParamLens for SORT_AS {
-    const NAME: &'static str = VCARD_SORT_AS;
+    const KIND: VcardParamKind = VcardParamKind::SortAs;
 
     type Target<'v> = Vec<Cow<'v, str>>;
 
@@ -30,7 +30,7 @@ impl VcardParamLens for SORT_AS {
     #[allow(clippy::ptr_arg)]
     fn encode(decoded: &Vec<Cow<'_, str>>) -> VcardParamNode<'static> {
         VcardParamNode {
-            name: VcardLeaf::from(VCARD_SORT_AS.to_string()),
+            name: VcardLeaf::from(Self::KIND.to_string()),
             values: decoded
                 .iter()
                 .map(|value| VcardLeaf::from(value.to_string()))

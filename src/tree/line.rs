@@ -153,7 +153,7 @@ impl<'a> VcardLine<'a> {
     pub fn param<P: VcardParamLens>(&self) -> Option<P::Target<'_>> {
         self.params
             .iter()
-            .find(|param| param.name.get().eq_ignore_ascii_case(P::NAME))
+            .find(|param| param.name.get().eq_ignore_ascii_case(&P::KIND))
             .map(|param| P::decode(param))
     }
 
@@ -161,7 +161,7 @@ impl<'a> VcardLine<'a> {
     pub fn param_mut<P: VcardParamLens>(&mut self) -> Option<&mut VcardParamNode<'a>> {
         self.params
             .iter_mut()
-            .find(|param| param.name.get().eq_ignore_ascii_case(P::NAME))
+            .find(|param| param.name.get().eq_ignore_ascii_case(&P::KIND))
     }
 
     /// Split one logical line into a typed line at the colon, separating the

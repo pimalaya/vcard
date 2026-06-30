@@ -2,425 +2,332 @@
 //!
 //! A decoded property and the RFC 6350 property-name vocabulary.
 //!
-//! A [`VcardProp`] is a name, a list of parameters, and a decoded value. The
-//! name is stored explicitly (as written on the wire) because many properties
-//! share one [`VcardValue`] kind: `FN` and `TITLE` both decode to text, so the
-//! value alone cannot say which property it is. The `VCARD_*` consts here are
-//! the single source of truth for those names; the lens markers in
-//! [`crate::tree::prop`] reference them to match and build lines, and the decode
-//! registry uses them to dispatch a line onto its value kind.
+//! A [`VcardProp`] is a [`VcardPropName`], a list of parameters, and a
+//! decoded value. The name is stored explicitly because many properties share
+//! one [`VcardValue`] kind: `FN` and `TITLE` both decode to text, so the value
+//! alone cannot say which property it is. A known name is held as the closed
+//! [`VcardPropKind`] identity (its wire spelling reached through `Deref` and
+//! `FromStr`); an unknown one keeps its verbatim bytes. The lens markers in
+//! [`crate::tree::prop`] carry the kind to match and build lines, and the decode
+//! registry parses a line name onto its value kind.
 //!
-//! Each property has a named constructor (`VcardProp::r#fn`,
-//! [`VcardProp::email`], [`VcardProp::n`], ...) that pins both the wire name and
-//! the value kind, so building a regular property means neither spelling the name
-//! nor knowing which [`VcardValue`] variant it takes. They are the discoverable
-//! entry point: browse them under [`VcardProp`].
+//! Build a property directly from its public fields; strict, spec-checked
+//! construction lives in the syntax layer
+//! ([`VcardPropBuilder`](crate::tree::build::VcardPropBuilder)).
 //!
 //! This module is pure model: it has no dependency on [`crate::tree`], so the
 //! decoded form can be used without the syntax layer.
 
-use alloc::{borrow::Cow, vec::Vec};
+use core::{error, fmt, ops, str};
 
-use crate::{
-    param::VcardParam,
-    value::{
-        VcardValue,
-        adr::VcardAdr,
-        client_pid_map::VcardClientPidMap,
-        datetime::{VcardDateAndOrTime, VcardTimestamp},
-        gender::VcardGender,
-        language::VcardLanguageTag,
-        n::VcardN,
-        org::VcardOrg,
-        text::{VcardText, VcardTextList},
-        uri::VcardUri,
-    },
+use alloc::{
+    borrow::Cow,
+    string::{String, ToString},
+    vec::Vec,
 };
 
-pub const VCARD_ADR: &str = "ADR";
-pub const VCARD_AGENT: &str = "AGENT";
-pub const VCARD_ANNIVERSARY: &str = "ANNIVERSARY";
-pub const VCARD_BDAY: &str = "BDAY";
-pub const VCARD_CALADRURI: &str = "CALADRURI";
-pub const VCARD_CALURI: &str = "CALURI";
-pub const VCARD_CATEGORIES: &str = "CATEGORIES";
-pub const VCARD_CLASS: &str = "CLASS";
-pub const VCARD_CLIENTPIDMAP: &str = "CLIENTPIDMAP";
-pub const VCARD_EMAIL: &str = "EMAIL";
-pub const VCARD_FBURL: &str = "FBURL";
-pub const VCARD_FN: &str = "FN";
-pub const VCARD_GENDER: &str = "GENDER";
-pub const VCARD_GEO: &str = "GEO";
-pub const VCARD_IMPP: &str = "IMPP";
-pub const VCARD_KEY: &str = "KEY";
-pub const VCARD_KIND: &str = "KIND";
-pub const VCARD_LABEL: &str = "LABEL";
-pub const VCARD_LANG: &str = "LANG";
-pub const VCARD_LOGO: &str = "LOGO";
-pub const VCARD_MAILER: &str = "MAILER";
-pub const VCARD_MEMBER: &str = "MEMBER";
-pub const VCARD_N: &str = "N";
-pub const VCARD_NAME: &str = "NAME";
-pub const VCARD_NICKNAME: &str = "NICKNAME";
-pub const VCARD_NOTE: &str = "NOTE";
-pub const VCARD_ORG: &str = "ORG";
-pub const VCARD_PHOTO: &str = "PHOTO";
-pub const VCARD_PRODID: &str = "PRODID";
-pub const VCARD_PROFILE: &str = "PROFILE";
-pub const VCARD_RELATED: &str = "RELATED";
-pub const VCARD_REV: &str = "REV";
-pub const VCARD_ROLE: &str = "ROLE";
-pub const VCARD_SOUND: &str = "SOUND";
-pub const VCARD_SORT_STRING: &str = "SORT-STRING";
-pub const VCARD_SOURCE: &str = "SOURCE";
-pub const VCARD_TEL: &str = "TEL";
-pub const VCARD_TITLE: &str = "TITLE";
-pub const VCARD_TZ: &str = "TZ";
-pub const VCARD_UID: &str = "UID";
-pub const VCARD_URL: &str = "URL";
-pub const VCARD_XML: &str = "XML";
+use crate::{param::VcardParam, value::VcardValue};
+
+/// Parse vCard property kind error.
+#[derive(Debug)]
+pub struct ParseVcardPropKindError(
+    /// The vCard property that cannot be parsed.
+    String,
+);
+
+impl fmt::Display for ParseVcardPropKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Cannot parse vCard property `{}`", self.0)
+    }
+}
+
+impl error::Error for ParseVcardPropKindError {}
+
+/// The closed RFC 6350 property-name vocabulary, one fieldless variant per
+/// known property. An identity for dispatch and allowed-sets; the
+/// open-vocabulary counterpart that also carries unknown names is
+/// [`VcardPropName`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VcardPropKind {
+    Adr,
+    Agent,
+    Anniversary,
+    Bday,
+    CalAdrUri,
+    CalUri,
+    Categories,
+    Class,
+    ClientPidMap,
+    Email,
+    FbUrl,
+    Fn,
+    Gender,
+    Geo,
+    Impp,
+    Key,
+    Kind,
+    Label,
+    Lang,
+    Logo,
+    Mailer,
+    Member,
+    N,
+    Name,
+    Nickname,
+    Note,
+    Org,
+    Photo,
+    ProdId,
+    Profile,
+    Related,
+    Rev,
+    Role,
+    SortString,
+    Sound,
+    Source,
+    Tel,
+    Title,
+    Tz,
+    Uid,
+    Url,
+    Xml,
+}
+
+impl VcardPropKind {
+    /// Every known property kind, for iterating the closed vocabulary (e.g. a
+    /// validator checking which required properties are absent).
+    pub const ALL: [Self; 42] = [
+        Self::Adr,
+        Self::Agent,
+        Self::Anniversary,
+        Self::Bday,
+        Self::CalAdrUri,
+        Self::CalUri,
+        Self::Categories,
+        Self::Class,
+        Self::ClientPidMap,
+        Self::Email,
+        Self::FbUrl,
+        Self::Fn,
+        Self::Gender,
+        Self::Geo,
+        Self::Impp,
+        Self::Key,
+        Self::Kind,
+        Self::Label,
+        Self::Lang,
+        Self::Logo,
+        Self::Mailer,
+        Self::Member,
+        Self::N,
+        Self::Name,
+        Self::Nickname,
+        Self::Note,
+        Self::Org,
+        Self::Photo,
+        Self::ProdId,
+        Self::Profile,
+        Self::Related,
+        Self::Rev,
+        Self::Role,
+        Self::SortString,
+        Self::Sound,
+        Self::Source,
+        Self::Tel,
+        Self::Title,
+        Self::Tz,
+        Self::Uid,
+        Self::Url,
+        Self::Xml,
+    ];
+}
+
+impl str::FromStr for VcardPropKind {
+    type Err = ParseVcardPropKindError;
+
+    /// The known property for a wire name (case-insensitive), or `None`.
+    fn from_str(kind: &str) -> Result<Self, Self::Err> {
+        match kind {
+            kind if kind.eq_ignore_ascii_case("ADR") => Ok(Self::Adr),
+            kind if kind.eq_ignore_ascii_case("AGENT") => Ok(Self::Agent),
+            kind if kind.eq_ignore_ascii_case("ANNIVERSARY") => Ok(Self::Anniversary),
+            kind if kind.eq_ignore_ascii_case("BDAY") => Ok(Self::Bday),
+            kind if kind.eq_ignore_ascii_case("CALADRURI") => Ok(Self::CalAdrUri),
+            kind if kind.eq_ignore_ascii_case("CALURI") => Ok(Self::CalUri),
+            kind if kind.eq_ignore_ascii_case("CATEGORIES") => Ok(Self::Categories),
+            kind if kind.eq_ignore_ascii_case("CLASS") => Ok(Self::Class),
+            kind if kind.eq_ignore_ascii_case("CLIENTPIDMAP") => Ok(Self::ClientPidMap),
+            kind if kind.eq_ignore_ascii_case("EMAIL") => Ok(Self::Email),
+            kind if kind.eq_ignore_ascii_case("FBURL") => Ok(Self::FbUrl),
+            kind if kind.eq_ignore_ascii_case("FN") => Ok(Self::Fn),
+            kind if kind.eq_ignore_ascii_case("GENDER") => Ok(Self::Gender),
+            kind if kind.eq_ignore_ascii_case("GEO") => Ok(Self::Geo),
+            kind if kind.eq_ignore_ascii_case("IMPP") => Ok(Self::Impp),
+            kind if kind.eq_ignore_ascii_case("KEY") => Ok(Self::Key),
+            kind if kind.eq_ignore_ascii_case("KIND") => Ok(Self::Kind),
+            kind if kind.eq_ignore_ascii_case("LABEL") => Ok(Self::Label),
+            kind if kind.eq_ignore_ascii_case("LANG") => Ok(Self::Lang),
+            kind if kind.eq_ignore_ascii_case("LOGO") => Ok(Self::Logo),
+            kind if kind.eq_ignore_ascii_case("MAILER") => Ok(Self::Mailer),
+            kind if kind.eq_ignore_ascii_case("MEMBER") => Ok(Self::Member),
+            kind if kind.eq_ignore_ascii_case("N") => Ok(Self::N),
+            kind if kind.eq_ignore_ascii_case("NAME") => Ok(Self::Name),
+            kind if kind.eq_ignore_ascii_case("NICKNAME") => Ok(Self::Nickname),
+            kind if kind.eq_ignore_ascii_case("NOTE") => Ok(Self::Note),
+            kind if kind.eq_ignore_ascii_case("ORG") => Ok(Self::Org),
+            kind if kind.eq_ignore_ascii_case("PHOTO") => Ok(Self::Photo),
+            kind if kind.eq_ignore_ascii_case("PRODID") => Ok(Self::ProdId),
+            kind if kind.eq_ignore_ascii_case("PROFILE") => Ok(Self::Profile),
+            kind if kind.eq_ignore_ascii_case("RELATED") => Ok(Self::Related),
+            kind if kind.eq_ignore_ascii_case("REV") => Ok(Self::Rev),
+            kind if kind.eq_ignore_ascii_case("ROLE") => Ok(Self::Role),
+            kind if kind.eq_ignore_ascii_case("SORT-STRING") => Ok(Self::SortString),
+            kind if kind.eq_ignore_ascii_case("SOUND") => Ok(Self::Sound),
+            kind if kind.eq_ignore_ascii_case("SOURCE") => Ok(Self::Source),
+            kind if kind.eq_ignore_ascii_case("TEL") => Ok(Self::Tel),
+            kind if kind.eq_ignore_ascii_case("TITLE") => Ok(Self::Title),
+            kind if kind.eq_ignore_ascii_case("TZ") => Ok(Self::Tz),
+            kind if kind.eq_ignore_ascii_case("UID") => Ok(Self::Uid),
+            kind if kind.eq_ignore_ascii_case("URL") => Ok(Self::Url),
+            kind if kind.eq_ignore_ascii_case("XML") => Ok(Self::Xml),
+            _ => Err(ParseVcardPropKindError(kind.to_string())),
+        }
+    }
+}
+
+impl ops::Deref for VcardPropKind {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Adr => "ADR",
+            Self::Agent => "AGENT",
+            Self::Anniversary => "ANNIVERSARY",
+            Self::Bday => "BDAY",
+            Self::CalAdrUri => "CALADRURI",
+            Self::CalUri => "CALURI",
+            Self::Categories => "CATEGORIES",
+            Self::Class => "CLASS",
+            Self::ClientPidMap => "CLIENTPIDMAP",
+            Self::Email => "EMAIL",
+            Self::FbUrl => "FBURL",
+            Self::Fn => "FN",
+            Self::Gender => "GENDER",
+            Self::Geo => "GEO",
+            Self::Impp => "IMPP",
+            Self::Key => "KEY",
+            Self::Kind => "KIND",
+            Self::Label => "LABEL",
+            Self::Lang => "LANG",
+            Self::Logo => "LOGO",
+            Self::Mailer => "MAILER",
+            Self::Member => "MEMBER",
+            Self::N => "N",
+            Self::Name => "NAME",
+            Self::Nickname => "NICKNAME",
+            Self::Note => "NOTE",
+            Self::Org => "ORG",
+            Self::Photo => "PHOTO",
+            Self::ProdId => "PRODID",
+            Self::Profile => "PROFILE",
+            Self::Related => "RELATED",
+            Self::Rev => "REV",
+            Self::Role => "ROLE",
+            Self::SortString => "SORT-STRING",
+            Self::Sound => "SOUND",
+            Self::Source => "SOURCE",
+            Self::Tel => "TEL",
+            Self::Title => "TITLE",
+            Self::Tz => "TZ",
+            Self::Uid => "UID",
+            Self::Url => "URL",
+            Self::Xml => "XML",
+        }
+    }
+}
+
+/// A property name: a known RFC 6350 name, or an unknown one kept verbatim.
+///
+/// Known names normalise to their canonical [`VcardPropKind`] spelling; unknown
+/// names keep their exact bytes so they round-trip.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VcardPropName<'a> {
+    /// A name in the closed RFC 6350 vocabulary.
+    Kind(VcardPropKind),
+    /// Any other kind, kept as written.
+    Unknown(Cow<'a, str>),
+}
+
+impl VcardPropName<'_> {
+    /// The name's wire string: the canonical spelling of a known name, or the
+    /// verbatim text of an unknown one.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Kind(kind) => kind,
+            Self::Unknown(name) => name,
+        }
+    }
+}
+
+impl From<VcardPropKind> for VcardPropName<'_> {
+    fn from(kind: VcardPropKind) -> Self {
+        Self::Kind(kind)
+    }
+}
+
+impl From<&VcardPropKind> for VcardPropName<'_> {
+    fn from(kind: &VcardPropKind) -> Self {
+        Self::Kind(*kind)
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for VcardPropName<'a> {
+    fn from(kind: Cow<'a, str>) -> Self {
+        match kind.parse().ok() {
+            Some(kind) => Self::Kind(kind),
+            None => Self::Unknown(kind),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for VcardPropName<'a> {
+    fn from(name: &'a str) -> Self {
+        Cow::Borrowed(name).into()
+    }
+}
 
 /// A decoded property: its wire name, its parameters, and its decoded value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VcardProp<'a> {
-    /// The property name, as written (e.g. `FN`, `N`, `EMAIL`).
-    pub name: Cow<'a, str>,
+    /// The property name (a known kind, or an unknown name kept verbatim).
+    pub name: VcardPropName<'a>,
     /// The parameters decorating the property.
     pub params: Vec<VcardParam<'a>>,
     /// The decoded value.
     pub value: VcardValue<'a>,
 }
 
-impl<'a> VcardProp<'a> {
-    /// Build an `ADR` property from its parameters and value.
-    pub fn adr(params: Vec<VcardParam<'a>>, value: VcardAdr<'a>) -> Self {
-        Self {
-            name: VCARD_ADR.into(),
-            params,
-            value: VcardValue::Adr(value),
-        }
-    }
-
-    /// Build an `ANNIVERSARY` property from its parameters and value.
-    pub fn anniversary(params: Vec<VcardParam<'a>>, value: VcardDateAndOrTime<'a>) -> Self {
-        Self {
-            name: VCARD_ANNIVERSARY.into(),
-            params,
-            value: VcardValue::DateAndOrTime(value),
-        }
-    }
-
-    /// Build a `BDAY` property from its parameters and value.
-    pub fn bday(params: Vec<VcardParam<'a>>, value: VcardDateAndOrTime<'a>) -> Self {
-        Self {
-            name: VCARD_BDAY.into(),
-            params,
-            value: VcardValue::DateAndOrTime(value),
-        }
-    }
-
-    /// Build a `CALADRURI` property from its parameters and value.
-    pub fn caladruri(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_CALADRURI.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `CALURI` property from its parameters and value.
-    pub fn caluri(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_CALURI.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `CATEGORIES` property from its parameters and value.
-    pub fn categories(params: Vec<VcardParam<'a>>, value: VcardTextList<'a>) -> Self {
-        Self {
-            name: VCARD_CATEGORIES.into(),
-            params,
-            value: VcardValue::TextList(value),
-        }
-    }
-
-    /// Build a `CLIENTPIDMAP` property from its parameters and value.
-    pub fn clientpidmap(params: Vec<VcardParam<'a>>, value: VcardClientPidMap<'a>) -> Self {
-        Self {
-            name: VCARD_CLIENTPIDMAP.into(),
-            params,
-            value: VcardValue::ClientPidMap(value),
-        }
-    }
-
-    /// Build an `EMAIL` property from its parameters and value.
-    pub fn email(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_EMAIL.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build an `FBURL` property from its parameters and value.
-    pub fn fburl(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_FBURL.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build an `FN` property from its parameters and value.
-    pub fn r#fn(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_FN.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build a `GENDER` property from its parameters and value.
-    pub fn gender(params: Vec<VcardParam<'a>>, value: VcardGender<'a>) -> Self {
-        Self {
-            name: VCARD_GENDER.into(),
-            params,
-            value: VcardValue::Gender(value),
-        }
-    }
-
-    /// Build a `GEO` property from its parameters and value.
-    pub fn geo(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_GEO.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build an `IMPP` property from its parameters and value.
-    pub fn impp(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_IMPP.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `KEY` property from its parameters and value.
-    pub fn key(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_KEY.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `KIND` property from its parameters and value.
-    pub fn kind(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_KIND.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build a `LANG` property from its parameters and value.
-    pub fn lang(params: Vec<VcardParam<'a>>, value: VcardLanguageTag<'a>) -> Self {
-        Self {
-            name: VCARD_LANG.into(),
-            params,
-            value: VcardValue::LanguageTag(value),
-        }
-    }
-
-    /// Build a `LOGO` property from its parameters and value.
-    pub fn logo(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_LOGO.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `MEMBER` property from its parameters and value.
-    pub fn member(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_MEMBER.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build an `N` property from its parameters and value.
-    pub fn n(params: Vec<VcardParam<'a>>, value: VcardN<'a>) -> Self {
-        Self {
-            name: VCARD_N.into(),
-            params,
-            value: VcardValue::N(value),
-        }
-    }
-
-    /// Build a `NICKNAME` property from its parameters and value.
-    pub fn nickname(params: Vec<VcardParam<'a>>, value: VcardTextList<'a>) -> Self {
-        Self {
-            name: VCARD_NICKNAME.into(),
-            params,
-            value: VcardValue::TextList(value),
-        }
-    }
-
-    /// Build a `NOTE` property from its parameters and value.
-    pub fn note(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_NOTE.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build an `ORG` property from its parameters and value.
-    pub fn org(params: Vec<VcardParam<'a>>, value: VcardOrg<'a>) -> Self {
-        Self {
-            name: VCARD_ORG.into(),
-            params,
-            value: VcardValue::Org(value),
-        }
-    }
-
-    /// Build a `PHOTO` property from its parameters and value.
-    pub fn photo(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_PHOTO.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `PRODID` property from its parameters and value.
-    pub fn prodid(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_PRODID.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build a `RELATED` property from its parameters and value.
-    pub fn related(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_RELATED.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `REV` property from its parameters and value.
-    pub fn rev(params: Vec<VcardParam<'a>>, value: VcardTimestamp<'a>) -> Self {
-        Self {
-            name: VCARD_REV.into(),
-            params,
-            value: VcardValue::Timestamp(value),
-        }
-    }
-
-    /// Build a `ROLE` property from its parameters and value.
-    pub fn role(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_ROLE.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build a `SOUND` property from its parameters and value.
-    pub fn sound(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_SOUND.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `SOURCE` property from its parameters and value.
-    pub fn source(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_SOURCE.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `TEL` property from its parameters and value.
-    pub fn tel(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_TEL.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build a `TITLE` property from its parameters and value.
-    pub fn title(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_TITLE.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build a `TZ` property from its parameters and value.
-    pub fn tz(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_TZ.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-
-    /// Build a `UID` property from its parameters and value.
-    pub fn uid(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_UID.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build a `URL` property from its parameters and value.
-    pub fn url(params: Vec<VcardParam<'a>>, value: VcardUri<'a>) -> Self {
-        Self {
-            name: VCARD_URL.into(),
-            params,
-            value: VcardValue::Uri(value),
-        }
-    }
-
-    /// Build an `XML` property from its parameters and value.
-    pub fn xml(params: Vec<VcardParam<'a>>, value: VcardText<'a>) -> Self {
-        Self {
-            name: VCARD_XML.into(),
-            params,
-            value: VcardValue::Text(value),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use alloc::{borrow::Cow, vec, vec::Vec};
+    use core::str::FromStr;
+
+    use alloc::{borrow::Cow, vec};
 
     use crate::{
-        prop::VcardProp,
+        param::VcardParam,
+        prop::{VcardProp, VcardPropKind, VcardPropName},
         value::{VcardValue, text::VcardText},
     };
 
     #[test]
     fn names_the_property_and_wraps_the_value() {
-        let prop = VcardProp::title(Vec::new(), "Developer".into());
-        assert_eq!(prop.name, "TITLE");
+        let prop = VcardProp {
+            name: VcardPropKind::Title.into(),
+            params: [].into(),
+            value: VcardValue::Text(VcardText(Cow::Borrowed("Developer"))),
+        };
+        assert_eq!(prop.name, VcardPropName::Kind(VcardPropKind::Title));
+        assert_eq!(prop.name.as_str(), "TITLE");
         assert_eq!(
             prop.value,
             VcardValue::Text(VcardText(Cow::Borrowed("Developer"))),
@@ -430,7 +337,27 @@ mod tests {
 
     #[test]
     fn carries_the_given_parameters() {
-        let prop = VcardProp::r#fn(vec![], VcardText(Cow::Borrowed("John")));
-        assert_eq!(prop.name, "FN");
+        let prop = VcardProp {
+            name: VcardPropKind::Fn.into(),
+            params: [VcardParam::Pref(Cow::Borrowed("1"))].into(),
+            value: VcardValue::Text(VcardText(Cow::Borrowed("John"))),
+        };
+        assert_eq!(prop.name.as_str(), "FN");
+        assert_eq!(prop.params, vec![VcardParam::Pref(Cow::Borrowed("1"))]);
+    }
+
+    #[test]
+    fn round_trips_every_kind_through_its_wire_name() {
+        for kind in [
+            VcardPropKind::Fn,
+            VcardPropKind::ClientPidMap,
+            VcardPropKind::SortString,
+            VcardPropKind::CalAdrUri,
+        ] {
+            assert_eq!(VcardPropKind::from_str(&kind).ok(), Some(kind));
+        }
+        // Case-insensitive on the way in; unknown names are not in the vocabulary.
+        assert_eq!(VcardPropKind::from_str("fn").ok(), Some(VcardPropKind::Fn),);
+        assert!(VcardPropKind::from_str("X-CUSTOM").is_err());
     }
 }

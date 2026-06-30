@@ -15,17 +15,15 @@
 
 use core::fmt;
 
-use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
+use alloc::{string::ToString, vec, vec::Vec};
 
-use crate::tree::codec::Escaper;
-use crate::tree::encode::reescape_line;
-use crate::tree::error::VcardParseError;
-use crate::vcard::{VCARD, VCARD_BEGIN, VCARD_END};
-use crate::version::{VCARD_VERSION, VcardVersion};
 use crate::{
     prop::VcardProp,
-    tree::{line::VcardLine, prop::VcardPropLens},
-    version::VCARD_VERSION_40,
+    tree::{
+        codec::Escaper, encode::reescape_line, error::VcardParseError, line::VcardLine,
+        prop::VcardPropLens,
+    },
+    version::VcardVersion,
 };
 
 /// A whole card as raw syntax: a `BEGIN` line, the property lines (the `VERSION`
@@ -45,9 +43,9 @@ impl<'a> VcardCst<'a> {
     /// Start an empty vCard 4.0, BEGIN/VERSION/END seeded, ready for properties.
     pub fn v4() -> Self {
         Self {
-            begin: VcardLine::text(VCARD_BEGIN, VCARD),
-            props: vec![VcardLine::text(VCARD_VERSION, VCARD_VERSION_40)],
-            end: VcardLine::text(VCARD_END, VCARD),
+            begin: VcardLine::text("BEGIN", "VCARD"),
+            props: vec![VcardLine::text("VERSION", &*VcardVersion::V4_0)],
+            end: VcardLine::text("END", "VCARD"),
         }
     }
 
@@ -56,7 +54,7 @@ impl<'a> VcardCst<'a> {
     /// all): the parser is liberal about its position, the way real cards are.
     pub fn parse(input: &'a str) -> Result<Self, VcardParseError> {
         let (begin, mut rest) = VcardLine::take(input)?;
-        if !begin.name.get().eq_ignore_ascii_case(VCARD_BEGIN) {
+        if !begin.name.get().eq_ignore_ascii_case("BEGIN") {
             return Err(VcardParseError::ExpectedBegin(begin.name.get().to_string()));
         }
 
@@ -70,12 +68,12 @@ impl<'a> VcardCst<'a> {
             let (line, tail) = VcardLine::take(rest)?;
             rest = tail;
 
-            if line.name.get().eq_ignore_ascii_case(VCARD_END) {
+            if line.name.get().eq_ignore_ascii_case("END") {
                 // VERSION can sit anywhere, so the escaping mode is only known
                 // once the whole card is parsed: stamp every value node with it.
                 let escaper = props
                     .iter()
-                    .find(|line| line.name.get().eq_ignore_ascii_case(VCARD_VERSION))
+                    .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
                     .map(|line| Escaper::for_version_str(line.raw_value()))
                     .unwrap_or_default();
                 for line in &mut props {
@@ -97,14 +95,15 @@ impl<'a> VcardCst<'a> {
     pub fn version_line(&self) -> Option<&VcardLine<'a>> {
         self.props
             .iter()
-            .find(|line| line.name.get().eq_ignore_ascii_case(VCARD_VERSION))
+            .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
     }
 
-    /// The card's version indicator, read from its `VERSION` line (or `Unknown`).
-    pub fn version(&self) -> VcardVersion<'_> {
+    /// The card's version indicator, read from its `VERSION` line. An
+    /// unrecognised or missing version normalises to [`V4_0`](VcardVersion::V4_0).
+    pub fn version(&self) -> VcardVersion {
         self.version_line()
-            .map(|line| VcardVersion::from(Cow::Borrowed(line.raw_value())))
-            .unwrap_or(VcardVersion::Unknown(Cow::Borrowed("")))
+            .and_then(|line| line.raw_value().parse().ok())
+            .unwrap_or(VcardVersion::V4_0)
     }
 
     // --- write: build / edit
@@ -129,7 +128,7 @@ impl<'a> VcardCst<'a> {
     /// Remove every property of type `L`.
     pub fn remove<L: VcardPropLens>(&mut self) -> &mut Self {
         self.props
-            .retain(|line| !line.name.get().eq_ignore_ascii_case(L::NAME));
+            .retain(|line| !line.name.get().eq_ignore_ascii_case(&L::PROP));
         self
     }
 
@@ -143,15 +142,15 @@ impl<'a> VcardCst<'a> {
         let version = self.version();
         self.props
             .iter()
-            .find(|line| line.name.get().eq_ignore_ascii_case(L::NAME))
-            .map(|line| L::decode_versioned(line, &version))
+            .find(|line| line.name.get().eq_ignore_ascii_case(&L::PROP))
+            .map(|line| L::decode_versioned(line, version))
     }
 
     /// The first property of type `L`, as a typed cursor for in-place editing.
     pub fn prop_mut<L: VcardPropLens>(&mut self) -> Option<L::Cursor<'_, 'a>> {
         self.props
             .iter_mut()
-            .find(|line| line.name.get().eq_ignore_ascii_case(L::NAME))
+            .find(|line| line.name.get().eq_ignore_ascii_case(&L::PROP))
             .map(|line| L::cursor(line))
     }
 }
@@ -172,6 +171,7 @@ impl fmt::Display for VcardCst<'_> {
 mod tests {
     use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
 
+    use crate::prop::VcardPropKind;
     use crate::version::VcardVersion;
     use crate::{
         param::VcardParam,
@@ -208,7 +208,11 @@ mod tests {
     #[test]
     fn pushes_a_typed_property_onto_a_parsed_card() {
         let mut card = VcardCst::parse(CARD).unwrap();
-        card.push(VcardProp::email(Vec::new(), "john@doe.example".into()));
+        card.push(VcardProp {
+            name: VcardPropKind::Email.into(),
+            params: [].into(),
+            value: VcardValue::Text("john@doe.example".into()),
+        });
 
         let out = card.to_string();
         // existing lines kept verbatim; only the appended one is canonical.
@@ -229,9 +233,9 @@ mod tests {
     #[test]
     fn builds_a_card_from_decoded_types() {
         let card = Vcard {
-            version: VcardVersion::V40,
+            version: VcardVersion::V4_0,
             properties: vec![VcardProp {
-                name: Cow::Borrowed("N"),
+                name: "N".into(),
                 params: Vec::new(),
                 value: VcardValue::N(VcardN {
                     family: vec![Cow::Borrowed("Doe")],
@@ -254,7 +258,7 @@ mod tests {
         let note = |version| Vcard {
             version,
             properties: vec![VcardProp {
-                name: Cow::Borrowed("NOTE"),
+                name: "NOTE".into(),
                 params: Vec::new(),
                 value: VcardValue::Text(VcardText(Cow::Borrowed("a,b;c"))),
             }],
@@ -262,12 +266,12 @@ mod tests {
 
         // 2.1 escapes only `;`, leaving `,` literal.
         assert_eq!(
-            note(VcardVersion::V21).to_string(),
+            note(VcardVersion::V2_1).to_string(),
             "BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE:a,b\\;c\r\nEND:VCARD\r\n",
         );
         // 4.0 escapes both `,` and `;` (modern rules).
         assert_eq!(
-            note(VcardVersion::V40).to_string(),
+            note(VcardVersion::V4_0).to_string(),
             "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a\\,b\\;c\r\nEND:VCARD\r\n",
         );
 
@@ -275,7 +279,7 @@ mod tests {
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nFN:X\r\nEND:VCARD\r\n").unwrap();
         card.push(VcardProp {
-            name: Cow::Borrowed("NOTE"),
+            name: "NOTE".into(),
             params: Vec::new(),
             value: VcardValue::Text(VcardText(Cow::Borrowed("a,b;c"))),
         });
@@ -291,16 +295,16 @@ mod tests {
         let cst = VcardCst::parse(CARD).unwrap();
         let vcard = cst.decode();
 
-        assert_eq!(vcard.version, VcardVersion::V40);
+        assert_eq!(vcard.version, VcardVersion::V4_0);
         assert_eq!(vcard.properties.len(), 2);
 
         let n = &vcard.properties[0];
-        assert_eq!(n.name, "N");
+        assert_eq!(n.name.as_str(), "N");
         assert_eq!(n.params, vec![VcardParam::Pid(vec![Cow::Borrowed("1")])]);
         assert!(matches!(n.value, VcardValue::N(_)));
 
         let fnn = &vcard.properties[1];
-        assert_eq!(fnn.name, "FN");
+        assert_eq!(fnn.name.as_str(), "FN");
         assert_eq!(
             fnn.value,
             VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
@@ -356,7 +360,7 @@ mod tests {
         assert_eq!(cst.to_string(), card);
 
         let vcard = cst.decode();
-        assert_eq!(vcard.version, VcardVersion::V30);
+        assert_eq!(vcard.version, VcardVersion::V3_0);
         // VERSION is the indicator, not a property: only BDAY and FN remain.
         assert_eq!(vcard.properties.len(), 2);
     }
@@ -366,8 +370,10 @@ mod tests {
         let card = "BEGIN:VCARD\r\nFN:X\r\nEND:VCARD\r\n";
         let cst = VcardCst::parse(card).unwrap();
 
+        // The raw card round-trips byte for byte (no VERSION line invented)...
         assert_eq!(cst.to_string(), card);
-        assert!(matches!(cst.decode().version, VcardVersion::Unknown(_)));
+        // ...but the decoded model normalises a missing version to 4.0.
+        assert_eq!(cst.decode().version, VcardVersion::V4_0);
     }
 
     #[test]

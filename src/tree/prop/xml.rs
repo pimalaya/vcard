@@ -3,17 +3,22 @@
 //! The `XML` property lens: embedded XML, as a text value.
 
 use crate::{
-    prop::VCARD_XML,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
     value::text::VcardText,
+    version::VcardVersion,
 };
 
 /// The `XML` property lens.
 pub struct XML;
 
 impl VcardPropLens for XML {
-    const NAME: &'static str = VCARD_XML;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,17 @@ impl VcardPropLens for XML {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for XML {
+    const PROP: VcardPropKind = VcardPropKind::Xml;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V4_0]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[VcardParamKind::AltId, VcardParamKind::Value]
     }
 }

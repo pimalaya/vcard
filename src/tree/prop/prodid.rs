@@ -3,17 +3,22 @@
 //! The `PRODID` property lens: the producer id, as a text value.
 
 use crate::{
-    prop::VCARD_PRODID,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
     value::text::VcardText,
+    version::VcardVersion,
 };
 
 /// The `PRODID` property lens.
 pub struct PRODID;
 
 impl VcardPropLens for PRODID {
-    const NAME: &'static str = VCARD_PRODID;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,21 @@ impl VcardPropLens for PRODID {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for PRODID {
+    const PROP: VcardPropKind = VcardPropKind::ProdId;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V3_0, VcardVersion::V4_0]
+    }
+
+    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
+        VcardPropCardinality::AtMostOne
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[VcardParamKind::Value]
     }
 }

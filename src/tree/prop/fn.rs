@@ -3,17 +3,22 @@
 //! The `FN` (formatted name) property lens: a single text value.
 
 use crate::{
-    prop::VCARD_FN,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
     value::text::VcardText,
+    version::VcardVersion,
 };
 
 /// The `FN` property lens.
 pub struct FN;
 
 impl VcardPropLens for FN {
-    const NAME: &'static str = VCARD_FN;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,27 @@ impl VcardPropLens for FN {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for FN {
+    const PROP: VcardPropKind = VcardPropKind::Fn;
+
+    fn cardinality(version: VcardVersion) -> VcardPropCardinality {
+        match version {
+            VcardVersion::V2_1 => VcardPropCardinality::AtMostOne,
+            _ => VcardPropCardinality::OneOrMore,
+        }
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Type,
+            VcardParamKind::Language,
+            VcardParamKind::AltId,
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::Value,
+        ]
     }
 }

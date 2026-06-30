@@ -7,7 +7,7 @@ use alloc::{borrow::Cow, string::ToString, vec};
 
 use crate::tree::leaf::VcardLeaf;
 use crate::{
-    param::VCARD_TZ,
+    param::VcardParamKind,
     tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
@@ -15,7 +15,7 @@ use crate::{
 pub struct TZ;
 
 impl VcardParamLens for TZ {
-    const NAME: &'static str = VCARD_TZ;
+    const KIND: VcardParamKind = VcardParamKind::Tz;
 
     type Target<'v> = Cow<'v, str>;
 
@@ -29,7 +29,7 @@ impl VcardParamLens for TZ {
 
     fn encode(decoded: &Cow<'_, str>) -> VcardParamNode<'static> {
         VcardParamNode {
-            name: VcardLeaf::from(VCARD_TZ.to_string()),
+            name: VcardLeaf::from(Self::KIND.to_string()),
             values: vec![VcardLeaf::from(decoded.to_string())],
         }
     }

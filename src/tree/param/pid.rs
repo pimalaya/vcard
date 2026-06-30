@@ -6,7 +6,7 @@ use alloc::{borrow::Cow, string::ToString, vec::Vec};
 
 use crate::tree::leaf::VcardLeaf;
 use crate::{
-    param::VCARD_PID,
+    param::VcardParamKind,
     tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
@@ -14,7 +14,7 @@ use crate::{
 pub struct PID;
 
 impl VcardParamLens for PID {
-    const NAME: &'static str = VCARD_PID;
+    const KIND: VcardParamKind = VcardParamKind::Pid;
 
     type Target<'v> = Vec<Cow<'v, str>>;
 
@@ -29,7 +29,7 @@ impl VcardParamLens for PID {
     #[allow(clippy::ptr_arg)]
     fn encode(decoded: &Vec<Cow<'_, str>>) -> VcardParamNode<'static> {
         VcardParamNode {
-            name: VcardLeaf::from(VCARD_PID.to_string()),
+            name: VcardLeaf::from(Self::KIND.to_string()),
             values: decoded
                 .iter()
                 .map(|value| VcardLeaf::from(value.to_string()))

@@ -7,7 +7,7 @@ use alloc::{borrow::Cow, string::ToString, vec};
 
 use crate::tree::leaf::VcardLeaf;
 use crate::{
-    param::VCARD_MEDIATYPE,
+    param::VcardParamKind,
     tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
@@ -15,7 +15,7 @@ use crate::{
 pub struct MEDIATYPE;
 
 impl VcardParamLens for MEDIATYPE {
-    const NAME: &'static str = VCARD_MEDIATYPE;
+    const KIND: VcardParamKind = VcardParamKind::MediaType;
 
     type Target<'v> = Cow<'v, str>;
 
@@ -29,7 +29,7 @@ impl VcardParamLens for MEDIATYPE {
 
     fn encode(decoded: &Cow<'_, str>) -> VcardParamNode<'static> {
         VcardParamNode {
-            name: VcardLeaf::from(VCARD_MEDIATYPE.to_string()),
+            name: VcardLeaf::from(Self::KIND.to_string()),
             values: vec![VcardLeaf::from(decoded.to_string())],
         }
     }

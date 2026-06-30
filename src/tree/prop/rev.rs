@@ -3,17 +3,22 @@
 //! The `REV` (revision) property lens: a timestamp value.
 
 use crate::{
-    prop::VCARD_REV,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::datetime::VcardTimestamp,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, datetime::VcardTimestamp},
+    version::VcardVersion,
 };
 
 /// The `REV` property lens.
 pub struct REV;
 
 impl VcardPropLens for REV {
-    const NAME: &'static str = VCARD_REV;
-
     type Target<'v> = VcardTimestamp<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,21 @@ impl VcardPropLens for REV {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for REV {
+    const PROP: VcardPropKind = VcardPropKind::Rev;
+
+    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
+        VcardPropCardinality::AtMostOne
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::Timestamp]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[VcardParamKind::Value]
     }
 }

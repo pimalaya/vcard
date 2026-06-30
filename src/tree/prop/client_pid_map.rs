@@ -6,17 +6,22 @@
 use alloc::borrow::Cow;
 
 use crate::{
-    prop::VCARD_CLIENTPIDMAP,
-    tree::{line::VcardLine, param::VcardParamLens, prop::VcardPropLens, value::VcardValueNode},
-    value::client_pid_map::VcardClientPidMap,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        line::VcardLine,
+        param::VcardParamLens,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, client_pid_map::VcardClientPidMap},
+    version::VcardVersion,
 };
 
 /// The `CLIENTPIDMAP` property lens.
 pub struct CLIENTPIDMAP;
 
 impl VcardPropLens for CLIENTPIDMAP {
-    const NAME: &'static str = VCARD_CLIENTPIDMAP;
-
     type Target<'v> = VcardClientPidMap<'v>;
 
     type Cursor<'c, 'a>
@@ -34,6 +39,22 @@ impl VcardPropLens for CLIENTPIDMAP {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> ClientPidMapCursor<'c, 'a> {
         ClientPidMapCursor { line }
+    }
+}
+
+impl VcardPropSpec for CLIENTPIDMAP {
+    const PROP: VcardPropKind = VcardPropKind::ClientPidMap;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V4_0]
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::ClientPidMap]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[]
     }
 }
 

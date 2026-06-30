@@ -2,79 +2,90 @@
 //!
 //! The card version value and its name vocabulary.
 //!
-//! [`VcardVersion`] is the decoded `VERSION` line: a known 2.1 / 3.0 / 4.0
-//! value, or `Unknown` for anything else. The version sits apart from the other
-//! properties because the syntax tree treats it as a required, fixed part of the
-//! card envelope rather than a free property. Shared by every version module;
-//! pure model, no syntax dependency. The per-version wire-string consts
-//! (`VCARD_VERSION_21` and friends) live in their own version modules.
+//! [`VcardVersion`] is the decoded `VERSION` line: one of the three defined
+//! versions (2.1 / 3.0 / 4.0). An unrecognised or missing version is normalised
+//! to [`V4_0`](VcardVersion::V4_0) at decode time; preserving the raw `VERSION`
+//! line byte for byte is the syntax tree's job, not the model's. The version
+//! sits apart from the other properties because the syntax tree treats it as a
+//! fixed part of the card envelope rather than a free property. Pure model, no
+//! syntax dependency.
 
-use alloc::borrow::Cow;
+use core::{error, fmt, ops, str};
 
-pub const VCARD_VERSION: &str = "VERSION";
-pub const VCARD_VERSION_21: &str = "2.1";
-pub const VCARD_VERSION_30: &str = "3.0";
-pub const VCARD_VERSION_40: &str = "4.0";
+use alloc::string::{String, ToString};
 
-/// The card version: a known value, or `Unknown` for anything else.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum VcardVersion<'a> {
-    /// vCard 2.1.
-    V21,
-    /// vCard 3.0.
-    V30,
-    /// vCard 4.0.
-    V40,
-    /// Any version the model does not recognise.
-    Unknown(Cow<'a, str>),
+/// Parse vCard value kind error.
+#[derive(Debug)]
+pub struct ParseVcardVersionError(
+    /// The vCard version that cannot be parsed.
+    String,
+);
+
+impl fmt::Display for ParseVcardVersionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Cannot parse vCard version `{}`", self.0)
+    }
 }
 
-impl VcardVersion<'_> {
-    /// The version's wire string.
-    pub fn as_str(&self) -> &str {
+impl error::Error for ParseVcardVersionError {}
+
+/// The vCard version: one of the three defined versions. An unrecognised or
+/// missing version normalises to [`V4_0`](Self::V4_0) (see the module docs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VcardVersion {
+    V2_1,
+    V3_0,
+    V4_0,
+}
+
+impl str::FromStr for VcardVersion {
+    type Err = ParseVcardVersionError;
+
+    /// The known parameter for a wire name (case-insensitive).
+    fn from_str(version: &str) -> Result<Self, Self::Err> {
+        match version {
+            "2.1" => Ok(Self::V2_1),
+            "3.0" => Ok(Self::V3_0),
+            "4.0" => Ok(Self::V4_0),
+            _ => Err(ParseVcardVersionError(version.to_string())),
+        }
+    }
+}
+
+impl ops::Deref for VcardVersion {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
         match self {
-            Self::V21 => "2.1",
-            Self::V30 => "3.0",
-            Self::V40 => "4.0",
-            Self::Unknown(version) => version,
+            Self::V2_1 => "2.1",
+            Self::V3_0 => "3.0",
+            Self::V4_0 => "4.0",
         }
     }
 }
 
-impl<'a> From<Cow<'a, str>> for VcardVersion<'a> {
-    fn from(version: Cow<'a, str>) -> Self {
-        match version.as_ref() {
-            "2.1" => Self::V21,
-            "3.0" => Self::V30,
-            "4.0" => Self::V40,
-            _ => Self::Unknown(version),
-        }
-    }
-}
-
-impl<'a> From<&'a str> for VcardVersion<'a> {
-    fn from(version: &'a str) -> Self {
-        Cow::Borrowed(version).into()
+impl fmt::Display for VcardVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &**self)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use alloc::borrow::Cow;
+    use alloc::string::ToString;
 
     use crate::version::VcardVersion;
 
     #[test]
     fn maps_known_wire_strings_both_ways() {
-        assert_eq!(VcardVersion::from("4.0"), VcardVersion::V40);
-        assert_eq!(VcardVersion::from("2.1"), VcardVersion::V21);
-        assert_eq!(VcardVersion::V30.as_str(), "3.0");
+        assert_eq!("4.0".parse().ok(), Some(VcardVersion::V4_0));
+        assert_eq!("2.1".parse().ok(), Some(VcardVersion::V2_1));
+        assert_eq!(VcardVersion::V3_0.to_string(), "3.0");
+        assert_eq!(&*VcardVersion::V3_0, "3.0");
     }
 
     #[test]
-    fn keeps_unknown_versions() {
-        let version = VcardVersion::from("5.0");
-        assert_eq!(version, VcardVersion::Unknown(Cow::Borrowed("5.0")));
-        assert_eq!(version.as_str(), "5.0");
+    fn rejects_unknown_versions() {
+        assert!("5.0".parse::<VcardVersion>().is_err());
     }
 }

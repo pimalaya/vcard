@@ -31,7 +31,13 @@ pub mod text;
 pub mod uri;
 pub mod utc_offset;
 
-use alloc::{borrow::Cow, vec::Vec};
+use core::{error, fmt, ops, str};
+
+use alloc::{
+    borrow::Cow,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::value::{
     adr::VcardAdr,
@@ -47,6 +53,114 @@ use crate::value::{
     uri::VcardUri,
     utc_offset::VcardUtcOffset,
 };
+
+/// Parse vCard value kind error.
+#[derive(Debug)]
+pub struct ParseVcardValueKindError(
+    /// The vCard value type that cannot be parsed.
+    String,
+);
+
+impl fmt::Display for ParseVcardValueKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Cannot parse vCard value type `{}`", self.0)
+    }
+}
+
+impl error::Error for ParseVcardValueKindError {}
+
+/// The closed RFC 6350 value-type vocabulary, one fieldless variant per value
+/// kind. It is the discriminant of [`VcardValue`] (which also has an `Unknown`
+/// arm outside this closed set) and the currency of the prop spec's
+/// allowed-values sets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VcardValueKind {
+    /// The structured `ADR` value.
+    Adr,
+    /// An inline-base64 or URI-reference binary value (2.1 / 3.0).
+    Binary,
+    /// The structured `CLIENTPIDMAP` value.
+    ClientPidMap,
+    /// A date-and-or-time value.
+    DateAndOrTime,
+    /// The structured `GENDER` value.
+    Gender,
+    /// A latitude/longitude pair (2.1 / 3.0 `GEO`).
+    Geo,
+    /// A language tag.
+    LanguageTag,
+    /// The structured `N` value.
+    N,
+    /// The structured `ORG` value.
+    Org,
+    /// A single text value.
+    Text,
+    /// A comma-separated text list.
+    TextList,
+    /// A timestamp.
+    Timestamp,
+    /// A URI.
+    Uri,
+    /// A UTC offset.
+    UtcOffset,
+}
+
+impl str::FromStr for VcardValueKind {
+    type Err = ParseVcardValueKindError;
+
+    /// The value kind named by a `VALUE` parameter (case-insensitive). Liberal:
+    /// it maps every wire spelling (and a few aliases) onto a model kind, leaving
+    /// membership checks to a later validation tier.
+    fn from_str(kind: &str) -> Result<Self, Self::Err> {
+        let kind = match kind {
+            kind if kind.eq_ignore_ascii_case("ADR") => Self::Adr,
+            kind if kind.eq_ignore_ascii_case("B") => Self::Binary,
+            kind if kind.eq_ignore_ascii_case("BINARY") => Self::Binary,
+            kind if kind.eq_ignore_ascii_case("CLIENTPIDMAP") => Self::ClientPidMap,
+            kind if kind.eq_ignore_ascii_case("DATE") => Self::DateAndOrTime,
+            kind if kind.eq_ignore_ascii_case("DATE-AND-OR-TIME") => Self::DateAndOrTime,
+            kind if kind.eq_ignore_ascii_case("DATE-TIME") => Self::DateAndOrTime,
+            kind if kind.eq_ignore_ascii_case("GENDER") => Self::Gender,
+            kind if kind.eq_ignore_ascii_case("GEO") => Self::Geo,
+            kind if kind.eq_ignore_ascii_case("LANGUAGE-TAG") => Self::LanguageTag,
+            kind if kind.eq_ignore_ascii_case("N") => Self::N,
+            kind if kind.eq_ignore_ascii_case("ORG") => Self::Org,
+            kind if kind.eq_ignore_ascii_case("TEXT") => Self::Text,
+            kind if kind.eq_ignore_ascii_case("TEXT-LIST") => Self::TextList,
+            kind if kind.eq_ignore_ascii_case("TIME") => Self::DateAndOrTime,
+            kind if kind.eq_ignore_ascii_case("TIMESTAMP") => Self::Timestamp,
+            kind if kind.eq_ignore_ascii_case("URI") => Self::Uri,
+            kind if kind.eq_ignore_ascii_case("URL") => Self::Uri,
+            kind if kind.eq_ignore_ascii_case("UTC-OFFSET") => Self::UtcOffset,
+            _ => return Err(ParseVcardValueKindError(kind.to_string())),
+        };
+
+        Ok(kind)
+    }
+}
+
+impl ops::Deref for VcardValueKind {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Adr => "ADR",
+            Self::Binary => "BINARY",
+            Self::ClientPidMap => "CLIENTPIDMAP",
+            Self::DateAndOrTime => "DATE-AND-OR-TIME",
+            Self::Gender => "GENDER",
+            Self::Geo => "GEO",
+            Self::LanguageTag => "LANGUAGE-TAG",
+            Self::N => "N",
+            Self::Org => "ORG",
+            Self::Text => "TEXT",
+            Self::TextList => "TEXT-LIST",
+            Self::Timestamp => "TIMESTAMP",
+            Self::Uri => "URI",
+            Self::UtcOffset => "UTC-OFFSET",
+        }
+    }
+}
 
 /// A decoded property value: one known kind, or `Unknown` (raw) for anything
 /// the model does not decode.
@@ -87,10 +201,60 @@ pub enum VcardValue<'a> {
     Unknown(VcardUnknownValue<'a>),
 }
 
+impl VcardValue<'_> {
+    /// The closed [`VcardValueKind`] of this value, or `None` for
+    /// [`Unknown`](VcardValue::Unknown) (which is outside the vocabulary).
+    pub fn kind(&self) -> Option<VcardValueKind> {
+        match self {
+            Self::Adr(_) => Some(VcardValueKind::Adr),
+            Self::Binary(_) => Some(VcardValueKind::Binary),
+            Self::ClientPidMap(_) => Some(VcardValueKind::ClientPidMap),
+            Self::DateAndOrTime(_) => Some(VcardValueKind::DateAndOrTime),
+            Self::Gender(_) => Some(VcardValueKind::Gender),
+            Self::Geo(_) => Some(VcardValueKind::Geo),
+            Self::LanguageTag(_) => Some(VcardValueKind::LanguageTag),
+            Self::N(_) => Some(VcardValueKind::N),
+            Self::Org(_) => Some(VcardValueKind::Org),
+            Self::Text(_) => Some(VcardValueKind::Text),
+            Self::TextList(_) => Some(VcardValueKind::TextList),
+            Self::Timestamp(_) => Some(VcardValueKind::Timestamp),
+            Self::Uri(_) => Some(VcardValueKind::Uri),
+            Self::UtcOffset(_) => Some(VcardValueKind::UtcOffset),
+            Self::Unknown(_) => None,
+        }
+    }
+}
+
 /// An undecoded property value: its unescaped components, in source order. The
 /// property name lives on [`VcardProp::name`](crate::prop::VcardProp::name).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VcardUnknownValue<'a> {
     /// The value, as components of values.
     pub components: Vec<Vec<Cow<'a, str>>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use core::str::FromStr;
+
+    use crate::value::{VcardUnknownValue, VcardValue, VcardValueKind, text::VcardText};
+
+    #[test]
+    fn reports_the_kind_of_a_value_and_none_for_unknown() {
+        assert_eq!(
+            VcardValue::Text(VcardText::default()).kind(),
+            Some(VcardValueKind::Text),
+        );
+        assert_eq!(
+            VcardValue::Unknown(VcardUnknownValue::default()).kind(),
+            None,
+        );
+    }
+
+    #[test]
+    fn maps_value_param_strings_liberally_and_case_insensitively() {
+        assert_eq!("URI".parse().ok(), Some(VcardValueKind::Uri));
+        assert_eq!("date".parse().ok(), Some(VcardValueKind::DateAndOrTime));
+        assert!(VcardValueKind::from_str("bogus").is_err());
+    }
 }

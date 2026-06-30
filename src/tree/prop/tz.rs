@@ -4,17 +4,22 @@
 //! form; the UTC-offset and URI forms round-trip as text).
 
 use crate::{
-    prop::VCARD_TZ,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
     value::text::VcardText,
+    version::VcardVersion,
 };
 
 /// The `TZ` property lens.
 pub struct TZ;
 
 impl VcardPropLens for TZ {
-    const NAME: &'static str = VCARD_TZ;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -32,5 +37,20 @@ impl VcardPropLens for TZ {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for TZ {
+    const PROP: VcardPropKind = VcardPropKind::Tz;
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::AltId,
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::Type,
+            VcardParamKind::MediaType,
+            VcardParamKind::Value,
+        ]
     }
 }

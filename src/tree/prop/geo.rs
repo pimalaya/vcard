@@ -7,9 +7,15 @@
 //! assumes the 4.0 URI form.
 
 use crate::{
-    prop::VCARD_GEO,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
-    value::{VcardValue, uri::VcardUri},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValue, VcardValueKind, uri::VcardUri},
     version::VcardVersion,
 };
 
@@ -17,8 +23,6 @@ use crate::{
 pub struct GEO;
 
 impl VcardPropLens for GEO {
-    const NAME: &'static str = VCARD_GEO;
-
     type Target<'v> = VcardValue<'v>;
 
     type Cursor<'c, 'a>
@@ -30,8 +34,8 @@ impl VcardPropLens for GEO {
         VcardValue::Uri(VcardUri::decode(value))
     }
 
-    fn decode_versioned<'v>(line: &'v VcardLine<'_>, version: &VcardVersion<'_>) -> VcardValue<'v> {
-        line.decode_geo(version)
+    fn decode_versioned<'v>(line: &'v VcardLine<'_>, version: VcardVersion) -> VcardValue<'v> {
+        line.decode_value(VcardPropKind::Geo, version)
     }
 
     fn encode(decoded: &VcardValue<'_>) -> VcardValueNode<'static> {
@@ -40,5 +44,27 @@ impl VcardPropLens for GEO {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for GEO {
+    const PROP: VcardPropKind = VcardPropKind::Geo;
+
+    fn allowed_values(version: VcardVersion) -> &'static [VcardValueKind] {
+        match version {
+            VcardVersion::V4_0 => &[VcardValueKind::Uri],
+            _ => &[VcardValueKind::Geo],
+        }
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::Type,
+            VcardParamKind::MediaType,
+            VcardParamKind::AltId,
+            VcardParamKind::Value,
+        ]
     }
 }

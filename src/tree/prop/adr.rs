@@ -8,17 +8,22 @@
 use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
-    prop::VCARD_ADR,
-    tree::{line::VcardLine, param::VcardParamLens, prop::VcardPropLens, value::VcardValueNode},
-    value::adr::VcardAdr,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        line::VcardLine,
+        param::VcardParamLens,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, adr::VcardAdr},
+    version::VcardVersion,
 };
 
 /// The `ADR` property lens.
 pub struct ADR;
 
 impl VcardPropLens for ADR {
-    const NAME: &'static str = VCARD_ADR;
-
     type Target<'v> = VcardAdr<'v>;
 
     type Cursor<'c, 'a>
@@ -36,6 +41,28 @@ impl VcardPropLens for ADR {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> AdrCursor<'c, 'a> {
         AdrCursor { line }
+    }
+}
+
+impl VcardPropSpec for ADR {
+    const PROP: VcardPropKind = VcardPropKind::Adr;
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::Adr]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Label,
+            VcardParamKind::Language,
+            VcardParamKind::Geo,
+            VcardParamKind::Tz,
+            VcardParamKind::AltId,
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::Type,
+            VcardParamKind::Value,
+        ]
     }
 }
 

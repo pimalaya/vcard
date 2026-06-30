@@ -6,17 +6,22 @@
 use alloc::borrow::Cow;
 
 use crate::{
-    prop::VCARD_GENDER,
-    tree::{line::VcardLine, param::VcardParamLens, prop::VcardPropLens, value::VcardValueNode},
-    value::gender::VcardGender,
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        line::VcardLine,
+        param::VcardParamLens,
+        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
+    value::{VcardValueKind, gender::VcardGender},
+    version::VcardVersion,
 };
 
 /// The `GENDER` property lens.
 pub struct GENDER;
 
 impl VcardPropLens for GENDER {
-    const NAME: &'static str = VCARD_GENDER;
-
     type Target<'v> = VcardGender<'v>;
 
     type Cursor<'c, 'a>
@@ -34,6 +39,26 @@ impl VcardPropLens for GENDER {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> GenderCursor<'c, 'a> {
         GenderCursor { line }
+    }
+}
+
+impl VcardPropSpec for GENDER {
+    const PROP: VcardPropKind = VcardPropKind::Gender;
+
+    fn allowed_versions() -> &'static [VcardVersion] {
+        &[VcardVersion::V4_0]
+    }
+
+    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
+        VcardPropCardinality::AtMostOne
+    }
+
+    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
+        &[VcardValueKind::Gender]
+    }
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[VcardParamKind::Value]
     }
 }
 

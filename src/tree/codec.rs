@@ -5,14 +5,14 @@
 //! [`Escaper`] telling the [`decode`](crate::tree::decode) /
 //! [`encode`](crate::tree::encode) bridges which rules to apply.
 
-use crate::version::{VCARD_VERSION_21, VcardVersion};
+use crate::version::VcardVersion;
 
 /// The value-escaping rules to apply, selected by the card version.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Escaper {
     /// vCard 2.1: only `;` is escaped (`\;`); a backslash before anything else
     /// is literal.
-    V21,
+    V2_1,
     /// vCard 3.0 / 4.0 (RFC 2426 / 6350): `\\`, `\,`, `\;` and `\n`.
     #[default]
     Modern,
@@ -20,17 +20,17 @@ pub enum Escaper {
 
 impl Escaper {
     /// The escaping rules a card of `version` uses.
-    pub fn for_version(version: &VcardVersion<'_>) -> Self {
+    pub fn for_version(version: VcardVersion) -> Self {
         match version {
-            VcardVersion::V21 => Self::V21,
+            VcardVersion::V2_1 => Self::V2_1,
             _ => Self::Modern,
         }
     }
 
     /// The escaping rules for a raw `VERSION` wire string (e.g. `"2.1"`).
     pub fn for_version_str(version: &str) -> Self {
-        match version.trim() {
-            VCARD_VERSION_21 => Self::V21,
+        match version.parse() {
+            Ok(VcardVersion::V2_1) => Self::V2_1,
             _ => Self::Modern,
         }
     }

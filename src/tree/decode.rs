@@ -7,22 +7,24 @@
 //! of it sit the `decode` methods, one per syntactic node: a
 //! [`VcardValueNode`] decodes its components, a [`VcardParamNode`] decodes into a
 //! [`VcardParam`], a [`VcardLine`] decodes into a [`VcardProp`], and a
-//! [`VcardCst`] decodes into a whole [`Vcard`]. The name dispatch (which value
-//! kind a property or parameter decodes to) is the match in
-//! [`VcardLine::decode`] and [`VcardParamNode::decode`], kept here so the generic
-//! nodes and the decoded model both stay free of it. Each decoded value type
-//! also gets an inherent `decode` that the per-name lens markers delegate to.
+//! [`VcardCst`] decodes into a whole [`Vcard`]. A property's value kind is no
+//! longer chosen by a name match: [`VcardLine::decode`] resolves the prop name to
+//! a [`VcardPropKind`], asks its spec for the in-force value kind (version plus
+//! any declared `VALUE`), then routes to that kind's decoder. The parameter name
+//! dispatch is still the match in [`VcardParamNode::decode`]. Each decoded value
+//! type gets an inherent `decode` that both paths delegate to.
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
-use crate::tree::codec::Escaper;
-use crate::version::{VCARD_VERSION, VcardVersion};
 use crate::{
-    param::VcardParam,
-    prop::VcardProp,
-    tree::{cst::VcardCst, line::VcardLine, param::VcardParamNode, value::VcardValueNode},
+    param::{VcardParam, VcardParamKind},
+    prop::{VcardProp, VcardPropKind, VcardPropName},
+    tree::{
+        codec::Escaper, cst::VcardCst, line::VcardLine, param::VcardParamNode, prop::prop_spec,
+        value::VcardValueNode,
+    },
     value::{
-        VcardUnknownValue, VcardValue,
+        VcardUnknownValue, VcardValue, VcardValueKind,
         adr::VcardAdr,
         binary::VcardBinary,
         client_pid_map::VcardClientPidMap,
@@ -37,6 +39,7 @@ use crate::{
         utc_offset::VcardUtcOffset,
     },
     vcard::Vcard,
+    version::VcardVersion,
 };
 
 impl VcardCst<'_> {
@@ -48,8 +51,8 @@ impl VcardCst<'_> {
         let properties = self
             .props
             .iter()
-            .filter(|line| !line.name.get().eq_ignore_ascii_case(VCARD_VERSION))
-            .map(|line| line.decode(&version))
+            .filter(|line| !line.name.get().eq_ignore_ascii_case("VERSION"))
+            .map(|line| line.decode(version))
             .collect();
 
         Vcard {
@@ -60,8 +63,10 @@ impl VcardCst<'_> {
 }
 
 impl VcardLine<'_> {
-    /// Decode the line into a typed property, dispatching the value on the name.
-    pub fn decode(&self, version: &VcardVersion<'_>) -> VcardProp<'_> {
+    /// Decode the line into a typed property. A known property dispatches its
+    /// value through the spec (see `decode_value`); an unknown one keeps its raw
+    /// components so it round-trips.
+    pub fn decode(&self, version: VcardVersion) -> VcardProp<'_> {
         let name = self.name.get();
         let qp = self.is_quoted_printable();
         let params = self
@@ -70,54 +75,22 @@ impl VcardLine<'_> {
             .filter(|param| !param_is_quoted_printable(param))
             .map(VcardParamNode::decode)
             .collect();
-        let node = &self.value;
 
-        let value = {
-            use crate::prop::*;
-
-            match name.to_ascii_uppercase().as_str() {
-                VCARD_FN | VCARD_KIND | VCARD_XML | VCARD_TEL | VCARD_EMAIL | VCARD_TITLE
-                | VCARD_ROLE | VCARD_NOTE | VCARD_PRODID | VCARD_TZ
-                // 2.1 / 3.0 text properties with no 4.0 equivalent.
-                | VCARD_LABEL | VCARD_NAME | VCARD_PROFILE | VCARD_MAILER | VCARD_AGENT
-                | VCARD_CLASS | VCARD_SORT_STRING => {
-                    VcardValue::Text(VcardText::decode(node))
-                }
-                VCARD_NICKNAME | VCARD_CATEGORIES => {
-                    VcardValue::TextList(VcardTextList::decode(node))
-                }
-                VCARD_SOURCE | VCARD_IMPP | VCARD_MEMBER | VCARD_RELATED | VCARD_UID
-                | VCARD_URL | VCARD_FBURL | VCARD_CALADRURI | VCARD_CALURI => {
-                    VcardValue::Uri(VcardUri::decode(node))
-                }
-                VCARD_GEO => self.decode_geo(version),
-                VCARD_PHOTO | VCARD_LOGO | VCARD_SOUND | VCARD_KEY => {
-                    self.decode_binary_value(version)
-                }
-                VCARD_BDAY | VCARD_ANNIVERSARY => {
-                    VcardValue::DateAndOrTime(VcardDateAndOrTime::decode(node))
-                }
-                VCARD_REV => VcardValue::Timestamp(VcardTimestamp::decode(node)),
-                VCARD_LANG => VcardValue::LanguageTag(VcardLanguageTag::decode(node)),
-                VCARD_N => VcardValue::N(VcardN::decode(node)),
-                VCARD_ADR => VcardValue::Adr(VcardAdr::decode(node)),
-                VCARD_GENDER => VcardValue::Gender(VcardGender::decode(node)),
-                VCARD_ORG => VcardValue::Org(VcardOrg::decode(node)),
-                VCARD_CLIENTPIDMAP => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
-
-                _ => VcardValue::Unknown(VcardUnknownValue {
-                    components: node
-                        .components
-                        .iter()
-                        .map(|component| {
-                            component
-                                .iter()
-                                .map(|v| unescape_with(v.get(), node.escaper))
-                                .collect()
-                        })
-                        .collect(),
-                }),
-            }
+        let value = match name.parse::<VcardPropKind>() {
+            Ok(prop) => self.decode_value(prop, version),
+            Err(_) => VcardValue::Unknown(VcardUnknownValue {
+                components: self
+                    .value
+                    .components
+                    .iter()
+                    .map(|component| {
+                        component
+                            .iter()
+                            .map(|v| unescape_with(v.get(), self.value.escaper))
+                            .collect()
+                    })
+                    .collect(),
+            }),
         };
 
         // QUOTED-PRINTABLE values carry their octets in the wire text; decode
@@ -126,10 +99,35 @@ impl VcardLine<'_> {
         let value = if qp { qp_decode_value(value) } else { value };
 
         VcardProp {
-            name: Cow::Borrowed(name),
+            name: VcardPropName::from(name),
             params,
             value,
         }
+    }
+
+    /// Decode a known property's value through its spec: resolve the in-force
+    /// value kind from the card version and any declared `VALUE`, then run that
+    /// kind's decoder over the value node. Shared by the whole-card decode and
+    /// the version-specific lenses (`GEO`, the binary props).
+    pub(crate) fn decode_value(
+        &self,
+        prop: VcardPropKind,
+        version: VcardVersion,
+    ) -> VcardValue<'_> {
+        let declared = self.declared_value_kind();
+        let kind = (prop_spec(prop).value)(version, declared);
+        decode_value_kind(kind, &self.value, version)
+    }
+
+    /// The value kind named by this line's `VALUE` parameter, if any. Only the
+    /// declared kind selects the value type; `ENCODING` / `CHARSET` transform the
+    /// text and stay in the codec.
+    fn declared_value_kind(&self) -> Option<VcardValueKind> {
+        self.params
+            .iter()
+            .find(|param| matches!(param.name.get().parse(), Ok(VcardParamKind::Value)))
+            .and_then(|param| param.values.first())
+            .and_then(|value| value.get().parse::<VcardValueKind>().ok())
     }
 
     /// Whether the line declares the `QUOTED-PRINTABLE` encoding, as an
@@ -137,52 +135,42 @@ impl VcardLine<'_> {
     fn is_quoted_printable(&self) -> bool {
         self.params.iter().any(param_is_quoted_printable)
     }
+}
 
-    /// Decode the `GEO` value: a coordinate pair in 2.1 (`,`) and 3.0 (`;`), a
-    /// URI in 4.0. Shared by the full-card decode and the `GEO` lens.
-    pub(crate) fn decode_geo(&self, version: &VcardVersion<'_>) -> VcardValue<'_> {
-        match version {
-            VcardVersion::V21 => VcardValue::Geo(VcardGeo::decode_comma(&self.value)),
-            VcardVersion::V30 => VcardValue::Geo(VcardGeo::decode_pair(&self.value)),
-            _ => VcardValue::Uri(VcardUri::decode(&self.value)),
+/// Decode a value node as the given value kind, branching on the version only
+/// where the value's wire shape is version-specific (the `GEO` pair separator).
+fn decode_value_kind<'v>(
+    kind: VcardValueKind,
+    node: &'v VcardValueNode<'_>,
+    version: VcardVersion,
+) -> VcardValue<'v> {
+    match kind {
+        VcardValueKind::Text => VcardValue::Text(VcardText::decode(node)),
+        VcardValueKind::TextList => VcardValue::TextList(VcardTextList::decode(node)),
+        VcardValueKind::Uri => VcardValue::Uri(VcardUri::decode(node)),
+        VcardValueKind::DateAndOrTime => {
+            VcardValue::DateAndOrTime(VcardDateAndOrTime::decode(node))
         }
+        VcardValueKind::Timestamp => VcardValue::Timestamp(VcardTimestamp::decode(node)),
+        VcardValueKind::LanguageTag => VcardValue::LanguageTag(VcardLanguageTag::decode(node)),
+        VcardValueKind::UtcOffset => VcardValue::UtcOffset(VcardUtcOffset::decode(node)),
+        VcardValueKind::N => VcardValue::N(VcardN::decode(node)),
+        VcardValueKind::Adr => VcardValue::Adr(VcardAdr::decode(node)),
+        VcardValueKind::Gender => VcardValue::Gender(VcardGender::decode(node)),
+        VcardValueKind::Org => VcardValue::Org(VcardOrg::decode(node)),
+        VcardValueKind::ClientPidMap => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
+        VcardValueKind::Geo => VcardValue::Geo(decode_geo_pair(node, version)),
+        // base64 kept verbatim; a 2.1 / 3.0 URI reference is reached via
+        // `VALUE=uri`, which resolves to the `Uri` kind above, not here.
+        VcardValueKind::Binary => VcardValue::Binary(VcardBinary::Base64(node.decode_scalar_at(0))),
     }
+}
 
-    /// Decode a binary-bearing value (`PHOTO`, `LOGO`, `SOUND`, `KEY`): inline
-    /// base64 or a URI reference in 2.1 / 3.0, a `data:` URI in 4.0. Shared by
-    /// the full-card decode and the binary lenses.
-    pub(crate) fn decode_binary_value(&self, version: &VcardVersion<'_>) -> VcardValue<'_> {
-        match version {
-            VcardVersion::V21 | VcardVersion::V30 => VcardValue::Binary(self.decode_binary()),
-            _ => VcardValue::Uri(VcardUri::decode(&self.value)),
-        }
-    }
-
-    /// Decode a 2.1 / 3.0 binary value: a URI reference when the line says so
-    /// (`VALUE=uri` or a bare token), otherwise inline base64 kept verbatim.
-    fn decode_binary(&self) -> VcardBinary<'_> {
-        let raw = self.value.decode_scalar_at(0);
-
-        if self.is_uri_reference() {
-            VcardBinary::Uri(raw)
-        } else {
-            VcardBinary::Base64(raw)
-        }
-    }
-
-    /// Whether the line declares its value to be an external URI reference.
-    fn is_uri_reference(&self) -> bool {
-        self.params.iter().any(|param| {
-            let name = param.name.get();
-
-            (name.eq_ignore_ascii_case("VALUE")
-                && param.values.iter().any(|v| {
-                    let v = v.get();
-                    v.eq_ignore_ascii_case("uri") || v.eq_ignore_ascii_case("url")
-                }))
-                || (param.values.is_empty()
-                    && (name.eq_ignore_ascii_case("uri") || name.eq_ignore_ascii_case("url")))
-        })
+/// Decode a `GEO` coordinate pair: `,`-separated in 2.1, `;`-separated otherwise.
+fn decode_geo_pair<'v>(node: &'v VcardValueNode<'_>, version: VcardVersion) -> VcardGeo<'v> {
+    match version {
+        VcardVersion::V2_1 => VcardGeo::decode_comma(node),
+        _ => VcardGeo::decode_pair(node),
     }
 }
 
@@ -209,28 +197,25 @@ impl VcardGeo<'_> {
 impl VcardParamNode<'_> {
     /// Decode the parameter into a typed parameter, dispatching on the name.
     pub fn decode(&self) -> VcardParam<'_> {
-        use crate::param::*;
+        let Ok(kind) = self.name.get().parse::<VcardParamKind>() else {
+            return VcardParam::Unknown(unescape(self.name.get()), self.list());
+        };
 
-        match self.name.get().to_ascii_uppercase().as_str() {
-            VCARD_LANGUAGE => VcardParam::Language(self.scalar()),
-            VCARD_CHARSET => VcardParam::Charset(self.scalar()),
-            VCARD_ENCODING => VcardParam::Encoding(self.scalar()),
-            VCARD_VALUE => VcardParam::Value(self.scalar()),
-            VCARD_PREF => VcardParam::Pref(self.scalar()),
-            VCARD_ALTID => VcardParam::AltId(self.scalar()),
-            VCARD_PID => VcardParam::Pid(self.list()),
-            VCARD_TYPE => VcardParam::Type(self.list()),
-            VCARD_MEDIATYPE => VcardParam::MediaType(self.scalar()),
-            VCARD_CALSCALE => VcardParam::CalScale(self.scalar()),
-            VCARD_SORT_AS => VcardParam::SortAs(self.list()),
-            VCARD_GEO => VcardParam::Geo(self.scalar()),
-            VCARD_TZ => VcardParam::Tz(self.scalar()),
-            VCARD_LABEL => VcardParam::Label(self.scalar()),
-
-            _ => VcardParam::Unknown {
-                name: unescape(self.name.get()),
-                values: self.list(),
-            },
+        match kind {
+            VcardParamKind::Language => VcardParam::Language(self.scalar()),
+            VcardParamKind::Charset => VcardParam::Charset(self.scalar()),
+            VcardParamKind::Encoding => VcardParam::Encoding(self.scalar()),
+            VcardParamKind::Value => VcardParam::Value(self.scalar()),
+            VcardParamKind::Pref => VcardParam::Pref(self.scalar()),
+            VcardParamKind::AltId => VcardParam::AltId(self.scalar()),
+            VcardParamKind::Pid => VcardParam::Pid(self.list()),
+            VcardParamKind::Type => VcardParam::Type(self.list()),
+            VcardParamKind::MediaType => VcardParam::MediaType(self.scalar()),
+            VcardParamKind::CalScale => VcardParam::CalScale(self.scalar()),
+            VcardParamKind::SortAs => VcardParam::SortAs(self.list()),
+            VcardParamKind::Geo => VcardParam::Geo(self.scalar()),
+            VcardParamKind::Tz => VcardParam::Tz(self.scalar()),
+            VcardParamKind::Label => VcardParam::Label(self.scalar()),
         }
     }
 
@@ -333,6 +318,13 @@ impl VcardLanguageTag<'_> {
     /// Decode a language-tag value from a syntax node.
     pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardLanguageTag<'v> {
         VcardLanguageTag(node.decode_scalar_at(0))
+    }
+}
+
+impl VcardUtcOffset<'_> {
+    /// Decode a UTC-offset value from a syntax node.
+    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardUtcOffset<'v> {
+        VcardUtcOffset(node.decode_scalar_at(0))
     }
 }
 
@@ -482,7 +474,7 @@ fn hex_value(byte: u8) -> Option<u8> {
 pub(crate) fn unescape_with(text: &str, escaper: Escaper) -> Cow<'_, str> {
     match escaper {
         Escaper::Modern => unescape_modern(text),
-        Escaper::V21 => unescape_v21(text),
+        Escaper::V2_1 => unescape_v21(text),
     }
 }
 
@@ -575,6 +567,30 @@ mod tests {
 
         assert!(params.contains(&VcardParam::Charset(Cow::Borrowed("UTF-8"))));
         assert!(params.contains(&VcardParam::Encoding(Cow::Borrowed("BASE64"))));
+    }
+
+    #[test]
+    fn the_value_param_selects_the_value_kind() {
+        // BDAY defaults to a date, but VALUE=text forces the text reading.
+        let cst = VcardCst::parse(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nBDAY;VALUE=text:circa 1800\r\nEND:VCARD\r\n",
+        )
+        .unwrap();
+        assert_eq!(
+            cst.decode().properties[0].value,
+            VcardValue::Text(VcardText(Cow::Borrowed("circa 1800"))),
+        );
+
+        // A 2.1 PHOTO is inline base64 by default, but a plain URI when the line
+        // declares VALUE=uri (the old is_uri_reference path, now spec-derived).
+        let cst = VcardCst::parse(
+            "BEGIN:VCARD\r\nVERSION:2.1\r\nPHOTO;VALUE=URI:http://x/p.png\r\nEND:VCARD\r\n",
+        )
+        .unwrap();
+        assert_eq!(
+            cst.decode().properties[0].value,
+            VcardValue::Uri(VcardUri(Cow::Borrowed("http://x/p.png"))),
+        );
     }
 
     #[test]

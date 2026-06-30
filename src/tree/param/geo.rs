@@ -7,7 +7,7 @@ use alloc::{borrow::Cow, string::ToString, vec};
 
 use crate::tree::leaf::VcardLeaf;
 use crate::{
-    param::VCARD_GEO,
+    param::VcardParamKind,
     tree::{decode::unescape, param::VcardParamLens, param::VcardParamNode},
 };
 
@@ -15,7 +15,7 @@ use crate::{
 pub struct GEO;
 
 impl VcardParamLens for GEO {
-    const NAME: &'static str = VCARD_GEO;
+    const KIND: VcardParamKind = VcardParamKind::Geo;
 
     type Target<'v> = Cow<'v, str>;
 
@@ -29,7 +29,7 @@ impl VcardParamLens for GEO {
 
     fn encode(decoded: &Cow<'_, str>) -> VcardParamNode<'static> {
         VcardParamNode {
-            name: VcardLeaf::from(VCARD_GEO.to_string()),
+            name: VcardLeaf::from(Self::KIND.to_string()),
             values: vec![VcardLeaf::from(decoded.to_string())],
         }
     }

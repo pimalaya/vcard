@@ -3,17 +3,22 @@
 //! The `EMAIL` property lens: an email address, as a text value.
 
 use crate::{
-    prop::VCARD_EMAIL,
-    tree::{cursor::VcardValueCursor, line::VcardLine, prop::VcardPropLens, value::VcardValueNode},
+    param::VcardParamKind,
+    prop::VcardPropKind,
+    tree::{
+        cursor::VcardValueCursor,
+        line::VcardLine,
+        prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueNode,
+    },
     value::text::VcardText,
+    version::VcardVersion,
 };
 
 /// The `EMAIL` property lens.
 pub struct EMAIL;
 
 impl VcardPropLens for EMAIL {
-    const NAME: &'static str = VCARD_EMAIL;
-
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -31,5 +36,19 @@ impl VcardPropLens for EMAIL {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
+    }
+}
+
+impl VcardPropSpec for EMAIL {
+    const PROP: VcardPropKind = VcardPropKind::Email;
+
+    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
+        &[
+            VcardParamKind::Type,
+            VcardParamKind::Pid,
+            VcardParamKind::Pref,
+            VcardParamKind::AltId,
+            VcardParamKind::Value,
+        ]
     }
 }

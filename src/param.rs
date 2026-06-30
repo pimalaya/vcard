@@ -4,31 +4,108 @@
 //!
 //! [`VcardParam`] is a closed set of the parameters defined by RFC 6350, one
 //! variant each, plus an [`Unknown`](VcardParam::Unknown) arm so anything else
-//! round-trips. Parameters are few and simple (a text, a list, a small integer),
-//! so unlike properties each variant carries its value directly rather than
-//! through a shared value type; the variant itself names the parameter. The
-//! `VCARD_*` consts are the single source of truth for the wire names; the lens
-//! markers in [`crate::tree::param`] reference them to match, and the decode
-//! registry uses them to dispatch a raw parameter onto its variant.
+//! round-trips. Parameters are few and simple (a text, a list, a small
+//! integer), so unlike properties each variant carries its value directly
+//! rather than through a shared value type; the variant itself names the
+//! parameter. A known name is the closed [`VcardParamKind`], reached through
+//! `FromStr` and `Deref`; the lens markers in [`crate::tree::param`] carry the
+//! kind to match, and the decode registry parses a raw name onto its variant.
 //!
 //! This module is pure model: no dependency on [`crate::tree`].
 
-use alloc::{borrow::Cow, vec::Vec};
+use core::{error, fmt, ops, str};
 
-pub const VCARD_ALTID: &str = "ALTID";
-pub const VCARD_CALSCALE: &str = "CALSCALE";
-pub const VCARD_CHARSET: &str = "CHARSET";
-pub const VCARD_ENCODING: &str = "ENCODING";
-pub const VCARD_GEO: &str = "GEO";
-pub const VCARD_LABEL: &str = "LABEL";
-pub const VCARD_LANGUAGE: &str = "LANGUAGE";
-pub const VCARD_MEDIATYPE: &str = "MEDIATYPE";
-pub const VCARD_PID: &str = "PID";
-pub const VCARD_PREF: &str = "PREF";
-pub const VCARD_SORT_AS: &str = "SORT-AS";
-pub const VCARD_TYPE: &str = "TYPE";
-pub const VCARD_TZ: &str = "TZ";
-pub const VCARD_VALUE: &str = "VALUE";
+use alloc::{
+    borrow::Cow,
+    string::{String, ToString},
+    vec::Vec,
+};
+
+/// Parse vCard parameter kind error.
+#[derive(Debug)]
+pub struct ParseVcardParamKindError(
+    /// The vCard parameter that cannot be parsed.
+    String,
+);
+
+impl fmt::Display for ParseVcardParamKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Cannot parse vCard parameter `{}`", self.0)
+    }
+}
+
+impl error::Error for ParseVcardParamKindError {}
+
+/// The closed RFC 6350 parameter-name vocabulary, one fieldless variant per
+/// known parameter. An identity for dispatch and allowed-sets; the open
+/// counterpart that carries the value (and unknown names) is [`VcardParam`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VcardParamKind {
+    AltId,
+    CalScale,
+    Charset,
+    Encoding,
+    Geo,
+    Label,
+    Language,
+    MediaType,
+    Pid,
+    Pref,
+    SortAs,
+    Type,
+    Tz,
+    Value,
+}
+
+impl str::FromStr for VcardParamKind {
+    type Err = ParseVcardParamKindError;
+
+    /// The known parameter for a wire name (case-insensitive).
+    fn from_str(kind: &str) -> Result<Self, Self::Err> {
+        let kind = match kind {
+            kind if kind.eq_ignore_ascii_case("ALTID") => Self::AltId,
+            kind if kind.eq_ignore_ascii_case("CALSCALE") => Self::CalScale,
+            kind if kind.eq_ignore_ascii_case("CHARSET") => Self::Charset,
+            kind if kind.eq_ignore_ascii_case("ENCODING") => Self::Encoding,
+            kind if kind.eq_ignore_ascii_case("GEO") => Self::Geo,
+            kind if kind.eq_ignore_ascii_case("LABEL") => Self::Label,
+            kind if kind.eq_ignore_ascii_case("LANGUAGE") => Self::Language,
+            kind if kind.eq_ignore_ascii_case("MEDIATYPE") => Self::MediaType,
+            kind if kind.eq_ignore_ascii_case("PID") => Self::Pid,
+            kind if kind.eq_ignore_ascii_case("PREF") => Self::Pref,
+            kind if kind.eq_ignore_ascii_case("SORT-AS") => Self::SortAs,
+            kind if kind.eq_ignore_ascii_case("TYPE") => Self::Type,
+            kind if kind.eq_ignore_ascii_case("TZ") => Self::Tz,
+            kind if kind.eq_ignore_ascii_case("VALUE") => Self::Value,
+            _ => return Err(ParseVcardParamKindError(kind.to_string())),
+        };
+
+        Ok(kind)
+    }
+}
+
+impl ops::Deref for VcardParamKind {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::AltId => "ALTID",
+            Self::CalScale => "CALSCALE",
+            Self::Charset => "CHARSET",
+            Self::Encoding => "ENCODING",
+            Self::Geo => "GEO",
+            Self::Label => "LABEL",
+            Self::Language => "LANGUAGE",
+            Self::MediaType => "MEDIATYPE",
+            Self::Pid => "PID",
+            Self::Pref => "PREF",
+            Self::SortAs => "SORT-AS",
+            Self::Type => "TYPE",
+            Self::Tz => "TZ",
+            Self::Value => "VALUE",
+        }
+    }
+}
 
 /// A decoded parameter: one known kind, or `Unknown` for anything unmodelled.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,11 +139,54 @@ pub enum VcardParam<'a> {
     /// `VALUE`: the value type the property value is to be read as.
     Value(Cow<'a, str>),
 
-    /// Any parameter the model does not decode.
-    Unknown {
-        /// The parameter name.
-        name: Cow<'a, str>,
-        /// The parameter values.
-        values: Vec<Cow<'a, str>>,
-    },
+    /// Any parameter the model does not decode: its name and its values.
+    Unknown(Cow<'a, str>, Vec<Cow<'a, str>>),
+}
+
+impl VcardParam<'_> {
+    /// The closed [`VcardParamKind`] of this parameter, or `None` for
+    /// [`Unknown`](VcardParam::Unknown) (which is outside the vocabulary).
+    pub fn kind(&self) -> Option<VcardParamKind> {
+        match self {
+            Self::AltId(_) => Some(VcardParamKind::AltId),
+            Self::CalScale(_) => Some(VcardParamKind::CalScale),
+            Self::Charset(_) => Some(VcardParamKind::Charset),
+            Self::Encoding(_) => Some(VcardParamKind::Encoding),
+            Self::Geo(_) => Some(VcardParamKind::Geo),
+            Self::Label(_) => Some(VcardParamKind::Label),
+            Self::Language(_) => Some(VcardParamKind::Language),
+            Self::MediaType(_) => Some(VcardParamKind::MediaType),
+            Self::Pid(_) => Some(VcardParamKind::Pid),
+            Self::Pref(_) => Some(VcardParamKind::Pref),
+            Self::SortAs(_) => Some(VcardParamKind::SortAs),
+            Self::Type(_) => Some(VcardParamKind::Type),
+            Self::Tz(_) => Some(VcardParamKind::Tz),
+            Self::Value(_) => Some(VcardParamKind::Value),
+            Self::Unknown(..) => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::str::FromStr;
+
+    use crate::param::VcardParamKind;
+
+    #[test]
+    fn round_trips_every_kind_through_its_wire_name() {
+        for kind in [
+            VcardParamKind::Type,
+            VcardParamKind::SortAs,
+            VcardParamKind::MediaType,
+        ] {
+            assert_eq!(VcardParamKind::from_str(&kind).ok(), Some(kind));
+        }
+        // Case-insensitive on the way in; unknown names are not in the vocabulary.
+        assert_eq!(
+            VcardParamKind::from_str("type").ok(),
+            Some(VcardParamKind::Type),
+        );
+        assert!(VcardParamKind::from_str("X-CUSTOM").is_err());
+    }
 }
