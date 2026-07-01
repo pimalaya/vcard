@@ -20,3 +20,34 @@ pub enum VcardBinary<'a> {
     /// Inline base64 data, kept verbatim (not decoded to bytes).
     Base64(Cow<'a, str>),
 }
+
+#[cfg(feature = "base64")]
+impl VcardBinary<'_> {
+    /// Decode the inline [`Base64`](Self::Base64) payload to raw bytes; `None`
+    /// for a [`Uri`](Self::Uri) reference, which embeds no data. Requires the
+    /// `base64` feature.
+    pub fn decode_base64(&self) -> Option<Result<alloc::vec::Vec<u8>, base64::DecodeError>> {
+        use base64::prelude::{BASE64_STANDARD, Engine};
+
+        match self {
+            VcardBinary::Base64(data) => Some(BASE64_STANDARD.decode(data.as_bytes())),
+            VcardBinary::Uri(_) => None,
+        }
+    }
+}
+
+#[cfg(all(test, feature = "base64"))]
+mod tests {
+    use alloc::borrow::Cow;
+
+    use crate::value::binary::VcardBinary;
+
+    #[test]
+    fn decodes_inline_base64_but_not_a_uri() {
+        let inline = VcardBinary::Base64(Cow::Borrowed("Zm9v"));
+        assert_eq!(inline.decode_base64().unwrap().unwrap(), b"foo");
+
+        let reference = VcardBinary::Uri(Cow::Borrowed("http://example.com/p.png"));
+        assert!(reference.decode_base64().is_none());
+    }
+}

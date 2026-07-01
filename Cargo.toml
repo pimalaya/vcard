@@ -17,8 +17,16 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["parser"]
+default = ["parser", "quoted-printable", "base64", "encoding"]
 parser = []
+quoted-printable = ["dep:quoted_printable"]
+base64 = ["dep:base64"]
+encoding = ["dep:encoding_rs"]
+
+[dependencies]
+quoted_printable = { version = "0.5", default-features = false, optional = true }
+base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
+encoding_rs = { version = "0.8", optional = true }
 
 [lib]
 name = "vcard"

@@ -10,8 +10,8 @@
 //! the in-force value kind (version plus any declared `VALUE`), then routes to
 //! that kind's decoder. The parameter name dispatch is the match in
 //! [`VcardParamNode::decode`]. Value escapes are resolved by the sibling
-//! [`unescape`](crate::tree::codec::unescape) codec and quoted-printable by
-//! [`quoted_printable`](crate::tree::codec::quoted_printable).
+//! [`unescape`](crate::tree::codec::unescape) codec; content transfer encodings
+//! (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are left to the feature helpers.
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -21,7 +21,6 @@ use crate::{
     tree::{
         codec::{
             Codec,
-            quoted_printable::{qp_decode, qp_decode_bytes},
             unescape::{unescape, unescape_bytes, unescape_with},
         },
         cst::VcardCst,
@@ -76,24 +75,12 @@ impl VcardLine<'_> {
     /// raw components so it round-trips.
     pub fn decode(&self, version: VcardVersion) -> VcardProp<'_> {
         let name = self.name.get();
-        let qp = self.is_quoted_printable();
-        let params = self
-            .params
-            .iter()
-            .filter(|param| !param_is_quoted_printable(param))
-            .map(VcardParamNode::decode)
-            .collect();
+        let params = self.params.iter().map(VcardParamNode::decode).collect();
 
         let value = match name.parse::<VcardPropKind>() {
             Ok(prop) => self.decode_value(prop, version),
             Err(_) => VcardValue::Unknown(VcardUnknownValue::decode(&self.value)),
         };
-
-        // NOTE: QUOTED-PRINTABLE values carry their octets in the wire text;
-        // decode them on read so the model holds clean text, and drop the
-        // now-stale encoding parameter (filtered above). Param-driven,
-        // version-agnostic.
-        let value = if qp { qp_decode_value(value) } else { value };
 
         VcardProp {
             name: VcardPropName::from(name),
@@ -127,27 +114,21 @@ impl VcardLine<'_> {
             .and_then(|value| value.get().parse::<VcardValueKind>().ok())
     }
 
-    /// The first value's raw bytes with escapes resolved and, when the line
-    /// declares `QUOTED-PRINTABLE`, its `=XX` octets decoded; still in the value's
-    /// own (possibly foreign) charset, never transcoded. The read side of the
-    /// [`set_bytes`](crate::tree::value::VcardValueCursor::set_bytes) escape hatch.
-    pub(crate) fn value_bytes(&self) -> Cow<'_, [u8]> {
-        let raw = self.value.decode_bytes_at(0);
-
-        if !self.is_quoted_printable() {
-            return raw;
-        }
-
-        match raw {
-            Cow::Borrowed(bytes) => qp_decode_bytes(bytes),
-            Cow::Owned(bytes) => Cow::Owned(qp_decode_bytes(&bytes).into_owned()),
-        }
-    }
-
     /// Whether the line declares the `QUOTED-PRINTABLE` encoding, as an
     /// `ENCODING=` parameter or a bare token (the 2.1 short form).
-    fn is_quoted_printable(&self) -> bool {
+    #[cfg(feature = "quoted-printable")]
+    pub(crate) fn is_quoted_printable(&self) -> bool {
         self.params.iter().any(param_is_quoted_printable)
+    }
+
+    /// The value of this line's `CHARSET` parameter, if any.
+    #[cfg(feature = "encoding")]
+    pub(crate) fn charset_label(&self) -> Option<&str> {
+        self.params
+            .iter()
+            .find(|param| param.name.get().eq_ignore_ascii_case("CHARSET"))
+            .and_then(|param| param.values.first())
+            .map(|value| value.get())
     }
 }
 
@@ -275,6 +256,7 @@ impl VcardValueNode<'_> {
 }
 
 /// Whether a parameter is `ENCODING=QUOTED-PRINTABLE` or the bare 2.1 token.
+#[cfg(feature = "quoted-printable")]
 fn param_is_quoted_printable(param: &VcardParamNode<'_>) -> bool {
     let name = param.name.get();
 
@@ -284,39 +266,6 @@ fn param_is_quoted_printable(param: &VcardParamNode<'_>) -> bool {
             .iter()
             .any(|v| v.get().eq_ignore_ascii_case("QUOTED-PRINTABLE")))
         || (param.values.is_empty() && name.eq_ignore_ascii_case("QUOTED-PRINTABLE"))
-}
-
-/// QUOTED-PRINTABLE-decode the text-bearing kinds of a decoded value, leaving
-/// the structured kinds untouched (they rarely carry the encoding).
-fn qp_decode_value(value: VcardValue<'_>) -> VcardValue<'_> {
-    match value {
-        VcardValue::Text(VcardText(c)) => VcardValue::Text(VcardText(qp_decode(c))),
-        VcardValue::Uri(VcardUri(c)) => VcardValue::Uri(VcardUri(qp_decode(c))),
-        VcardValue::DateAndOrTime(VcardDateAndOrTime(c)) => {
-            VcardValue::DateAndOrTime(VcardDateAndOrTime(qp_decode(c)))
-        }
-        VcardValue::Timestamp(VcardTimestamp(c)) => {
-            VcardValue::Timestamp(VcardTimestamp(qp_decode(c)))
-        }
-        VcardValue::LanguageTag(VcardLanguageTag(c)) => {
-            VcardValue::LanguageTag(VcardLanguageTag(qp_decode(c)))
-        }
-        VcardValue::UtcOffset(VcardUtcOffset(c)) => {
-            VcardValue::UtcOffset(VcardUtcOffset(qp_decode(c)))
-        }
-        VcardValue::TextList(VcardTextList(values)) => {
-            VcardValue::TextList(VcardTextList(values.into_iter().map(qp_decode).collect()))
-        }
-        VcardValue::Unknown(VcardUnknownValue { components }) => {
-            VcardValue::Unknown(VcardUnknownValue {
-                components: components
-                    .into_iter()
-                    .map(|component| component.into_iter().map(qp_decode).collect())
-                    .collect(),
-            })
-        }
-        other => other,
-    }
 }
 
 #[cfg(test)]
@@ -472,7 +421,12 @@ mod tests {
     }
 
     #[test]
-    fn decodes_quoted_printable_value_and_drops_the_stale_encoding_param() {
+    fn keeps_a_quoted_printable_value_and_its_encoding_param_undecoded() {
+        use crate::param::VcardParam;
+
+        // Core transforms no content: the `=XX` octets stay in the value and the
+        // ENCODING param is kept, so a consumer can decode via the
+        // `quoted-printable` feature helper.
         let input = concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -485,9 +439,12 @@ mod tests {
 
         assert_eq!(
             prop.value,
-            VcardValue::Text(VcardText(Cow::Borrowed("café")))
+            VcardValue::Text(VcardText(Cow::Borrowed("caf=C3=A9"))),
         );
-        assert!(prop.params.is_empty(), "stale ENCODING param was kept");
+        assert!(
+            prop.params
+                .contains(&VcardParam::Encoding(Cow::Borrowed("QUOTED-PRINTABLE"))),
+        );
     }
 
     #[test]

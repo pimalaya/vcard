@@ -36,11 +36,13 @@ impl VcardValueCursor<'_, '_> {
         self.line.value.set_at(0, &[value]);
     }
 
-    /// The whole value's raw bytes (component 0, value 0): escapes resolved and
-    /// any `QUOTED-PRINTABLE` `=XX` octets decoded, but not transcoded, for a
-    /// value carrying a foreign charset.
+    /// The whole value's raw bytes (component 0, value 0), unescaped but not
+    /// transcoded and not transfer-decoded, for a value carrying a foreign
+    /// charset. To resolve `QUOTED-PRINTABLE` or a `CHARSET`, use the
+    /// [`quoted_printable`](Self::quoted_printable) /
+    /// [`charset`](Self::charset) feature helpers.
     pub fn bytes(&self) -> Cow<'_, [u8]> {
-        self.line.value_bytes()
+        self.line.value.decode_bytes_at(0)
     }
 
     /// Set the value to raw bytes (the foreign-charset escape hatch), escaping
@@ -49,6 +51,43 @@ impl VcardValueCursor<'_, '_> {
     /// the caller's to keep consistent.
     pub fn set_bytes(&mut self, value: impl AsRef<[u8]>) {
         self.line.value.set_bytes_at(0, &[value]);
+    }
+
+    /// Decode the value's `QUOTED-PRINTABLE` `=XX` octets to raw bytes when the
+    /// line declares that encoding, else the raw [`bytes`](Self::bytes). Still in
+    /// the value's own (possibly foreign) charset; pair with
+    /// [`charset`](Self::charset) to get text. Requires the `quoted-printable`
+    /// feature.
+    #[cfg(feature = "quoted-printable")]
+    pub fn quoted_printable(&self) -> Vec<u8> {
+        let raw = self.bytes();
+
+        if self.line.is_quoted_printable() {
+            quoted_printable::decode(raw.as_ref(), quoted_printable::ParseMode::Robust)
+                .unwrap_or_else(|_| raw.into_owned())
+        } else {
+            raw.into_owned()
+        }
+    }
+
+    /// Transcode the value to text using its `CHARSET` parameter (defaulting to
+    /// UTF-8 when absent or unrecognised). When the `quoted-printable` feature is
+    /// also on, `QUOTED-PRINTABLE` octets are resolved first. Requires the
+    /// `encoding` feature.
+    #[cfg(feature = "encoding")]
+    pub fn charset(&self) -> alloc::string::String {
+        #[cfg(feature = "quoted-printable")]
+        let bytes = self.quoted_printable();
+        #[cfg(not(feature = "quoted-printable"))]
+        let bytes = self.bytes().into_owned();
+
+        let encoding = self
+            .line
+            .charset_label()
+            .and_then(|label| encoding_rs::Encoding::for_label(label.as_bytes()))
+            .unwrap_or(encoding_rs::UTF_8);
+
+        encoding.decode_without_bom_handling(&bytes).0.into_owned()
     }
 
     /// The value's first component as a decoded list (its `,`-separated
@@ -113,10 +152,10 @@ mod tests {
     }
 
     #[test]
-    fn recovers_quoted_printable_foreign_charset_bytes() {
+    fn bytes_returns_the_raw_undecoded_value() {
         use crate::tree::prop::note::NOTE;
 
-        // 2.1 NOTE in ISO-8859-1, quoted-printable: =E9 is the Latin-1 'é' octet.
+        // Core does not resolve QP: bytes() is the raw wire value.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -125,11 +164,45 @@ mod tests {
         ))
         .unwrap();
 
-        // bytes() resolves QP, handing back the raw Latin-1 bytes to transcode.
+        assert_eq!(card.prop_mut::<NOTE>().unwrap().bytes().as_ref(), b"caf=E9");
+    }
+
+    #[cfg(feature = "quoted-printable")]
+    #[test]
+    fn quoted_printable_helper_resolves_octets() {
+        use crate::tree::prop::note::NOTE;
+
+        // =E9 is the Latin-1 'é' octet; the helper resolves QP to raw bytes.
+        let mut card = VcardCst::parse(concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:2.1\r\n",
+            "NOTE;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:caf=E9\r\n",
+            "END:VCARD\r\n",
+        ))
+        .unwrap();
+
         assert_eq!(
-            card.prop_mut::<NOTE>().unwrap().bytes().as_ref(),
-            &[b'c', b'a', b'f', 0xE9],
+            card.prop_mut::<NOTE>().unwrap().quoted_printable(),
+            [b'c', b'a', b'f', 0xE9],
         );
+    }
+
+    #[cfg(all(feature = "encoding", feature = "quoted-printable"))]
+    #[test]
+    fn charset_helper_transcodes_to_utf8() {
+        use crate::tree::prop::note::NOTE;
+
+        // ISO-8859-1 + quoted-printable "café": the charset helper (composing the
+        // QP helper) yields the UTF-8 string.
+        let mut card = VcardCst::parse(concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:2.1\r\n",
+            "NOTE;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:caf=E9\r\n",
+            "END:VCARD\r\n",
+        ))
+        .unwrap();
+
+        assert_eq!(card.prop_mut::<NOTE>().unwrap().charset(), "café");
     }
 
     #[test]

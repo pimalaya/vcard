@@ -6,9 +6,10 @@
 //! [`decode`] projects a raw syntax tree onto the decoded model and [`encode`]
 //! projects it back; that is the structural level. Underneath, the value-string
 //! level: [`escape`] and [`unescape`] apply and resolve the RFC 6350 3.4 value
-//! escapes (keyed by the [`mode`] `Escaper`), and [`quoted_printable`] decodes
-//! the 2.1 `=XX` octet encoding. The structural encoders and decoders run every
-//! value leaf through those.
+//! escapes (keyed by the [`mode`] `Escaper`). The structural encoders and
+//! decoders run every value leaf through those. Content transfer encodings
+//! (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are never resolved here: the
+//! core transforms no content, leaving that to the opt-in feature helpers.
 //!
 //! The per-value-type projection is the [`Codec`] trait. One impl per value
 //! type lives under [`crate::tree::value`], mirroring the model's `value/`, so
@@ -24,7 +25,6 @@ pub mod decode;
 pub mod encode;
 pub mod escape;
 pub mod mode;
-pub mod quoted_printable;
 pub mod unescape;
 
 /// How a decoded value type projects to and from a syntax node: `decode` reads
