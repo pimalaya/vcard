@@ -5,7 +5,7 @@
 
 use crate::{
     tree::{
-        codec::{encode::scalar_node, mode::Escaper, value::Codec},
+        codec::{Codec, encode::scalar_node, mode::Escaper},
         value::VcardValueNode,
     },
     value::datetime::{VcardDateAndOrTime, VcardTimestamp},

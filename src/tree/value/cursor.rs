@@ -9,7 +9,7 @@
 //! line stays byte for byte intact. [`VcardValueCursor`] exposes both
 //! convenience accessors for the common single-value and list shapes and raw
 //! component-level access for the structured kinds (`ADR`, `GENDER`, `ORG`,
-//! `CLIENTPIDMAP`); the bespoke [`NCursor`](crate::tree::prop::n::NCursor)
+//! `CLIENTPIDMAP`); the bespoke [`VcardNCursor`](crate::tree::prop::n::VcardNCursor)
 //! names `N`'s components.
 
 use alloc::{borrow::Cow, vec::Vec};

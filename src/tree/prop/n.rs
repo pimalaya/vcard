@@ -5,13 +5,12 @@
 //!
 //! `N` is the showcase of the structured-value path: unlike the scalar/list
 //! lenses that use the generic cursor, it pairs [`VcardN`] with a dedicated
-//! [`NCursor`] that names the five components, so callers write
+//! [`VcardNCursor`] that names the five components, so callers write
 //! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. The
 //! decode/encode projections use the lens defaults, which delegate to
-//! [`VcardN`]'s [`Codec`] impl in [`crate::tree::codec::value`]; only the cursor
-//! is bespoke. Edits are byte
-//! preserving: writing one component leaves the others, and every parameter,
-//! untouched.
+//! [`VcardN`]'s [`Codec`] impl in [`crate::tree::value`]; only the cursor is
+//! bespoke. Edits are byte preserving: writing one component leaves the others,
+//! and every parameter, untouched.
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -19,7 +18,7 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        codec::value::Codec,
+        codec::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
@@ -35,12 +34,12 @@ impl VcardPropLens for N {
     type Target<'v> = VcardN<'v>;
 
     type Cursor<'c, 'a>
-        = NCursor<'c, 'a>
+        = VcardNCursor<'c, 'a>
     where
         'a: 'c;
 
-    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> NCursor<'c, 'a> {
-        NCursor { line }
+    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardNCursor<'c, 'a> {
+        VcardNCursor { line }
     }
 }
 
@@ -71,12 +70,12 @@ impl VcardPropSpec for N {
 /// A typed cursor over an N line: getters decode, setters encode and write
 /// through to the syntax node, leaving every untouched component (and every
 /// parameter) byte for byte intact.
-pub struct NCursor<'c, 'a> {
+pub struct VcardNCursor<'c, 'a> {
     /// The borrowed content line.
     pub line: &'c mut VcardLine<'a>,
 }
 
-impl NCursor<'_, '_> {
+impl VcardNCursor<'_, '_> {
     /// The whole decoded value.
     pub fn get(&self) -> VcardN<'_> {
         VcardN::decode(&self.line.value)

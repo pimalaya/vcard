@@ -4,7 +4,7 @@
 
 use crate::{
     tree::{
-        codec::{encode::encode_component, mode::Escaper, value::Codec},
+        codec::{Codec, encode::encode_component, mode::Escaper},
         value::VcardValueNode,
     },
     value::org::VcardOrg,

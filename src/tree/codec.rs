@@ -1,30 +1,31 @@
-//! # Value codec
+//! # Codec
 //!
-//! The [`Codec`] trait: how a decoded value type reads itself from a
-//! [`VcardValueNode`] and writes itself back. One impl per value type lives in a
-//! submodule here, mirroring the model's `value/`. Both the structural
-//! [`decode`](crate::tree::codec::decode) / [`encode`](crate::tree::codec::encode)
-//! dispatch and the per-property lenses go through it, so each value's codec is
-//! written exactly once.
+//! The bytes-to-model bridge, in both directions and at both levels. It is the
+//! only part of [`crate::tree`] that consults the card version.
+//!
+//! [`decode`] projects a raw syntax tree onto the decoded model and [`encode`]
+//! projects it back; that is the structural level. Underneath, the value-string
+//! level: [`escape`] and [`unescape`] apply and resolve the RFC 6350 3.4 value
+//! escapes (keyed by the [`mode`] `Escaper`), and [`quoted_printable`] decodes
+//! the 2.1 `=XX` octet encoding. The structural encoders and decoders run every
+//! value leaf through those.
+//!
+//! The per-value-type projection is the [`Codec`] trait. One impl per value
+//! type lives under [`crate::tree::value`], mirroring the model's `value/`, so
+//! each value's codec is written exactly once; both the structural dispatch and
+//! the per-property lenses go through it.
 
 use crate::{
     tree::{codec::mode::Escaper, value::VcardValueNode},
     value::{VcardUnknownValue, VcardValue},
 };
 
-pub mod adr;
-pub mod binary;
-pub mod client_pid_map;
-pub mod datetime;
-pub mod gender;
-pub mod geo;
-pub mod language;
-pub mod n;
-pub mod org;
-pub mod text;
-pub mod unknown;
-pub mod uri;
-pub mod utc_offset;
+pub mod decode;
+pub mod encode;
+pub mod escape;
+pub mod mode;
+pub mod quoted_printable;
+pub mod unescape;
 
 /// How a decoded value type projects to and from a syntax node: `decode` reads
 /// it from a node (its [`escaper`](VcardValueNode::escaper) carries the mode),
@@ -41,10 +42,11 @@ pub trait Codec<'v>: Sized {
 }
 
 impl<'v> Codec<'v> for VcardValue<'v> {
-    /// Decode liberally as raw [`Unknown`](VcardValue::Unknown): no value kind is
-    /// known at this level (that is the spec's job), so the version-divergent
-    /// lenses whose target is `VcardValue` override the lens `decode` to resolve
-    /// the real kind; this fallback is what the others inherit.
+    /// Decode liberally as raw [`Unknown`](VcardValue::Unknown): no value kind
+    /// is known at this level (that is the spec's job), so the
+    /// version-divergent lenses whose target is `VcardValue` override the lens
+    /// `decode` to resolve the real kind; this fallback is what the others
+    /// inherit.
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardValue::Unknown(VcardUnknownValue::decode(node))
     }

@@ -9,12 +9,30 @@
 //! *known* parts of the (lossy) model against the per-property
 //! [`VcardPropSpec`](crate::tree::prop::VcardPropSpec) for the card version
 //! (existence, value kind, parameters, cardinality) and leaves the unknown
-//! parts alone. [`Valid`] is a marker a validated value earns; it is the only
-//! thing that can mint one, so holding a `Valid<Vcard>` is proof the check
-//! passed. The same per-property check backs the [`VcardPropBuilder`]'s strict
-//! construction.
+//! parts alone. A passing check yields a [`Valid`] marker: it is the only thing
+//! that can mint one, so holding a `Valid<Vcard>` is proof the check passed. The
+//! same per-property check backs the [`VcardPropBuilder`]'s strict construction.
 //!
-//! [`VcardPropBuilder`]: crate::tree::builder::VcardPropBuilder
+//! [`VcardPropBuilder`]: crate::tree::vcard::builder::VcardPropBuilder
+//!
+//! # Example
+//!
+//! Decode a parsed card, validate it into a proof, and convert that back into a
+//! byte tree:
+//!
+//! ```rust
+//! use vcard::tree::cst::VcardCst;
+//!
+//! let cst =
+//!     VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n").unwrap();
+//!
+//! // validate consumes the card and returns the proof (or the violations).
+//! let valid = cst.decode().validate().expect("a conformant 4.0 card");
+//!
+//! // The proof converts back into a byte tree for free.
+//! let out = VcardCst::from(valid);
+//! assert!(out.to_string().contains("FN:John Doe"));
+//! ```
 
 use core::{error, fmt, ops::Deref};
 
@@ -108,12 +126,13 @@ impl fmt::Display for VcardValidateError {
 
 impl error::Error for VcardValidateError {}
 
-impl Vcard<'_> {
-    /// Check the card against RFC 6350 for its version: every known property
-    /// must exist in the version, carry an allowed value kind and allowed
-    /// parameters, and respect its multiplicity. Extensions (unknown properties
-    /// and parameters) are conformant and pass. Collects every violation.
-    pub fn validate(&self) -> Result<(), Vec<VcardValidateError>> {
+impl<'a> Vcard<'a> {
+    /// Check the card against RFC 6350 for its version: every known property must
+    /// exist in the version, carry an allowed value kind and allowed parameters,
+    /// and respect its multiplicity. Extensions (unknown properties and
+    /// parameters) are conformant and pass. On success the card is yielded back
+    /// as a [`Valid`] proof; on failure every violation is collected.
+    pub fn validate(self) -> Result<Valid<Vcard<'a>>, Vec<VcardValidateError>> {
         let mut errors = Vec::new();
         let mut counts: Vec<(VcardPropKind, usize)> = Vec::new();
 
@@ -150,7 +169,7 @@ impl Vcard<'_> {
         }
 
         if errors.is_empty() {
-            Ok(())
+            Ok(Valid(self))
         } else {
             Err(errors)
         }
@@ -159,7 +178,8 @@ impl Vcard<'_> {
 
 /// Check one property against its spec for the version, pushing any violations.
 /// An unknown (extension) property is always conformant. Shared by
-/// [`Vcard::validate`] and the [`VcardPropBuilder`](crate::tree::build).
+/// [`Vcard::validate`] and the
+/// [`VcardPropBuilder`](crate::tree::vcard::builder::VcardPropBuilder).
 pub(crate) fn validate_prop(
     prop: &VcardProp<'_>,
     version: VcardVersion,
@@ -230,9 +250,10 @@ fn cardinality_ok(cardinality: VcardPropCardinality, count: usize) -> bool {
 }
 
 /// A value that has passed validation. The only way to mint one is a validating
-/// conversion, so holding a `Valid<T>` is proof the check passed; it derefs to
-/// the inner value for reads and yields it back with
-/// [`into_inner`](Self::into_inner).
+/// conversion ([`Vcard::validate`] or its `TryFrom`), so holding a `Valid<T>` is
+/// proof the check passed; it derefs to the inner value for reads and yields it
+/// back with [`into_inner`](Self::into_inner). It is never constructed directly:
+/// it is a marker, not data.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Valid<T>(T);
 
@@ -255,8 +276,7 @@ impl<'a> TryFrom<Vcard<'a>> for Valid<Vcard<'a>> {
     type Error = Vec<VcardValidateError>;
 
     fn try_from(card: Vcard<'a>) -> Result<Self, Self::Error> {
-        card.validate()?;
-        Ok(Self(card))
+        card.validate()
     }
 }
 
@@ -273,7 +293,7 @@ mod tests {
     use crate::{
         param::VcardParam,
         prop::{VcardProp, VcardPropKind},
-        tree::validate::{Valid, VcardValidateError},
+        tree::vcard::validate::VcardValidateError,
         value::{VcardValue, n::VcardN, text::VcardText, uri::VcardUri},
         vcard::Vcard,
         version::VcardVersion,
@@ -313,7 +333,6 @@ mod tests {
             ],
         );
         assert!(vcard.validate().is_ok());
-        assert!(Valid::try_from(vcard).is_ok());
     }
 
     #[test]

@@ -1,121 +1,23 @@
-//! # Property lenses
+//! # Property spec
 //!
-//! The property lens contract and one hand-written module per RFC 6350
-//! property.
-//!
-//! [`VcardPropLens`] ties a wire name to a decoded value type plus the `decode`
-//! projection and an edit cursor; each property implements
-//! it in its own submodule, where the marker is the type-level key for
-//! [`VcardCst::prop`](crate::tree::cst::VcardCst::prop). Scalar, list and URI
-//! properties share the generic
-//! [`VcardValueCursor`](crate::tree::cursor::VcardValueCursor); the structured
-//! ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor that names their
-//! components. The name dispatch for whole-card decoding lives in
-//! [`crate::tree::codec::decode`].
-
-pub mod adr;
-pub mod agent;
-pub mod anniversary;
-pub mod bday;
-pub mod caladruri;
-pub mod caluri;
-pub mod categories;
-pub mod class;
-pub mod client_pid_map;
-pub mod email;
-pub mod fburl;
-pub mod r#fn;
-pub mod gender;
-pub mod geo;
-pub mod impp;
-pub mod key;
-pub mod kind;
-pub mod label;
-pub mod lang;
-pub mod logo;
-pub mod mailer;
-pub mod member;
-pub mod n;
-pub mod name;
-pub mod nickname;
-pub mod note;
-pub mod org;
-pub mod photo;
-pub mod prodid;
-pub mod profile;
-pub mod related;
-pub mod rev;
-pub mod role;
-pub mod sort_string;
-pub mod sound;
-pub mod source;
-pub mod tel;
-pub mod title;
-pub mod tz;
-pub mod uid;
-pub mod url;
-pub mod xml;
+//! The per-property contract on the lens markers, and the runtime vtable that
+//! bridges the open [`VcardPropKind`] back to those static impls.
 
 use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
-    tree::{codec::value::Codec, line::VcardLine},
+    tree::{
+        param::COMMON_PARAMS,
+        prop::{
+            VcardPropCardinality, adr, agent, anniversary, bday, caladruri, caluri, categories,
+            class, client_pid_map, email, fburl, r#fn, gender, geo, impp, key, kind, label, lang,
+            logo, mailer, member, n, name, nickname, note, org, photo, prodid, profile, related,
+            rev, role, sort_string, sound, source, tel, title, tz, uid, url, xml,
+        },
+    },
     value::VcardValueKind,
     version::VcardVersion,
 };
-
-/// A property identified by type: its decoded value type, edit cursor, and the
-/// `decode` projection from the generic syntax node onto the type. The wire name
-/// comes from its [`VcardPropSpec::KIND`] (a supertrait), so the two stay in
-/// sync.
-pub trait VcardPropLens: VcardPropSpec {
-    /// The decoded value type, borrowing the syntax node for reads. Its
-    /// [`Codec`] impl is what the default `decode` delegates to.
-    type Target<'v>: Codec<'v>;
-
-    /// The typed edit cursor over a content line.
-    type Cursor<'c, 'a>
-    where
-        'a: 'c;
-
-    /// Project a content line onto the decoded type, consulting the card
-    /// version where the value's shape is version-specific (`GEO`, the binary
-    /// props). The default ignores the version and decodes the value node
-    /// through the target's [`Codec`]; the version-specific lenses override it.
-    fn decode<'v>(line: &'v VcardLine<'_>, _version: VcardVersion) -> Self::Target<'v> {
-        <Self::Target<'v> as Codec<'v>>::decode(&line.value)
-    }
-
-    /// Wrap a content line in the typed cursor for in-place editing.
-    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> Self::Cursor<'c, 'a>;
-}
-
-/// The RFC 6350 section 6 property multiplicity: how many times a property may
-/// appear in a card. Prop multiplicity, not value structure, so it is not
-/// derivable from the value kind (`FN` and `NOTE` are both text but differ).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum VcardPropCardinality {
-    /// Exactly one (required, single).
-    ExactlyOne,
-    /// At most one (optional, single).
-    AtMostOne,
-    /// One or more (required, repeatable).
-    OneOrMore,
-    /// Any number, including zero (optional, repeatable).
-    Any,
-}
-
-/// The default parameters a property may carry, used by the spec for the
-/// uniform majority. Per-property sets refine this where a property allows more
-/// or fewer.
-const COMMON_PARAMS: &[VcardParamKind] = &[
-    VcardParamKind::Value,
-    VcardParamKind::Language,
-    VcardParamKind::Pref,
-    VcardParamKind::AltId,
-    VcardParamKind::Pid,
-    VcardParamKind::Type,
-];
 
 /// The per-property contract: the versions it lives in, its multiplicity, the
 /// value-types and parameters it may carry (all per version), and the
@@ -164,10 +66,10 @@ pub trait VcardPropSpec {
     }
 }
 
-/// The spec of a property as function pointers, the runtime bridge from the
-/// open [`VcardPropKind`] back to the static per-marker [`VcardPropSpec`]
-/// impls. The decoder and the validator dispatch a prop kind through
-/// [`prop_spec`] and then call these, instead of each owning a 42-arm match.
+/// The spec of a property as function pointers, the runtime bridge from the open
+/// [`VcardPropKind`] back to the static per-marker [`VcardPropSpec`] impls. The
+/// decoder and the validator dispatch a prop kind through [`prop_spec`] and then
+/// call these, instead of each owning a 42-arm match.
 pub(crate) struct VcardPropSpecFns {
     /// See [`VcardPropSpec::allowed_versions`].
     pub allowed_versions: fn() -> &'static [VcardVersion],

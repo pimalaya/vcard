@@ -7,9 +7,9 @@ use alloc::vec;
 use crate::{
     tree::{
         codec::{
+            Codec,
             encode::{encode_component, scalar_node},
             mode::Escaper,
-            value::Codec,
         },
         value::VcardValueNode,
     },

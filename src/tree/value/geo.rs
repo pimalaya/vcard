@@ -8,7 +8,7 @@ use alloc::vec;
 
 use crate::{
     tree::{
-        codec::{encode::encode_component, mode::Escaper, value::Codec},
+        codec::{Codec, encode::encode_component, mode::Escaper},
         value::VcardValueNode,
     },
     value::geo::VcardGeo,
@@ -16,8 +16,8 @@ use crate::{
 
 impl<'v> Codec<'v> for VcardGeo<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        // NOTE: 2.1 separates the pair with `,` (one component, two values), 3.0
-        // with `;` (two components); the node's escaper tells them apart.
+        // NOTE: 2.1 separates the pair with `,` (one component, two values),
+        // 3.0 with `;` (two components); the node's escaper tells them apart.
         if node.escaper == Escaper::V2_1 {
             let mut parts = node.decode_at(0).into_iter();
             VcardGeo {

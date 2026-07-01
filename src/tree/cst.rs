@@ -13,6 +13,65 @@
 //! `remove`). The semantic projection ([`decode`](VcardCst::decode)) and the
 //! codec live in the [`decode`](crate::tree::codec::decode) /
 //! [`encode`](crate::tree::codec::encode) siblings.
+//!
+//! # Examples
+//!
+//! Parse raw bytes into a CST, edit a field in place (byte-preservingly), then
+//! project onto the decoded model:
+//!
+//! ```rust
+//! use vcard::tree::cst::VcardCst;
+//! use vcard::tree::prop::r#fn::FN;
+//! use vcard::version::VcardVersion;
+//!
+//! // 1. Parse raw bytes into the byte-faithful syntax tree (round-trips exactly).
+//! let raw = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n";
+//! let mut cst = VcardCst::parse(raw).unwrap();
+//! assert_eq!(cst.to_string(), raw);
+//!
+//! // 2. Edit one field through its lens; every untouched byte is preserved.
+//! cst.prop_mut::<FN>().unwrap().set_text("Jane Doe");
+//! assert_eq!(
+//!     cst.to_string(),
+//!     "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n",
+//! );
+//!
+//! // 3. Project onto the decoded, version-agnostic model.
+//! let card = cst.decode();
+//! assert_eq!(card.version, VcardVersion::V4_0);
+//! assert_eq!(&*card.properties[0].name, "FN");
+//! ```
+//!
+//! Build a property from the strict builder, validate a whole card into a
+//! [`Valid`](crate::tree::vcard::validate::Valid) proof, then turn it back into a
+//! CST:
+//!
+//! ```rust
+//! use vcard::tree::cst::VcardCst;
+//! use vcard::tree::vcard::builder::VcardPropBuilder;
+//! use vcard::tree::prop::r#fn::FN;
+//! use vcard::vcard::Vcard;
+//! use vcard::value::VcardValue;
+//! use vcard::value::text::VcardText;
+//! use vcard::version::VcardVersion;
+//! use std::borrow::Cow;
+//!
+//! // 1. Build a property strictly against its spec.
+//! let fn_prop = VcardPropBuilder::<FN>::new(VcardVersion::V4_0)
+//!     .build(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
+//!     .unwrap();
+//!
+//! // 2. Assemble a card and validate it into a proof.
+//! let card = Vcard {
+//!     version: VcardVersion::V4_0,
+//!     properties: vec![fn_prop],
+//! };
+//! let valid = card.validate().expect("a conformant 4.0 card");
+//!
+//! // 3. A Valid<Vcard> converts back into a byte tree for free.
+//! let cst = VcardCst::from(valid);
+//! assert!(cst.to_string().contains("FN:John Doe\r\n"));
+//! ```
 
 use core::fmt;
 

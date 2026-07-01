@@ -22,14 +22,8 @@ pub enum VcardParseError {
     MissingPropertyColon(String),
     /// A card did not open with a BEGIN:VCARD line.
     ExpectedBegin(String),
-    /// A card did not follow BEGIN with a VERSION line.
-    ExpectedVersion(String),
-    /// A VERSION value named a version the parser does not support.
-    UnsupportedVersion(String),
     /// A card was left open by a missing END:VCARD line.
     MissingEnd(String),
-    /// A single-card parse found no card, or more than one.
-    ExpectedSingleCard,
 }
 
 impl fmt::Display for VcardParseError {
@@ -44,17 +38,8 @@ impl fmt::Display for VcardParseError {
             Self::ExpectedBegin(data) => {
                 write!(f, "Card does not open with a BEGIN line: {data}")
             }
-            Self::ExpectedVersion(data) => {
-                write!(f, "Card does not follow BEGIN with a VERSION line: {data}")
-            }
-            Self::UnsupportedVersion(data) => {
-                write!(f, "Card names an unsupported version: {data}")
-            }
             Self::MissingEnd(data) => {
                 write!(f, "Card is left open by a missing END line: {data}")
-            }
-            Self::ExpectedSingleCard => {
-                write!(f, "Content does not hold exactly one card")
             }
         }
     }

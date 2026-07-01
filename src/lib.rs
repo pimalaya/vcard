@@ -11,6 +11,27 @@
 //! escaping or a value's shape genuinely differ. The crate is `no_std` (with
 //! `alloc`) and dependency-free.
 //!
+//! ## Example
+//!
+//! Parse raw bytes, read a property through its typed lens, edit it in place,
+//! and serialize back; every untouched byte is preserved.
+//!
+//! ```rust
+//! use vcard::tree::cst::VcardCst;
+//! use vcard::tree::prop::r#fn::FN;
+//!
+//! let mut card =
+//!     VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n").unwrap();
+//!
+//! assert_eq!(&*card.prop::<FN>().unwrap().0, "John Doe");
+//!
+//! card.prop_mut::<FN>().unwrap().set_text("Jane Doe");
+//! assert_eq!(
+//!     card.to_string(),
+//!     "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n",
+//! );
+//! ```
+//!
 //! ## Postel's law
 //!
 //! The library is liberal in what it accepts and strict in what it sends.
@@ -19,8 +40,8 @@
 //! and round-trips byte for byte. The decoded model keeps that openness, with
 //! an `Unknown` arm on every open vocabulary. Strictness lives only on the way
 //! out, as two runtime steps: the builder, which refuses to construct a
-//! property the spec forbids, and [`validate`](tree::validate), which checks a
-//! decoded card against its version's RFC contract.
+//! property the spec forbids, and [`validate`](tree::vcard::validate), which
+//! checks a decoded card against its version's RFC contract.
 //!
 //! ## The two layers
 //!
@@ -43,8 +64,8 @@
 //! [`Vcard`](vcard::Vcard); [`encode`](tree::codec::encode) (and `From<Vcard>`)
 //! projects the model back to a canonical CST. Per-property lens markers
 //! ([`VcardPropLens`](tree::prop::VcardPropLens)) read or edit a single line
-//! through the byte-preserving [`cursor`](tree::cursor)s, so editing one
-//! property leaves every other byte intact.
+//! through the byte-preserving [`cursor`](tree::value::VcardValueCursor)s, so
+//! editing one property leaves every other byte intact.
 //!
 //! ## The spec layer
 //!
@@ -53,13 +74,14 @@
 //! parameters it may take per version, and the value type in force given a
 //! declared `VALUE`. A single vtable dispatch bridges the open
 //! [`VcardPropKind`](prop::VcardPropKind) back to those static specs, so the
-//! decoder consults it to pick a value kind, [`validate`](tree::validate)
-//! consults it to check conformance, and the builder consults it to reject
-//! illegal construction. Validity and lossiness are orthogonal: a conformant
-//! card may still carry extensions, so validity is that runtime predicate, not
+//! decoder consults it to pick a value kind,
+//! [`validate`](tree::vcard::validate) consults it to check conformance, and
+//! the builder consults it to reject illegal construction. Validity and
+//! lossiness are orthogonal: a conformant card may still carry extensions, so
+//! validity is that runtime predicate, not
 //! a second strict type. A card that passes earns a
-//! [`Valid`](tree::validate::Valid) marker, and both `Vcard` and `Valid<Vcard>`
-//! convert back into a [`VcardCst`](tree::cst::VcardCst).
+//! [`Valid`](tree::vcard::validate::Valid) proof, and both `Vcard` and
+//! `Valid<Vcard>` convert back into a [`VcardCst`](tree::cst::VcardCst).
 
 extern crate alloc;
 

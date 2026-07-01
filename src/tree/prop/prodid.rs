@@ -7,9 +7,9 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        value::VcardValueCursor,
     },
     value::text::VcardText,
     version::VcardVersion,

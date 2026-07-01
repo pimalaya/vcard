@@ -1,50 +1,17 @@
-//! # Parameters (syntax side)
+//! # Parameter node
 //!
-//! The raw parameter node and the per-parameter lens modules.
+//! The raw, byte-faithful parameter on the syntax side.
 //!
 //! [`VcardParamNode`] is the syntactic peer of the decoded
 //! [`VcardParam`](crate::param::VcardParam): a name leaf and its raw value
-//! leaves, parsed from and serialized back to the wire verbatim. Each RFC 6350
-//! parameter then has its own hand-written lens marker in a submodule here,
-//! tying a wire name to the decoded shape (a single value, or a list); those
-//! markers are the type-level keys for
-//! [`VcardLine::param`](crate::tree::line::VcardLine::param). The name dispatch
-//! for whole-line decoding lives in [`crate::tree::codec::decode`].
-
-pub mod altid;
-pub mod calscale;
-pub mod geo;
-pub mod label;
-pub mod language;
-pub mod mediatype;
-pub mod pid;
-pub mod pref;
-pub mod sort_as;
-pub mod r#type;
-pub mod tz;
-pub mod value;
+//! leaves, parsed from and serialized back to the wire verbatim. The per-name
+//! lens markers that give it meaning live alongside in [`crate::tree::param`].
 
 use core::fmt;
 
 use alloc::vec::Vec;
 
-use crate::{param::VcardParamKind, tree::leaf::VcardLeaf};
-
-/// A parameter identified by type, projecting a generic syntax parameter onto a
-/// decoded value type and back.
-pub trait VcardParamLens {
-    /// The parameter kind to look up by (its wire name comes through `Deref`).
-    const KIND: VcardParamKind;
-
-    /// The decoded value type, borrowing the syntax node for reads.
-    type Target<'v>;
-
-    /// Project the generic syntax parameter onto the decoded type.
-    fn decode<'v>(param: &'v VcardParamNode<'_>) -> Self::Target<'v>;
-
-    /// Encode a decoded value back into a generic syntax parameter (owned).
-    fn encode(decoded: &Self::Target<'_>) -> VcardParamNode<'static>;
-}
+use crate::tree::leaf::VcardLeaf;
 
 /// One raw parameter: a name and its `,`-separated raw values (empty when the
 /// parameter has no `=` list). The syntactic peer of the decoded
@@ -128,29 +95,14 @@ fn split_param_values(values: &str) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{borrow::Cow, string::ToString, vec};
+    use alloc::string::ToString;
 
-    use crate::tree::param::{VcardParamLens, VcardParamNode, language::LANGUAGE, pid::PID};
+    use crate::tree::param::VcardParamNode;
 
     #[test]
     fn parses_quoted_values_then_round_trips() {
         let node = VcardParamNode::parse(r#"TYPE=work,"a,b""#);
         assert_eq!(node.values.len(), 2);
         assert_eq!(node.to_string(), r#"TYPE=work,"a,b""#);
-    }
-
-    #[test]
-    fn decodes_a_list_parameter_through_its_lens() {
-        let node = VcardParamNode::parse("PID=1,2");
-        assert_eq!(
-            PID::decode(&node),
-            vec![Cow::Borrowed("1"), Cow::Borrowed("2")],
-        );
-    }
-
-    #[test]
-    fn encodes_a_scalar_parameter_through_its_lens() {
-        let node = LANGUAGE::encode(&Cow::Borrowed("en"));
-        assert_eq!(node.to_string(), "LANGUAGE=en");
     }
 }

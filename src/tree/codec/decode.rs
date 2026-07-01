@@ -20,9 +20,9 @@ use crate::{
     prop::{VcardProp, VcardPropKind, VcardPropName},
     tree::{
         codec::{
+            Codec,
             quoted_printable::qp_decode,
             unescape::{unescape, unescape_with},
-            value::Codec,
         },
         cst::VcardCst,
         line::VcardLine,
@@ -296,7 +296,7 @@ mod tests {
 
     use crate::{
         param::VcardParam,
-        tree::{codec::value::Codec, cst::VcardCst, value::VcardValueNode},
+        tree::{codec::Codec, cst::VcardCst, value::VcardValueNode},
         value::{
             VcardValue, binary::VcardBinary, geo::VcardGeo, n::VcardN, text::VcardText,
             uri::VcardUri,

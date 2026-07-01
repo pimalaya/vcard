@@ -1,7 +1,7 @@
 //! # ADR lens
 //!
 //! The `ADR` (structured address) property lens, with a cursor naming its seven
-//! components. Like [`NCursor`](crate::tree::prop::n::NCursor), getters decode
+//! components. Like [`VcardNCursor`](crate::tree::prop::n::VcardNCursor), getters decode
 //! and setters encode in place, leaving the other components (and every
 //! parameter) byte for byte intact.
 //!
@@ -13,7 +13,7 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        codec::value::Codec,
+        codec::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropLens, VcardPropSpec},
@@ -29,12 +29,12 @@ impl VcardPropLens for ADR {
     type Target<'v> = VcardAdr<'v>;
 
     type Cursor<'c, 'a>
-        = AdrCursor<'c, 'a>
+        = VcardAdrCursor<'c, 'a>
     where
         'a: 'c;
 
-    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> AdrCursor<'c, 'a> {
-        AdrCursor { line }
+    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardAdrCursor<'c, 'a> {
+        VcardAdrCursor { line }
     }
 }
 
@@ -61,12 +61,12 @@ impl VcardPropSpec for ADR {
 }
 
 /// A typed cursor over an ADR line, naming its seven components.
-pub struct AdrCursor<'c, 'a> {
+pub struct VcardAdrCursor<'c, 'a> {
     /// The borrowed content line.
     pub line: &'c mut VcardLine<'a>,
 }
 
-impl AdrCursor<'_, '_> {
+impl VcardAdrCursor<'_, '_> {
     /// The whole decoded value.
     pub fn get(&self) -> VcardAdr<'_> {
         VcardAdr::decode(&self.line.value)

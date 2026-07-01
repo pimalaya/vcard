@@ -11,7 +11,7 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        codec::value::Codec,
+        codec::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
@@ -27,12 +27,12 @@ impl VcardPropLens for GENDER {
     type Target<'v> = VcardGender<'v>;
 
     type Cursor<'c, 'a>
-        = GenderCursor<'c, 'a>
+        = VcardGenderCursor<'c, 'a>
     where
         'a: 'c;
 
-    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> GenderCursor<'c, 'a> {
-        GenderCursor { line }
+    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardGenderCursor<'c, 'a> {
+        VcardGenderCursor { line }
     }
 }
 
@@ -57,12 +57,12 @@ impl VcardPropSpec for GENDER {
 }
 
 /// A typed cursor over a GENDER line, naming its sex code and identity.
-pub struct GenderCursor<'c, 'a> {
+pub struct VcardGenderCursor<'c, 'a> {
     /// The borrowed content line.
     pub line: &'c mut VcardLine<'a>,
 }
 
-impl GenderCursor<'_, '_> {
+impl VcardGenderCursor<'_, '_> {
     /// The whole decoded value.
     pub fn get(&self) -> VcardGender<'_> {
         VcardGender::decode(&self.line.value)

@@ -11,7 +11,7 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        codec::value::Codec,
+        codec::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropLens, VcardPropSpec},
@@ -27,12 +27,12 @@ impl VcardPropLens for CLIENTPIDMAP {
     type Target<'v> = VcardClientPidMap<'v>;
 
     type Cursor<'c, 'a>
-        = ClientPidMapCursor<'c, 'a>
+        = VcardClientPidMapCursor<'c, 'a>
     where
         'a: 'c;
 
-    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> ClientPidMapCursor<'c, 'a> {
-        ClientPidMapCursor { line }
+    fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardClientPidMapCursor<'c, 'a> {
+        VcardClientPidMapCursor { line }
     }
 }
 
@@ -53,12 +53,12 @@ impl VcardPropSpec for CLIENTPIDMAP {
 }
 
 /// A typed cursor over a CLIENTPIDMAP line, naming its id and URI.
-pub struct ClientPidMapCursor<'c, 'a> {
+pub struct VcardClientPidMapCursor<'c, 'a> {
     /// The borrowed content line.
     pub line: &'c mut VcardLine<'a>,
 }
 
-impl ClientPidMapCursor<'_, '_> {
+impl VcardClientPidMapCursor<'_, '_> {
     /// The whole decoded value.
     pub fn get(&self) -> VcardClientPidMap<'_> {
         VcardClientPidMap::decode(&self.line.value)

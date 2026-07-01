@@ -9,9 +9,9 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueCursor,
     },
     value::{VcardValueKind, org::VcardOrg},
     version::VcardVersion,

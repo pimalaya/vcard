@@ -20,7 +20,7 @@ use crate::{
     param::VcardParam,
     prop::VcardProp,
     tree::{
-        codec::{escape::escape_with, mode::Escaper, value::Codec},
+        codec::{Codec, escape::escape_with, mode::Escaper},
         cst::VcardCst,
         leaf::VcardLeaf,
         line::VcardLine,
@@ -163,7 +163,7 @@ mod tests {
 
     use crate::{
         tree::{
-            codec::{mode::Escaper, value::Codec},
+            codec::{Codec, mode::Escaper},
             cst::VcardCst,
         },
         value::{n::VcardN, text::VcardText},

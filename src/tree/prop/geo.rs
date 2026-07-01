@@ -13,9 +13,9 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
+        value::VcardValueCursor,
     },
     value::{VcardValue, VcardValueKind},
     version::VcardVersion,

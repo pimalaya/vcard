@@ -7,11 +7,30 @@
 //! parameters, then emits an open [`VcardProp`]. Construction is the strict
 //! half of "liberal in, strict out": the name is pinned by the marker's
 //! [`VcardPropSpec`], and [`build`](VcardPropBuilder::build) runs the shared
-//! per-property check ([`validate_prop`](crate::tree::validate)) so the value
-//! kind and every known parameter must be allowed for the version (unknown,
+//! per-property check ([`validate_prop`](crate::tree::vcard::validate)) so the
+//! value kind and every known parameter must be allowed for the version (unknown,
 //! extension parameters pass). To emit something the spec forbids, construct
 //! the open [`VcardProp`] by hand. The version is a value the builder carries,
 //! never a type parameter.
+//!
+//! # Example
+//!
+//! ```rust
+//! use vcard::tree::vcard::builder::VcardPropBuilder;
+//! use vcard::tree::prop::r#fn::FN;
+//! use vcard::param::VcardParam;
+//! use vcard::value::VcardValue;
+//! use vcard::value::text::VcardText;
+//! use vcard::version::VcardVersion;
+//! use std::borrow::Cow;
+//!
+//! let prop = VcardPropBuilder::<FN>::new(VcardVersion::V4_0)
+//!     .param(VcardParam::Pref(Cow::Borrowed("1")))
+//!     .build(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
+//!     .expect("FN accepts text with a PREF parameter");
+//!
+//! assert_eq!(&*prop.name, "FN");
+//! ```
 
 use core::marker::PhantomData;
 
@@ -22,7 +41,7 @@ use crate::{
     prop::{VcardProp, VcardPropName},
     tree::{
         prop::VcardPropSpec,
-        validate::{VcardValidateError, validate_prop},
+        vcard::validate::{VcardValidateError, validate_prop},
     },
     value::VcardValue,
     version::VcardVersion,
@@ -83,7 +102,7 @@ mod tests {
 
     use crate::{
         param::VcardParam,
-        tree::{builder::VcardPropBuilder, prop::r#fn::FN},
+        tree::{prop::r#fn::FN, vcard::builder::VcardPropBuilder},
         value::{VcardValue, text::VcardText},
         version::VcardVersion,
     };

@@ -5,7 +5,7 @@
 
 use crate::{
     tree::{
-        codec::{encode::encode_component, mode::Escaper, unescape::unescape_with, value::Codec},
+        codec::{Codec, encode::encode_component, mode::Escaper, unescape::unescape_with},
         value::VcardValueNode,
     },
     value::VcardUnknownValue,

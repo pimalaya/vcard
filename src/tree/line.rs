@@ -35,6 +35,12 @@ use crate::tree::{
 };
 
 /// One raw content line: a name, parameters, a value and the line ending.
+///
+/// This is a *logical* line, not a physical one: [`take`](Self::take) unfolds
+/// RFC 6350 3.2 folded continuations and QUOTED-PRINTABLE soft line breaks, so a
+/// `VcardLine` never holds an internal line break, only its terminating
+/// [`eol`](Self::eol). It is also the syntactic unit for the `BEGIN` / `VERSION`
+/// / `END` envelope lines, not only decoded properties.
 #[derive(Clone, Debug)]
 pub struct VcardLine<'a> {
     /// The property name leaf, with any group prefix.

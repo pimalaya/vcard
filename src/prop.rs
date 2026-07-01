@@ -13,7 +13,7 @@
 //!
 //! Build a property directly from its public fields; strict, spec-checked
 //! construction lives in the syntax layer
-//! ([`VcardPropBuilder`](crate::tree::builder::VcardPropBuilder)).
+//! ([`VcardPropBuilder`](crate::tree::vcard::builder::VcardPropBuilder)).
 //!
 //! This module is pure model: it has no dependency on [`crate::tree`], so the
 //! decoded form can be used without the syntax layer.
