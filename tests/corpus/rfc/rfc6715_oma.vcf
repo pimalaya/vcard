@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:4.0
+FN:Expertise Example
+EXPERTISE;LEVEL=beginner;INDEX=2:chinese literature
+EXPERTISE;INDEX=1;LEVEL=expert:chemistry
+HOBBY;INDEX=1;LEVEL=high:reading
+INTEREST;INDEX=2;LEVEL=high:rock 'n' roll music
+ORG-DIRECTORY;PREF=1:ldap://ldap.tech.example/o=Example%20Tech,ou=Engineering
+END:VCARD

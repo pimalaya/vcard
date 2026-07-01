@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:4.0
+FN:Example Registrant
+CONTACT-URI:https://contact.example.com
+CONTACT-URI;PREF=1:mailto:contact@example.com
+ADR;TYPE=work;CC=US:;;54321 Oak St;Reston;VA;20190;USA
+END:VCARD
