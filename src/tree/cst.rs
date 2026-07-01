@@ -131,7 +131,12 @@ impl<'a> VcardCst<'a> {
     /// [`parse_many`](Self::parse_many): without the envelope there is no
     /// reliable boundary between records.
     pub fn parse<T: AsRef<[u8]> + ?Sized>(input: &'a T) -> Result<Self, VcardParseError> {
-        let input = input.as_ref();
+        // Trim leading blank-line bytes before the bare-vs-wrapped decision, so
+        // it does not hinge on stray leading whitespace: serialization
+        // normalises that away, so a classification that depended on it would
+        // make the round-trip non-idempotent (a bare record whose first line
+        // then reads as BEGIN would reparse as a wrapped card).
+        let input = trim_leading_eol(input.as_ref());
         let (first, _rest) = VcardLine::take(input)?;
 
         if first.name.get().eq_ignore_ascii_case("BEGIN") {

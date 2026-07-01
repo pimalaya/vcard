@@ -6,3 +6,10 @@
 # direnv (https://direnv.net/)
 .envrc
 .direnv
+
+# cargo-tarpaulin coverage reports
+/tarpaulin-report.html
+/tarpaulin-report.json
+/cobertura.xml
+/lcov.info
+*.profraw

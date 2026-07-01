@@ -1,0 +1,22 @@
+[package]
+name = "vcard-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vcard-rs = { path = "..", features = ["parser", "quoted-printable", "base64", "encoding"] }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+# Detach from the parent package so `cargo fuzz` builds this crate standalone.
+[workspace]
