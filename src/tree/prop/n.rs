@@ -7,10 +7,11 @@
 //! lenses that use the generic cursor, it pairs [`VcardN`] with a dedicated
 //! [`NCursor`] that names the five components, so callers write
 //! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. The
-//! decode/encode projections still delegate to [`VcardN`]'s inherent methods (in
-//! [`crate::tree::decode`] / [`crate::tree::encode`]); only the cursor is
-//! bespoke. Edits are byte preserving: writing one component leaves the others,
-//! and every parameter, untouched.
+//! decode/encode projections use the lens defaults, which delegate to
+//! [`VcardN`]'s [`Codec`] impl in [`crate::tree::codec::value`]; only the cursor
+//! is bespoke. Edits are byte
+//! preserving: writing one component leaves the others, and every parameter,
+//! untouched.
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -18,10 +19,10 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
+        codec::value::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, n::VcardN},
     version::VcardVersion,
@@ -38,21 +39,13 @@ impl VcardPropLens for N {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardN<'v> {
-        VcardN::decode(value)
-    }
-
-    fn encode(decoded: &VcardN<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> NCursor<'c, 'a> {
         NCursor { line }
     }
 }
 
 impl VcardPropSpec for N {
-    const PROP: VcardPropKind = VcardPropKind::N;
+    const KIND: VcardPropKind = VcardPropKind::N;
 
     fn cardinality(version: VcardVersion) -> VcardPropCardinality {
         match version {

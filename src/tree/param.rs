@@ -9,7 +9,7 @@
 //! tying a wire name to the decoded shape (a single value, or a list); those
 //! markers are the type-level keys for
 //! [`VcardLine::param`](crate::tree::line::VcardLine::param). The name dispatch
-//! for whole-line decoding lives in [`crate::tree::decode`].
+//! for whole-line decoding lives in [`crate::tree::codec::decode`].
 
 pub mod altid;
 pub mod calscale;
@@ -28,8 +28,7 @@ use core::fmt;
 
 use alloc::vec::Vec;
 
-use crate::param::VcardParamKind;
-use crate::tree::leaf::VcardLeaf;
+use crate::{param::VcardParamKind, tree::leaf::VcardLeaf};
 
 /// A parameter identified by type, projecting a generic syntax parameter onto a
 /// decoded value type and back.
@@ -95,6 +94,7 @@ impl fmt::Display for VcardParamNode<'_> {
 
         if let Some((first, rest)) = self.values.split_first() {
             write!(f, "={}", first.get())?;
+
             for value in rest {
                 write!(f, ",{}", value.get())?;
             }
@@ -121,8 +121,8 @@ fn split_param_values(values: &str) -> Vec<&str> {
             _ => {}
         }
     }
-    pieces.push(&values[start..]);
 
+    pieces.push(&values[start..]);
     pieces
 }
 
@@ -130,10 +130,7 @@ fn split_param_values(values: &str) -> Vec<&str> {
 mod tests {
     use alloc::{borrow::Cow, string::ToString, vec};
 
-    use crate::tree::{
-        param::VcardParamLens,
-        param::{VcardParamNode, language::LANGUAGE, pid::PID},
-    };
+    use crate::tree::param::{VcardParamLens, VcardParamNode, language::LANGUAGE, pid::PID};
 
     #[test]
     fn parses_quoted_values_then_round_trips() {

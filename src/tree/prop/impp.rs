@@ -12,7 +12,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, uri::VcardUri},
     version::VcardVersion,
@@ -29,21 +28,13 @@ impl VcardPropLens for IMPP {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardUri<'v> {
-        VcardUri::decode(value)
-    }
-
-    fn encode(decoded: &VcardUri<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for IMPP {
-    const PROP: VcardPropKind = VcardPropKind::Impp;
+    const KIND: VcardPropKind = VcardPropKind::Impp;
 
     fn allowed_versions() -> &'static [VcardVersion] {
         &[VcardVersion::V3_0, VcardVersion::V4_0]

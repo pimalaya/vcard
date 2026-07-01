@@ -11,10 +11,10 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
+        codec::value::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, client_pid_map::VcardClientPidMap},
     version::VcardVersion,
@@ -31,21 +31,13 @@ impl VcardPropLens for CLIENTPIDMAP {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardClientPidMap<'v> {
-        VcardClientPidMap::decode(value)
-    }
-
-    fn encode(decoded: &VcardClientPidMap<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> ClientPidMapCursor<'c, 'a> {
         ClientPidMapCursor { line }
     }
 }
 
 impl VcardPropSpec for CLIENTPIDMAP {
-    const PROP: VcardPropKind = VcardPropKind::ClientPidMap;
+    const KIND: VcardPropKind = VcardPropKind::ClientPidMap;
 
     fn allowed_versions() -> &'static [VcardVersion] {
         &[VcardVersion::V4_0]

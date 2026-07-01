@@ -11,10 +11,10 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
+        codec::value::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, gender::VcardGender},
     version::VcardVersion,
@@ -31,21 +31,13 @@ impl VcardPropLens for GENDER {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardGender<'v> {
-        VcardGender::decode(value)
-    }
-
-    fn encode(decoded: &VcardGender<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> GenderCursor<'c, 'a> {
         GenderCursor { line }
     }
 }
 
 impl VcardPropSpec for GENDER {
-    const PROP: VcardPropKind = VcardPropKind::Gender;
+    const KIND: VcardPropKind = VcardPropKind::Gender;
 
     fn allowed_versions() -> &'static [VcardVersion] {
         &[VcardVersion::V4_0]

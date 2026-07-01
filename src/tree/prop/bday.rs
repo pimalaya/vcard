@@ -12,7 +12,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, datetime::VcardDateAndOrTime},
     version::VcardVersion,
@@ -29,21 +28,13 @@ impl VcardPropLens for BDAY {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardDateAndOrTime<'v> {
-        VcardDateAndOrTime::decode(value)
-    }
-
-    fn encode(decoded: &VcardDateAndOrTime<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for BDAY {
-    const PROP: VcardPropKind = VcardPropKind::Bday;
+    const KIND: VcardPropKind = VcardPropKind::Bday;
 
     fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
         VcardPropCardinality::AtMostOne

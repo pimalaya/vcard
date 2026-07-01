@@ -11,23 +11,26 @@
 //! (existence, value kind, parameters, cardinality) and leaves the unknown
 //! parts alone. [`Valid`] is a marker a validated value earns; it is the only
 //! thing that can mint one, so holding a `Valid<Vcard>` is proof the check
-//! passed. The same per-property check backs the [`VcardPropBuilder`]'s
-//! strict construction.
+//! passed. The same per-property check backs the [`VcardPropBuilder`]'s strict
+//! construction.
 //!
-//! [`VcardPropBuilder`]: crate::tree::build::VcardPropBuilder
+//! [`VcardPropBuilder`]: crate::tree::builder::VcardPropBuilder
 
-use core::ops::Deref;
-use core::{error, fmt};
+use core::{error, fmt, ops::Deref};
 
 use alloc::vec::Vec;
 
-use crate::param::VcardParamKind;
-use crate::prop::{VcardProp, VcardPropKind, VcardPropName};
-use crate::tree::cst::VcardCst;
-use crate::tree::prop::{VcardPropCardinality, VcardPropSpecFns, prop_spec};
-use crate::value::VcardValueKind;
-use crate::vcard::Vcard;
-use crate::version::VcardVersion;
+use crate::{
+    param::VcardParamKind,
+    prop::{VcardProp, VcardPropKind, VcardPropName},
+    tree::{
+        cst::VcardCst,
+        prop::{VcardPropCardinality, VcardPropSpecFns, prop_spec},
+    },
+    value::VcardValueKind,
+    vcard::Vcard,
+    version::VcardVersion,
+};
 
 /// A way a known property breaks its RFC 6350 contract for the card version.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,16 +111,14 @@ impl error::Error for VcardValidateError {}
 impl Vcard<'_> {
     /// Check the card against RFC 6350 for its version: every known property
     /// must exist in the version, carry an allowed value kind and allowed
-    /// parameters, and respect its multiplicity. Extensions (unknown
-    /// properties and parameters) are conformant and pass. Collects every
-    /// violation.
+    /// parameters, and respect its multiplicity. Extensions (unknown properties
+    /// and parameters) are conformant and pass. Collects every violation.
     pub fn validate(&self) -> Result<(), Vec<VcardValidateError>> {
-        let version = self.version;
         let mut errors = Vec::new();
         let mut counts: Vec<(VcardPropKind, usize)> = Vec::new();
 
         for prop in &self.properties {
-            validate_prop(prop, version, &mut errors);
+            validate_prop(prop, self.version, &mut errors);
             if let VcardPropName::Kind(kind) = &prop.name {
                 match counts.iter_mut().find(|(seen, _)| *seen == *kind) {
                     Some((_, count)) => *count += 1,
@@ -131,14 +132,14 @@ impl Vcard<'_> {
         // often.
         for prop in VcardPropKind::ALL {
             let spec = prop_spec(prop);
-            if !(spec.allowed_versions)().contains(&version) {
+            if !(spec.allowed_versions)().contains(&self.version) {
                 continue;
             }
             let count = counts
                 .iter()
                 .find(|(seen, _)| *seen == prop)
                 .map_or(0, |(_, count)| *count);
-            let cardinality = (spec.cardinality)(version);
+            let cardinality = (spec.cardinality)(self.version);
             if !cardinality_ok(cardinality, count) {
                 errors.push(VcardValidateError::Cardinality {
                     prop,
@@ -167,12 +168,12 @@ pub(crate) fn validate_prop(
     let VcardPropName::Kind(kind) = &prop.name else {
         return;
     };
-    let kind = *kind;
-    let spec = prop_spec(kind);
+
+    let spec = prop_spec(*kind);
 
     if !(spec.allowed_versions)().contains(&version) {
         errors.push(VcardValidateError::PropVersion {
-            prop: kind,
+            prop: *kind,
             version,
         });
     }
@@ -180,7 +181,7 @@ pub(crate) fn validate_prop(
     let value_kind = prop.value.kind();
     if !value_kind.is_some_and(|kind| (spec.allowed_values)(version).contains(&kind)) {
         errors.push(VcardValidateError::ValueKind {
-            prop: kind,
+            prop: *kind,
             found: value_kind,
         });
     }
@@ -189,7 +190,7 @@ pub(crate) fn validate_prop(
         if let Some(param) = param.kind()
             && !param_allowed(&spec, version, param)
         {
-            errors.push(VcardValidateError::Param { prop: kind, param });
+            errors.push(VcardValidateError::Param { prop: *kind, param });
         }
     }
 }

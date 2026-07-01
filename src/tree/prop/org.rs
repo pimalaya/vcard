@@ -12,7 +12,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, org::VcardOrg},
     version::VcardVersion,
@@ -29,21 +28,13 @@ impl VcardPropLens for ORG {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardOrg<'v> {
-        VcardOrg::decode(value)
-    }
-
-    fn encode(decoded: &VcardOrg<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for ORG {
-    const PROP: VcardPropKind = VcardPropKind::Org;
+    const KIND: VcardPropKind = VcardPropKind::Org;
 
     fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
         &[VcardValueKind::Org]

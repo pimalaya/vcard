@@ -9,8 +9,9 @@
 //! bridge in the crate; decoding, encoding and serializing never fail, so this
 //! is the whole error surface.
 
+use core::{error, fmt};
+
 use alloc::string::String;
-use core::fmt;
 
 /// An error raised while parsing vCard text.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,4 +60,4 @@ impl fmt::Display for VcardParseError {
     }
 }
 
-impl core::error::Error for VcardParseError {}
+impl error::Error for VcardParseError {}

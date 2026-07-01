@@ -60,12 +60,13 @@ impl<'a, L: VcardPropSpec> VcardPropBuilder<'a, L> {
     /// (unknown, i.e. extension, parameters pass).
     pub fn build(self, value: VcardValue<'a>) -> Result<VcardProp<'a>, Vec<VcardValidateError>> {
         let prop = VcardProp {
-            name: VcardPropName::Kind(L::PROP),
+            name: VcardPropName::Kind(L::KIND),
             params: self.params,
             value,
         };
 
         let mut errors = Vec::new();
+
         validate_prop(&prop, self.version, &mut errors);
 
         if errors.is_empty() {
@@ -82,7 +83,7 @@ mod tests {
 
     use crate::{
         param::VcardParam,
-        tree::{build::VcardPropBuilder, prop::r#fn::FN},
+        tree::{builder::VcardPropBuilder, prop::r#fn::FN},
         value::{VcardValue, text::VcardText},
         version::VcardVersion,
     };

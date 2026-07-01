@@ -10,7 +10,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, text::VcardText},
     version::VcardVersion,
@@ -27,21 +26,13 @@ impl VcardPropLens for TEL {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardText<'v> {
-        VcardText::decode(value)
-    }
-
-    fn encode(decoded: &VcardText<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for TEL {
-    const PROP: VcardPropKind = VcardPropKind::Tel;
+    const KIND: VcardPropKind = VcardPropKind::Tel;
 
     fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
         &[VcardValueKind::Text, VcardValueKind::Uri]

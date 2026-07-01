@@ -9,7 +9,8 @@
 //! that separates the name from its parameters. It exposes its raw value and
 //! typed parameter access by lens, but stays generic: the meaning of the name
 //! and the decoding of the value belong to the lens markers and the
-//! [`decode`](crate::tree::decode) / [`encode`](crate::tree::encode) bridges.
+//! [`decode`](crate::tree::codec::decode) /
+//! [`encode`](crate::tree::codec::encode) bridges.
 //!
 //! Folding and stray blank lines are normalised away on parse, not preserved: a
 //! folded line unfolds to its logical content, blank lines are dropped, and the
@@ -25,10 +26,13 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::tree::codec::Escaper;
-use crate::tree::error::VcardParseError;
-use crate::tree::leaf::VcardLeaf;
-use crate::tree::{param::VcardParamLens, param::VcardParamNode, value::VcardValueNode};
+use crate::tree::{
+    codec::mode::Escaper,
+    error::VcardParseError,
+    leaf::VcardLeaf,
+    param::{VcardParamLens, VcardParamNode},
+    value::VcardValueNode,
+};
 
 /// One raw content line: a name, parameters, a value and the line ending.
 #[derive(Clone, Debug)]

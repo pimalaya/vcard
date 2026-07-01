@@ -4,12 +4,13 @@
 //!
 //! [`VcardValueNode`] is the syntactic peer of the decoded
 //! [`VcardValue`](crate::value::VcardValue): the text after a line's colon,
-//! split into `;`-separated components of `,`-separated [`VcardLeaf`] values. The
-//! splitting is purely generic (it counts and preserves separators so the value
-//! round-trips); what those components *mean* is the lens's business. The codec
-//! that turns components into decoded values and back ([`decode_at`], `set_at`,
-//! `decode_scalar_at`) lives on this type but is implemented in the
-//! [`decode`](crate::tree::decode) / [`encode`](crate::tree::encode) siblings.
+//! split into `;`-separated components of `,`-separated [`VcardLeaf`]
+//! values. The splitting is purely generic (it counts and preserves separators
+//! so the value round-trips); what those components *mean* is the lens's
+//! business. The codec that turns components into decoded values and back
+//! ([`decode_at`], `set_at`, `decode_scalar_at`) lives on this type but is
+//! implemented in the [`decode`](crate::tree::codec::decode) /
+//! [`encode`](crate::tree::codec::encode) siblings.
 //!
 //! [`decode_at`]: VcardValueNode::decode_at
 
@@ -17,13 +18,13 @@ use core::fmt;
 
 use alloc::vec::Vec;
 
-use crate::tree::codec::Escaper;
-use crate::tree::leaf::VcardLeaf;
+use crate::tree::{codec::mode::Escaper, leaf::VcardLeaf};
 
-/// A raw value: `;`-separated components, each a list of `,`-separated raw value
-/// leaves. Splitting is generic; joining on serialize restores the bytes. The
-/// `escaper` records which version's escaping rules the codec must apply; it is
-/// stamped from the card version after parsing (see `VcardCst::parse`).
+/// A raw value: `;`-separated components, each a list of `,`-separated raw
+/// value leaves. Splitting is generic; joining on serialize restores the
+/// bytes. The `escaper` records which version's escaping rules the codec must
+/// apply; it is stamped from the card version after parsing (see
+/// `VcardCst::parse`).
 #[derive(Clone, Debug, Default)]
 pub struct VcardValueNode<'a> {
     /// The components, in source order.
@@ -70,10 +71,12 @@ impl fmt::Display for VcardValueNode<'_> {
             if i > 0 {
                 f.write_str(";")?;
             }
+
             for (j, leaf) in component.iter().enumerate() {
                 if j > 0 {
                     f.write_str(",")?;
                 }
+
                 f.write_str(leaf.get())?;
             }
         }

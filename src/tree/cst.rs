@@ -11,8 +11,8 @@
 //! (`push`), exports raw contents ([`Display`](core::fmt::Display) /
 //! `to_string`), and offers typed access by lens (`prop`, `prop_mut`,
 //! `remove`). The semantic projection ([`decode`](VcardCst::decode)) and the
-//! codec live in the [`decode`](crate::tree::decode) /
-//! [`encode`](crate::tree::encode) siblings.
+//! codec live in the [`decode`](crate::tree::codec::decode) /
+//! [`encode`](crate::tree::codec::encode) siblings.
 
 use core::fmt;
 
@@ -20,10 +20,7 @@ use alloc::{string::ToString, vec, vec::Vec};
 
 use crate::{
     prop::VcardProp,
-    tree::{
-        codec::Escaper, encode::reescape_line, error::VcardParseError, line::VcardLine,
-        prop::VcardPropLens,
-    },
+    tree::{codec::mode::Escaper, error::VcardParseError, line::VcardLine, prop::VcardPropLens},
     version::VcardVersion,
 };
 
@@ -58,6 +55,7 @@ impl<'a> VcardCst<'a> {
     /// are.
     pub fn parse(input: &'a str) -> Result<Self, VcardParseError> {
         let (begin, mut rest) = VcardLine::take(input)?;
+
         if !begin.name.get().eq_ignore_ascii_case("BEGIN") {
             return Err(VcardParseError::ExpectedBegin(begin.name.get().to_string()));
         }
@@ -81,6 +79,7 @@ impl<'a> VcardCst<'a> {
                     .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
                     .map(|line| Escaper::for_version_str(line.raw_value()))
                     .unwrap_or_default();
+
                 for line in &mut props {
                     line.value.escaper = escaper;
                 }
@@ -112,8 +111,6 @@ impl<'a> VcardCst<'a> {
             .unwrap_or(VcardVersion::V4_0)
     }
 
-    // --- write: build / edit
-
     /// Append a typed property, encoding it into a line. Adding to a *parsed*
     /// card leaves every existing line byte for byte intact (they stay
     /// borrowed); only the new line is canonical. The building primitive.
@@ -123,22 +120,16 @@ impl<'a> VcardCst<'a> {
             .map(|line| Escaper::for_version_str(line.raw_value()))
             .unwrap_or_default();
 
-        let mut line = prop.encode();
-        if escaper != Escaper::Modern {
-            reescape_line(&mut line, escaper);
-        }
-        self.props.push(line);
+        self.props.push(prop.encode(escaper));
         self
     }
 
     /// Remove every property of type `L`.
     pub fn remove<L: VcardPropLens>(&mut self) -> &mut Self {
         self.props
-            .retain(|line| !line.name.get().eq_ignore_ascii_case(&L::PROP));
+            .retain(|line| !line.name.get().eq_ignore_ascii_case(&L::KIND));
         self
     }
-
-    // --- read: typed access
 
     /// The first property of type `L`, decoded into a borrowed snapshot. The
     /// card version is threaded through so version-specific value shapes
@@ -148,15 +139,15 @@ impl<'a> VcardCst<'a> {
         let version = self.version();
         self.props
             .iter()
-            .find(|line| line.name.get().eq_ignore_ascii_case(&L::PROP))
-            .map(|line| L::decode_versioned(line, version))
+            .find(|line| line.name.get().eq_ignore_ascii_case(&L::KIND))
+            .map(|line| L::decode(line, version))
     }
 
     /// The first property of type `L`, as a typed cursor for in-place editing.
     pub fn prop_mut<L: VcardPropLens>(&mut self) -> Option<L::Cursor<'_, 'a>> {
         self.props
             .iter_mut()
-            .find(|line| line.name.get().eq_ignore_ascii_case(&L::PROP))
+            .find(|line| line.name.get().eq_ignore_ascii_case(&L::KIND))
             .map(|line| L::cursor(line))
     }
 }

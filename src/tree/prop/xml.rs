@@ -10,7 +10,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::text::VcardText,
     version::VcardVersion,
@@ -27,21 +26,13 @@ impl VcardPropLens for XML {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardText<'v> {
-        VcardText::decode(value)
-    }
-
-    fn encode(decoded: &VcardText<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for XML {
-    const PROP: VcardPropKind = VcardPropKind::Xml;
+    const KIND: VcardPropKind = VcardPropKind::Xml;
 
     fn allowed_versions() -> &'static [VcardVersion] {
         &[VcardVersion::V4_0]

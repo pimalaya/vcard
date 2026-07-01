@@ -12,7 +12,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, language::VcardLanguageTag},
     version::VcardVersion,
@@ -29,21 +28,13 @@ impl VcardPropLens for LANG {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardLanguageTag<'v> {
-        VcardLanguageTag::decode(value)
-    }
-
-    fn encode(decoded: &VcardLanguageTag<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for LANG {
-    const PROP: VcardPropKind = VcardPropKind::Lang;
+    const KIND: VcardPropKind = VcardPropKind::Lang;
 
     fn allowed_versions() -> &'static [VcardVersion] {
         &[VcardVersion::V4_0]

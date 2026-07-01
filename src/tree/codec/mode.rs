@@ -1,9 +1,10 @@
-//! # Codec mode
+//! # Escaping mode
 //!
-//! The one place the syntax tree consults the card version: value escaping (RFC
-//! 6350 3.4) differs between vCard 2.1 and the later versions, so a node
-//! carries an [`Escaper`] telling the [`decode`](crate::tree::decode) /
-//! [`encode`](crate::tree::encode) bridges which rules to apply.
+//! The one place the codec consults the card version: value escaping (RFC 6350
+//! 3.4) differs between vCard 2.1 and the later versions, so a value node
+//! carries an [`Escaper`] telling the sibling
+//! [`escape`](crate::tree::codec::escape) and
+//! [`unescape`](crate::tree::codec::unescape) codecs which rules to apply.
 
 use crate::version::VcardVersion;
 

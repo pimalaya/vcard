@@ -1,27 +1,33 @@
 //! # Decode (syntax to model)
 //!
-//! The read side of the bridge: project a raw syntax tree onto the decoded
-//! model.
+//! The read side of the structural bridge: project a raw syntax tree onto the
+//! decoded model. A [`VcardValueNode`] decodes its components, a
+//! [`VcardParamNode`] decodes into a [`VcardParam`], a [`VcardLine`] decodes
+//! into a [`VcardProp`], and a [`VcardCst`] decodes into a whole [`Vcard`].
 //!
-//! `unescape` is the read codec (it resolves the RFC 6350 3.4 value escapes).
-//! On top of it sit the `decode` methods, one per syntactic node: a
-//! [`VcardValueNode`] decodes its components, a [`VcardParamNode`] decodes into
-//! a [`VcardParam`], a [`VcardLine`] decodes into a [`VcardProp`], and a
-//! [`VcardCst`] decodes into a whole [`Vcard`]. A property's value kind is no
-//! longer chosen by a name match: [`VcardLine::decode`] resolves the prop name
-//! to a [`VcardPropKind`], asks its spec for the in-force value kind (version
-//! plus any declared `VALUE`), then routes to that kind's decoder. The
-//! parameter name dispatch is still the match in [`VcardParamNode::decode`].
-//! Each decoded value type gets an inherent `decode` that both paths delegate
-//! to.
+//! A property's value kind is resolved through its spec, not a name match:
+//! [`VcardLine::decode`] maps the name to a [`VcardPropKind`], asks the spec for
+//! the in-force value kind (version plus any declared `VALUE`), then routes to
+//! that kind's decoder. The parameter name dispatch is the match in
+//! [`VcardParamNode::decode`]. Value escapes are resolved by the sibling
+//! [`unescape`](crate::tree::codec::unescape) codec and quoted-printable by
+//! [`quoted_printable`](crate::tree::codec::quoted_printable).
 
-use alloc::{borrow::Cow, string::String, vec::Vec};
+use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
     param::{VcardParam, VcardParamKind},
     prop::{VcardProp, VcardPropKind, VcardPropName},
     tree::{
-        codec::Escaper, cst::VcardCst, line::VcardLine, param::VcardParamNode, prop::prop_spec,
+        codec::{
+            quoted_printable::qp_decode,
+            unescape::{unescape, unescape_with},
+            value::Codec,
+        },
+        cst::VcardCst,
+        line::VcardLine,
+        param::VcardParamNode,
+        prop::prop_spec,
         value::VcardValueNode,
     },
     value::{
@@ -80,19 +86,7 @@ impl VcardLine<'_> {
 
         let value = match name.parse::<VcardPropKind>() {
             Ok(prop) => self.decode_value(prop, version),
-            Err(_) => VcardValue::Unknown(VcardUnknownValue {
-                components: self
-                    .value
-                    .components
-                    .iter()
-                    .map(|component| {
-                        component
-                            .iter()
-                            .map(|v| unescape_with(v.get(), self.value.escaper))
-                            .collect()
-                    })
-                    .collect(),
-            }),
+            Err(_) => VcardValue::Unknown(VcardUnknownValue::decode(&self.value)),
         };
 
         // NOTE: QUOTED-PRINTABLE values carry their octets in the wire text;
@@ -119,7 +113,7 @@ impl VcardLine<'_> {
     ) -> VcardValue<'_> {
         let declared = self.declared_value_kind();
         let kind = (prop_spec(prop).value)(version, declared);
-        decode_value_kind(kind, &self.value, version)
+        decode_value_kind(kind, &self.value)
     }
 
     /// The value kind named by this line's `VALUE` parameter, if any. Only the
@@ -140,13 +134,10 @@ impl VcardLine<'_> {
     }
 }
 
-/// Decode a value node as the given value kind, branching on the version only
-/// where the value's wire shape is version-specific (the `GEO` pair separator).
-fn decode_value_kind<'v>(
-    kind: VcardValueKind,
-    node: &'v VcardValueNode<'_>,
-    version: VcardVersion,
-) -> VcardValue<'v> {
+/// Decode a value node as the given value kind, routing to that value type's
+/// [`Codec`]. No version is needed: the one version-specific shape (the `GEO`
+/// pair separator) is resolved from the node's escaper inside its codec.
+fn decode_value_kind<'v>(kind: VcardValueKind, node: &'v VcardValueNode<'_>) -> VcardValue<'v> {
     match kind {
         VcardValueKind::Text => VcardValue::Text(VcardText::decode(node)),
         VcardValueKind::TextList => VcardValue::TextList(VcardTextList::decode(node)),
@@ -162,39 +153,8 @@ fn decode_value_kind<'v>(
         VcardValueKind::Gender => VcardValue::Gender(VcardGender::decode(node)),
         VcardValueKind::Org => VcardValue::Org(VcardOrg::decode(node)),
         VcardValueKind::ClientPidMap => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
-        VcardValueKind::Geo => VcardValue::Geo(decode_geo_pair(node, version)),
-        // NOTE: base64 kept verbatim; a 2.1 / 3.0 URI reference is reached via
-        // `VALUE=uri`, which resolves to the `Uri` kind above, not here.
-        VcardValueKind::Binary => VcardValue::Binary(VcardBinary::Base64(node.decode_scalar_at(0))),
-    }
-}
-
-/// Decode a `GEO` coordinate pair: `,`-separated in 2.1, `;`-separated
-/// otherwise.
-fn decode_geo_pair<'v>(node: &'v VcardValueNode<'_>, version: VcardVersion) -> VcardGeo<'v> {
-    match version {
-        VcardVersion::V2_1 => VcardGeo::decode_comma(node),
-        _ => VcardGeo::decode_pair(node),
-    }
-}
-
-impl VcardGeo<'_> {
-    /// Decode a 3.0 `GEO` pair (`latitude;longitude`) from a syntax node.
-    pub fn decode_pair<'v>(node: &'v VcardValueNode<'_>) -> VcardGeo<'v> {
-        VcardGeo {
-            latitude: node.decode_scalar_at(0),
-            longitude: node.decode_scalar_at(1),
-        }
-    }
-
-    /// Decode a 2.1 `GEO` pair (`latitude,longitude`) from a syntax node.
-    pub fn decode_comma<'v>(node: &'v VcardValueNode<'_>) -> VcardGeo<'v> {
-        let mut parts = node.decode_at(0).into_iter();
-
-        VcardGeo {
-            latitude: parts.next().unwrap_or_default(),
-            longitude: parts.next().unwrap_or_default(),
-        }
+        VcardValueKind::Geo => VcardValue::Geo(VcardGeo::decode(node)),
+        VcardValueKind::Binary => VcardValue::Binary(VcardBinary::decode(node)),
     }
 }
 
@@ -285,114 +245,6 @@ impl VcardValueNode<'_> {
     }
 }
 
-impl VcardText<'_> {
-    /// Decode a single text value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardText<'v> {
-        VcardText(node.decode_scalar_at(0))
-    }
-}
-
-impl VcardTextList<'_> {
-    /// Decode a comma-separated text list from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardTextList<'v> {
-        VcardTextList(node.decode_at(0))
-    }
-}
-
-impl VcardUri<'_> {
-    /// Decode a URI value from a syntax node. A URI's comma is literal, not a
-    /// list separator, so the whole component is kept (not truncated at `,`).
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardUri<'v> {
-        VcardUri(node.decode_joined_at(0))
-    }
-}
-
-impl VcardDateAndOrTime<'_> {
-    /// Decode a date-and-or-time value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardDateAndOrTime<'v> {
-        VcardDateAndOrTime(node.decode_scalar_at(0))
-    }
-}
-
-impl VcardTimestamp<'_> {
-    /// Decode a timestamp value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardTimestamp<'v> {
-        VcardTimestamp(node.decode_scalar_at(0))
-    }
-}
-
-impl VcardLanguageTag<'_> {
-    /// Decode a language-tag value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardLanguageTag<'v> {
-        VcardLanguageTag(node.decode_scalar_at(0))
-    }
-}
-
-impl VcardUtcOffset<'_> {
-    /// Decode a UTC-offset value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardUtcOffset<'v> {
-        VcardUtcOffset(node.decode_scalar_at(0))
-    }
-}
-
-impl VcardN<'_> {
-    /// Decode the structured N value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardN<'v> {
-        VcardN {
-            family: node.decode_at(0),
-            given: node.decode_at(1),
-            additional: node.decode_at(2),
-            prefixes: node.decode_at(3),
-            suffixes: node.decode_at(4),
-        }
-    }
-}
-
-impl VcardAdr<'_> {
-    /// Decode the structured ADR value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardAdr<'v> {
-        VcardAdr {
-            po_box: node.decode_at(0),
-            extended: node.decode_at(1),
-            street: node.decode_at(2),
-            locality: node.decode_at(3),
-            region: node.decode_at(4),
-            postal_code: node.decode_at(5),
-            country: node.decode_at(6),
-        }
-    }
-}
-
-impl VcardGender<'_> {
-    /// Decode the structured GENDER value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardGender<'v> {
-        VcardGender {
-            sex: node.decode_scalar_at(0),
-            identity: node.decode_scalar_at(1),
-        }
-    }
-}
-
-impl VcardOrg<'_> {
-    /// Decode the structured ORG value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardOrg<'v> {
-        let units = (0..node.components.len())
-            .map(|i| node.decode_scalar_at(i))
-            .collect();
-        VcardOrg(units)
-    }
-}
-
-impl VcardClientPidMap<'_> {
-    /// Decode the structured CLIENTPIDMAP value from a syntax node.
-    pub fn decode<'v>(node: &'v VcardValueNode<'_>) -> VcardClientPidMap<'v> {
-        VcardClientPidMap {
-            id: node.decode_scalar_at(0),
-            uri: node.decode_scalar_at(1),
-        }
-    }
-}
-
 /// Whether a parameter is `ENCODING=QUOTED-PRINTABLE` or the bare 2.1 token.
 fn param_is_quoted_printable(param: &VcardParamNode<'_>) -> bool {
     let name = param.name.get();
@@ -438,120 +290,13 @@ fn qp_decode_value(value: VcardValue<'_>) -> VcardValue<'_> {
     }
 }
 
-/// Decode QUOTED-PRINTABLE `=XX` octets (soft line breaks are already joined by
-/// the tokeniser). Bytes are reassembled then read as UTF-8 (lossy).
-pub(crate) fn qp_decode(input: Cow<'_, str>) -> Cow<'_, str> {
-    if !input.as_bytes().contains(&b'=') {
-        return input;
-    }
-
-    let bytes = input.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-
-    while i < bytes.len() {
-        if bytes[i] == b'='
-            && i + 2 < bytes.len()
-            && let (Some(hi), Some(lo)) = (hex_value(bytes[i + 1]), hex_value(bytes[i + 2]))
-        {
-            out.push(hi << 4 | lo);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-
-    Cow::Owned(String::from_utf8_lossy(&out).into_owned())
-}
-
-/// The value of a hex digit, or `None`.
-fn hex_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        _ => None,
-    }
-}
-
-/// Resolve value escapes by the card's escaping mode.
-pub(crate) fn unescape_with(text: &str, escaper: Escaper) -> Cow<'_, str> {
-    match escaper {
-        Escaper::Modern => unescape_modern(text),
-        Escaper::V2_1 => unescape_v21(text),
-    }
-}
-
-/// Resolve value escapes with the modern (RFC 2426 / 6350) rules. The default
-/// used wherever the escaping mode is not version-specific (parameters, the
-/// version-blind lens path).
-pub(crate) fn unescape(text: &str) -> Cow<'_, str> {
-    unescape_modern(text)
-}
-
-/// Resolve the RFC 2426 / 6350 3.4 value escapes `\\` `\,` `\;` `\n`, borrowing
-/// when there is nothing to unescape.
-fn unescape_modern(text: &str) -> Cow<'_, str> {
-    if !text.contains('\\') {
-        return Cow::Borrowed(text);
-    }
-
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars();
-
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-
-        match chars.next() {
-            Some('n' | 'N') => out.push('\n'),
-            Some(other) => out.push(other),
-            None => out.push('\\'),
-        }
-    }
-
-    Cow::Owned(out)
-}
-
-/// Resolve the vCard 2.1 value escape `\;` only; a backslash before anything
-/// else stays literal.
-fn unescape_v21(text: &str) -> Cow<'_, str> {
-    if !text.contains('\\') {
-        return Cow::Borrowed(text);
-    }
-
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars();
-
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-
-        match chars.next() {
-            Some(';') => out.push(';'),
-            Some(other) => {
-                out.push('\\');
-                out.push(other);
-            }
-            None => out.push('\\'),
-        }
-    }
-
-    Cow::Owned(out)
-}
-
 #[cfg(test)]
 mod tests {
     use alloc::{borrow::Cow, string::ToString, vec};
 
     use crate::{
         param::VcardParam,
-        tree::{cst::VcardCst, decode::unescape, value::VcardValueNode},
+        tree::{codec::value::Codec, cst::VcardCst, value::VcardValueNode},
         value::{
             VcardValue, binary::VcardBinary, geo::VcardGeo, n::VcardN, text::VcardText,
             uri::VcardUri,
@@ -747,12 +492,6 @@ mod tests {
             "{}",
             card.to_string(),
         );
-    }
-
-    #[test]
-    fn unescapes_value_escapes_and_borrows_when_clean() {
-        assert_eq!(unescape(r"a\,b\;c\nd"), "a,b;c\nd");
-        assert!(matches!(unescape("plain"), Cow::Borrowed("plain")));
     }
 
     #[test]

@@ -12,7 +12,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::text::VcardText,
     version::VcardVersion,
@@ -29,21 +28,13 @@ impl VcardPropLens for LABEL {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardText<'v> {
-        VcardText::decode(value)
-    }
-
-    fn encode(decoded: &VcardText<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for LABEL {
-    const PROP: VcardPropKind = VcardPropKind::Label;
+    const KIND: VcardPropKind = VcardPropKind::Label;
 
     fn allowed_versions() -> &'static [VcardVersion] {
         &[VcardVersion::V2_1, VcardVersion::V3_0]

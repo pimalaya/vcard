@@ -10,7 +10,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, uri::VcardUri},
     version::VcardVersion,
@@ -27,21 +26,13 @@ impl VcardPropLens for UID {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardUri<'v> {
-        VcardUri::decode(value)
-    }
-
-    fn encode(decoded: &VcardUri<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for UID {
-    const PROP: VcardPropKind = VcardPropKind::Uid;
+    const KIND: VcardPropKind = VcardPropKind::Uid;
 
     fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
         VcardPropCardinality::AtMostOne

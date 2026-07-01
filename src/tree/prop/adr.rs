@@ -13,10 +13,10 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
+        codec::value::Codec,
         line::VcardLine,
         param::VcardParamLens,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, adr::VcardAdr},
     version::VcardVersion,
@@ -33,21 +33,13 @@ impl VcardPropLens for ADR {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardAdr<'v> {
-        VcardAdr::decode(value)
-    }
-
-    fn encode(decoded: &VcardAdr<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> AdrCursor<'c, 'a> {
         AdrCursor { line }
     }
 }
 
 impl VcardPropSpec for ADR {
-    const PROP: VcardPropKind = VcardPropKind::Adr;
+    const KIND: VcardPropKind = VcardPropKind::Adr;
 
     fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
         &[VcardValueKind::Adr]

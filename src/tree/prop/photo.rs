@@ -4,8 +4,9 @@
 //! value shape is version-specific, so the lens
 //! decodes through the card version: a `data:` URI in 4.0
 //! ([`VcardValue::Uri`]), inline base64 or a URI reference in 2.1 / 3.0
-//! ([`VcardValue::Binary`]). The version-blind
-//! [`decode`](VcardPropLens::decode) assumes the 4.0 URI form.
+//! ([`VcardValue::Binary`]). The lens overrides
+//! [`decode`](VcardPropLens::decode) to resolve the shape from the version
+//! through the property spec.
 
 use crate::{
     param::VcardParamKind,
@@ -14,9 +15,8 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
-    value::{VcardValue, VcardValueKind, uri::VcardUri},
+    value::{VcardValue, VcardValueKind},
     version::VcardVersion,
 };
 
@@ -31,16 +31,8 @@ impl VcardPropLens for PHOTO {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardValue<'v> {
-        VcardValue::Uri(VcardUri::decode(value))
-    }
-
-    fn decode_versioned<'v>(line: &'v VcardLine<'_>, version: VcardVersion) -> VcardValue<'v> {
+    fn decode<'v>(line: &'v VcardLine<'_>, version: VcardVersion) -> VcardValue<'v> {
         line.decode_value(VcardPropKind::Photo, version)
-    }
-
-    fn encode(decoded: &VcardValue<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
     }
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
@@ -49,7 +41,7 @@ impl VcardPropLens for PHOTO {
 }
 
 impl VcardPropSpec for PHOTO {
-    const PROP: VcardPropKind = VcardPropKind::Photo;
+    const KIND: VcardPropKind = VcardPropKind::Photo;
 
     fn allowed_values(version: VcardVersion) -> &'static [VcardValueKind] {
         match version {

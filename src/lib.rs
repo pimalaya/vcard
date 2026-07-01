@@ -39,8 +39,8 @@
 //! The syntax tree ([`tree`], gated behind the `parser` feature, on by default)
 //! is everything byte-faithful. Its hub is [`VcardCst`](tree::cst::VcardCst), a
 //! tree of generic nodes that reproduces the wire bytes exactly. Parsing fills
-//! a CST; [`decode`](tree::decode) projects it onto the decoded
-//! [`Vcard`](vcard::Vcard); [`encode`](tree::encode) (and `From<Vcard>`)
+//! a CST; [`decode`](tree::codec::decode) projects it onto the decoded
+//! [`Vcard`](vcard::Vcard); [`encode`](tree::codec::encode) (and `From<Vcard>`)
 //! projects the model back to a canonical CST. Per-property lens markers
 //! ([`VcardPropLens`](tree::prop::VcardPropLens)) read or edit a single line
 //! through the byte-preserving [`cursor`](tree::cursor)s, so editing one

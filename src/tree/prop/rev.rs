@@ -10,7 +10,6 @@ use crate::{
         cursor::VcardValueCursor,
         line::VcardLine,
         prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
-        value::VcardValueNode,
     },
     value::{VcardValueKind, datetime::VcardTimestamp},
     version::VcardVersion,
@@ -27,21 +26,13 @@ impl VcardPropLens for REV {
     where
         'a: 'c;
 
-    fn decode<'v>(value: &'v VcardValueNode<'_>) -> VcardTimestamp<'v> {
-        VcardTimestamp::decode(value)
-    }
-
-    fn encode(decoded: &VcardTimestamp<'_>) -> VcardValueNode<'static> {
-        decoded.encode()
-    }
-
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
     }
 }
 
 impl VcardPropSpec for REV {
-    const PROP: VcardPropKind = VcardPropKind::Rev;
+    const KIND: VcardPropKind = VcardPropKind::Rev;
 
     fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
         VcardPropCardinality::AtMostOne
