@@ -109,8 +109,8 @@ impl str::FromStr for VcardValueKind {
     type Err = ParseVcardValueKindError;
 
     /// The value kind named by a `VALUE` parameter (case-insensitive). Liberal:
-    /// it maps every wire spelling (and a few aliases) onto a model kind, leaving
-    /// membership checks to a later validation tier.
+    /// it maps every wire spelling (and a few aliases) onto a model kind,
+    /// leaving membership checks to a later validation tier.
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
         match kind {
             kind if kind.eq_ignore_ascii_case("ADR") => Ok(Self::Adr),

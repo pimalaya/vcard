@@ -37,10 +37,10 @@ use crate::tree::{
 /// One raw content line: a name, parameters, a value and the line ending.
 ///
 /// This is a *logical* line, not a physical one: [`take`](Self::take) unfolds
-/// RFC 6350 3.2 folded continuations and QUOTED-PRINTABLE soft line breaks, so a
-/// `VcardLine` never holds an internal line break, only its terminating
-/// [`eol`](Self::eol). It is also the syntactic unit for the `BEGIN` / `VERSION`
-/// / `END` envelope lines, not only decoded properties.
+/// RFC 6350 3.2 folded continuations and QUOTED-PRINTABLE soft line breaks, so
+/// a `VcardLine` never holds an internal line break, only its terminating
+/// [`eol`](Self::eol). It is also the syntactic unit for the `BEGIN` /
+/// `VERSION` / `END` envelope lines, not only decoded properties.
 #[derive(Clone, Debug)]
 pub struct VcardLine<'a> {
     /// The property name leaf, with any group prefix.
@@ -159,8 +159,8 @@ impl<'a> VcardLine<'a> {
             .unwrap_or(b"")
     }
 
-    /// The raw first value as UTF-8 text, lossily; for the ASCII envelope values
-    /// (`VERSION`) and diagnostics.
+    /// The raw first value as UTF-8 text, lossily; for the ASCII envelope
+    /// values (`VERSION`) and diagnostics.
     pub fn raw_value_str(&self) -> Cow<'_, str> {
         self.value
             .components
@@ -201,8 +201,8 @@ impl<'a> VcardLine<'a> {
 
     /// Split one logical line into a typed line at the colon, separating the
     /// name, its parameters and the value. The head (name and parameters) must
-    /// be valid UTF-8, as every version's grammar guarantees; only the value may
-    /// carry a foreign charset, so it is kept as raw bytes.
+    /// be valid UTF-8, as every version's grammar guarantees; only the value
+    /// may carry a foreign charset, so it is kept as raw bytes.
     fn parse<'b>(content: &'b [u8], eol: &'b [u8]) -> Result<VcardLine<'b>, VcardParseError> {
         let Some(colon) = content.iter().position(|&b| b == b':') else {
             return Err(VcardParseError::MissingPropertyColon(lossy(content)));
@@ -346,7 +346,8 @@ mod tests {
 
     #[test]
     fn keeps_whitespace_beyond_the_single_fold_indicator() {
-        // only the first space is the fold marker; the rest is value content.
+        // NOTE: only the first space is the fold marker; the rest is value
+        // content.
         let (line, _) = VcardLine::take(b"NOTE:foo\r\n  bar\r\n").unwrap();
         assert_eq!(line.raw_value_str(), "foo bar");
     }

@@ -402,7 +402,8 @@ mod tests {
         ] {
             assert_eq!(VcardPropKind::from_str(&kind).ok(), Some(kind));
         }
-        // Case-insensitive on the way in; unknown names are not in the vocabulary.
+        // NOTE: Case-insensitive on the way in; unknown names are not in the
+        // vocabulary.
         assert_eq!(VcardPropKind::from_str("fn").ok(), Some(VcardPropKind::Fn));
         assert!(VcardPropKind::from_str("X-CUSTOM").is_err());
     }

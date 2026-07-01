@@ -1,9 +1,9 @@
 //! # ADR lens
 //!
 //! The `ADR` (structured address) property lens, with a cursor naming its seven
-//! components. Like [`VcardNCursor`](crate::tree::prop::n::VcardNCursor), getters decode
-//! and setters encode in place, leaving the other components (and every
-//! parameter) byte for byte intact.
+//! components. Like [`VcardNCursor`](crate::tree::prop::n::VcardNCursor),
+//! getters decode and setters encode in place, leaving the other components
+//! (and every parameter) byte for byte intact.
 //!
 //! See RFC 6350 6.3.1.
 

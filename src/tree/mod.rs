@@ -7,9 +7,9 @@
 //! [`param`], [`value`], [`leaf`]) that round-trips the wire bytes exactly. On
 //! top of the generic tree sit the per-name lens markers, each carrying the
 //! `VcardPropLens` / `VcardParamLens` contract (plus the per-property
-//! `VcardPropSpec`) defined in [`prop`] / [`param`], the in-place edit cursor in
-//! [`value`], the [`codec`] that projects between the tree and the decoded model
-//! (decode / encode plus the value escaping), and the strict-out layer in
+//! `VcardPropSpec`) defined in [`prop`] / [`param`], the in-place edit cursor
+//! in [`value`], the [`codec`] that projects between the tree and the decoded
+//! model (decode / encode plus the value escaping), and the strict-out layer in
 //! [`vcard`] (the spec-driven builder and validation). Parsing is the only
 //! fallible step, so its [`error`] type lives here too. This whole layer is
 //! gated behind the `parser` feature, so the decoded model can be depended on

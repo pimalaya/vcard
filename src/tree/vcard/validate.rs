@@ -10,8 +10,9 @@
 //! [`VcardPropSpec`](crate::tree::prop::VcardPropSpec) for the card version
 //! (existence, value kind, parameters, cardinality) and leaves the unknown
 //! parts alone. A passing check yields a [`Valid`] marker: it is the only thing
-//! that can mint one, so holding a `Valid<Vcard>` is proof the check passed. The
-//! same per-property check backs the [`VcardPropBuilder`]'s strict construction.
+//! that can mint one, so holding a `Valid<Vcard>` is proof the check passed.
+//! The same per-property check backs the [`VcardPropBuilder`]'s strict
+//! construction.
 //!
 //! [`VcardPropBuilder`]: crate::tree::vcard::builder::VcardPropBuilder
 //!
@@ -127,11 +128,12 @@ impl fmt::Display for VcardValidateError {
 impl error::Error for VcardValidateError {}
 
 impl<'a> Vcard<'a> {
-    /// Check the card against RFC 6350 for its version: every known property must
-    /// exist in the version, carry an allowed value kind and allowed parameters,
-    /// and respect its multiplicity. Extensions (unknown properties and
-    /// parameters) are conformant and pass. On success the card is yielded back
-    /// as a [`Valid`] proof; on failure every violation is collected.
+    /// Check the card against RFC 6350 for its version: every known property
+    /// must exist in the version, carry an allowed value kind and allowed
+    /// parameters, and respect its multiplicity. Extensions (unknown
+    /// properties and parameters) are conformant and pass. On success the card
+    /// is yielded back as a [`Valid`] proof; on failure every violation is
+    /// collected.
     pub fn validate(self) -> Result<Valid<Vcard<'a>>, Vec<VcardValidateError>> {
         let mut errors = Vec::new();
         let mut counts: Vec<(VcardPropKind, usize)> = Vec::new();
@@ -250,10 +252,10 @@ fn cardinality_ok(cardinality: VcardPropCardinality, count: usize) -> bool {
 }
 
 /// A value that has passed validation. The only way to mint one is a validating
-/// conversion ([`Vcard::validate`] or its `TryFrom`), so holding a `Valid<T>` is
-/// proof the check passed; it derefs to the inner value for reads and yields it
-/// back with [`into_inner`](Self::into_inner). It is never constructed directly:
-/// it is a marker, not data.
+/// conversion ([`Vcard::validate`] or its `TryFrom`), so holding a `Valid<T>`
+/// is proof the check passed; it derefs to the inner value for reads and yields
+/// it back with [`into_inner`](Self::into_inner). It is never constructed
+/// directly: it is a marker, not data.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Valid<T>(T);
 
@@ -328,7 +330,7 @@ mod tests {
                     vec![],
                     VcardValue::Text(VcardText(Cow::Borrowed("John"))),
                 ),
-                // An X- extension property is conformant.
+                // NOTE: An X- extension property is conformant.
                 prop("X-FOO", vec![], VcardValue::Unknown(Default::default())),
             ],
         );
@@ -351,8 +353,9 @@ mod tests {
 
     #[test]
     fn allows_charset_in_2_1_but_not_4_0() {
-        // N and FN make the envelope conformant in both versions, so only the
-        // CHARSET parameter (legal in 2.1, not 4.0) decides the outcome.
+        // NOTE: N and FN make the envelope conformant in both versions, so
+        // only the CHARSET parameter (legal in 2.1, not 4.0) decides the
+        // outcome.
         let with_charset = |version| {
             card(
                 version,
@@ -379,7 +382,7 @@ mod tests {
 
     #[test]
     fn flags_a_required_property_that_is_absent() {
-        // 4.0 requires FN (one-or-more); a card without it fails.
+        // NOTE: 4.0 requires FN (one-or-more); a card without it fails.
         let errors = card(VcardVersion::V4_0, vec![]).validate().unwrap_err();
         assert!(errors.iter().any(|error| matches!(
             error,

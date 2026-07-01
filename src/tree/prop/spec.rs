@@ -66,10 +66,10 @@ pub trait VcardPropSpec {
     }
 }
 
-/// The spec of a property as function pointers, the runtime bridge from the open
-/// [`VcardPropKind`] back to the static per-marker [`VcardPropSpec`] impls. The
-/// decoder and the validator dispatch a prop kind through [`prop_spec`] and then
-/// call these, instead of each owning a 42-arm match.
+/// The spec of a property as function pointers, the runtime bridge from the
+/// open [`VcardPropKind`] back to the static per-marker [`VcardPropSpec`]
+/// impls. The decoder and the validator dispatch a prop kind through
+/// [`prop_spec`] and then call these, instead of each owning a 42-arm match.
 pub(crate) struct VcardPropSpecFns {
     /// See [`VcardPropSpec::allowed_versions`].
     pub allowed_versions: fn() -> &'static [VcardVersion],

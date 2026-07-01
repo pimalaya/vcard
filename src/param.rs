@@ -199,7 +199,8 @@ mod tests {
         ] {
             assert_eq!(VcardParamKind::from_str(&kind).ok(), Some(kind));
         }
-        // Case-insensitive on the way in; unknown names are not in the vocabulary.
+        // NOTE: Case-insensitive on the way in; unknown names are not in the
+        // vocabulary.
         assert_eq!(
             VcardParamKind::from_str("type").ok(),
             Some(VcardParamKind::Type),

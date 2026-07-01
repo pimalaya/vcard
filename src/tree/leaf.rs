@@ -3,12 +3,13 @@
 //! The atom of the syntax tree: a single raw piece of a card.
 //!
 //! Two leaf kinds split on a spec boundary. [`VcardLeaf`] wraps still-escaped
-//! *text*: a name, a parameter value, a line ending; these are US-ASCII in every
-//! version, so they are always valid UTF-8. [`VcardValueLeaf`] wraps a single
-//! still-escaped *value* component as raw bytes, because a property value may
-//! carry a foreign charset (a vCard 2.1 `CHARSET`) that is not UTF-8. Both are a
-//! [`Cow`], so a parsed leaf borrows the source (the basis of byte-faithful
-//! round-trips) and only becomes owned when a build or an edit replaces it.
+//! *text*: a name, a parameter value, a line ending; these are US-ASCII in
+//! every version, so they are always valid UTF-8. [`VcardValueLeaf`] wraps a
+//! single still-escaped *value* component as raw bytes, because a property
+//! value may carry a foreign charset (a vCard 2.1 `CHARSET`) that is not UTF-8.
+//! Both are a [`Cow`], so a parsed leaf borrows the source (the basis of
+//! byte-faithful round-trips) and only becomes owned when a build or an edit
+//! replaces it.
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
@@ -61,8 +62,8 @@ impl<'a> VcardValueLeaf<'a> {
     }
 
     /// The raw bytes as UTF-8 text, lossily (invalid sequences become the
-    /// replacement character). For a diagnostic or a best-effort read; the exact
-    /// bytes are [`as_bytes`](Self::as_bytes).
+    /// replacement character). For a diagnostic or a best-effort read; the
+    /// exact bytes are [`as_bytes`](Self::as_bytes).
     pub fn to_str_lossy(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(&self.0)
     }

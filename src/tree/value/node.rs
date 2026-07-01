@@ -5,12 +5,12 @@
 //! [`VcardValueNode`] is the syntactic peer of the decoded
 //! [`VcardValue`](crate::value::VcardValue): the bytes after a line's colon,
 //! split into `;`-separated components of `,`-separated
-//! [`VcardValueLeaf`](crate::tree::leaf::VcardValueLeaf) values (raw bytes, so a
-//! foreign charset survives). The splitting is purely generic (it counts and
+//! [`VcardValueLeaf`](crate::tree::leaf::VcardValueLeaf) values (raw bytes, so
+//! a foreign charset survives). The splitting is purely generic (it counts and
 //! preserves separators so the value round-trips); what those components *mean*
-//! is the lens's business. The codec that turns components into decoded values and back
-//! ([`decode_at`], `set_at`, `decode_scalar_at`) lives on this type but is
-//! implemented in the [`decode`](crate::tree::codec::decode) /
+//! is the lens's business. The codec that turns components into decoded values
+//! and back ([`decode_at`], `set_at`, `decode_scalar_at`) lives on this type
+//! but is implemented in the [`decode`](crate::tree::codec::decode) /
 //! [`encode`](crate::tree::codec::encode) siblings.
 //!
 //! [`decode_at`]: VcardValueNode::decode_at

@@ -9,13 +9,14 @@
 //! line stays byte for byte intact. [`VcardValueCursor`] exposes both
 //! convenience accessors for the common single-value and list shapes and raw
 //! component-level access for the structured kinds (`ADR`, `GENDER`, `ORG`,
-//! `CLIENTPIDMAP`); the bespoke [`VcardNCursor`](crate::tree::prop::n::VcardNCursor)
-//! names `N`'s components.
+//! `CLIENTPIDMAP`); the bespoke
+//! [`VcardNCursor`](crate::tree::prop::n::VcardNCursor) names `N`'s components.
 //!
 //! Beside the UTF-8 text accessors it offers a raw byte hatch
-//! ([`bytes`](VcardValueCursor::bytes) / [`set_bytes`](VcardValueCursor::set_bytes))
-//! for a value in a foreign charset, and, behind the content-encoding features,
-//! the [`quoted_printable`](VcardValueCursor::quoted_printable) and
+//! ([`bytes`](VcardValueCursor::bytes) /
+//! [`set_bytes`](VcardValueCursor::set_bytes)) for a value in a foreign
+//! charset, and, behind the content-encoding features, the
+//! [`quoted_printable`](VcardValueCursor::quoted_printable) and
 //! [`charset`](VcardValueCursor::charset) decoders.
 
 use alloc::{borrow::Cow, vec::Vec};
@@ -53,15 +54,15 @@ impl VcardValueCursor<'_, '_> {
 
     /// Set the value to raw bytes (the foreign-charset escape hatch), escaping
     /// structural separators but writing the bytes verbatim and preserving any
-    /// other components. The card's `CHARSET` parameter is left untouched: it is
-    /// the caller's to keep consistent.
+    /// other components. The card's `CHARSET` parameter is left untouched: it
+    /// is the caller's to keep consistent.
     pub fn set_bytes(&mut self, value: impl AsRef<[u8]>) {
         self.line.value.set_bytes_at(0, &[value]);
     }
 
     /// Decode the value's `QUOTED-PRINTABLE` `=XX` octets to raw bytes when the
-    /// line declares that encoding, else the raw [`bytes`](Self::bytes). Still in
-    /// the value's own (possibly foreign) charset; pair with
+    /// line declares that encoding, else the raw [`bytes`](Self::bytes). Still
+    /// in the value's own (possibly foreign) charset; pair with
     /// [`charset`](Self::charset) to get text. Requires the `quoted-printable`
     /// feature.
     #[cfg(feature = "quoted-printable")]
@@ -77,8 +78,8 @@ impl VcardValueCursor<'_, '_> {
     }
 
     /// Transcode the value to text using its `CHARSET` parameter (defaulting to
-    /// UTF-8 when absent or unrecognised). When the `quoted-printable` feature is
-    /// also on, `QUOTED-PRINTABLE` octets are resolved first. Requires the
+    /// UTF-8 when absent or unrecognised). When the `quoted-printable` feature
+    /// is also on, `QUOTED-PRINTABLE` octets are resolved first. Requires the
     /// `encoding` feature.
     #[cfg(feature = "encoding")]
     pub fn charset(&self) -> alloc::string::String {
@@ -149,7 +150,7 @@ mod tests {
         )
         .unwrap();
 
-        // "café" in ISO-8859-1: the trailing 0xE9 is not valid UTF-8.
+        // NOTE: "café" in ISO-8859-1: the trailing 0xE9 is not valid UTF-8.
         let latin1 = [b'c', b'a', b'f', 0xE9];
         card.prop_mut::<NOTE>().unwrap().set_bytes(latin1);
 
@@ -161,7 +162,7 @@ mod tests {
     fn bytes_returns_the_raw_undecoded_value() {
         use crate::tree::prop::note::NOTE;
 
-        // Core does not resolve QP: bytes() is the raw wire value.
+        // NOTE: Core does not resolve QP: bytes() is the raw wire value.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -178,7 +179,8 @@ mod tests {
     fn quoted_printable_helper_resolves_octets() {
         use crate::tree::prop::note::NOTE;
 
-        // =E9 is the Latin-1 'é' octet; the helper resolves QP to raw bytes.
+        // NOTE: =E9 is the Latin-1 'é' octet; the helper resolves QP to raw
+        // bytes.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -198,8 +200,8 @@ mod tests {
     fn charset_helper_transcodes_to_utf8() {
         use crate::tree::prop::note::NOTE;
 
-        // ISO-8859-1 + quoted-printable "café": the charset helper (composing the
-        // QP helper) yields the UTF-8 string.
+        // NOTE: ISO-8859-1 + quoted-printable "café": the charset helper
+        // (composing the QP helper) yields the UTF-8 string.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",

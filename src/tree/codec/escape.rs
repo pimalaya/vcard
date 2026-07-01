@@ -11,8 +11,8 @@ use alloc::{borrow::Cow, vec::Vec};
 use crate::tree::codec::mode::Escaper;
 
 /// Apply the value escapes by the card's escaping mode (RFC 6350 3.4 for the
-/// modern rules; vCard 2.1 escapes only `;`), over raw value bytes. Borrows when
-/// nothing needs escaping; non-UTF-8 content passes through verbatim.
+/// modern rules; vCard 2.1 escapes only `;`), over raw value bytes. Borrows
+/// when nothing needs escaping; non-UTF-8 content passes through verbatim.
 pub(crate) fn escape_with(bytes: &[u8], escaper: Escaper) -> Cow<'_, [u8]> {
     match escaper {
         Escaper::Modern => escape_modern(bytes),
@@ -78,7 +78,7 @@ mod tests {
             escape_with(b"plain", Escaper::Modern),
             Cow::Borrowed(b"plain")
         ));
-        // vCard 2.1 escapes only `;`.
+        // NOTE: vCard 2.1 escapes only `;`.
         assert_eq!(
             escape_with(b"a,b;c", Escaper::V2_1).as_ref(),
             br"a,b\;c".as_slice(),

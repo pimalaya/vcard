@@ -1,6 +1,7 @@
 //! # Text values
 //!
-//! The decoded text value kinds: a single text, and a comma-separated text list.
+//! The decoded text value kinds: a single text, and a comma-separated text
+//! list.
 //!
 //! These back the bulk of RFC 6350 properties whose value is plain text (the
 //! TEXT value type, RFC 6350 4.1): `FN`, `TITLE`, `ROLE`, `NOTE`, `PRODID`,

@@ -1,5 +1,5 @@
 {
-  description = "vCard (RFC 6350) model with parser and builder, written in Rust";
+  description = "vCard Rust library";
 
   inputs = {
     nixpkgs = {

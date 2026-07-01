@@ -6,12 +6,13 @@
 //! into a [`VcardProp`], and a [`VcardCst`] decodes into a whole [`Vcard`].
 //!
 //! A property's value kind is resolved through its spec, not a name match:
-//! [`VcardLine::decode`] maps the name to a [`VcardPropKind`], asks the spec for
-//! the in-force value kind (version plus any declared `VALUE`), then routes to
-//! that kind's decoder. The parameter name dispatch is the match in
+//! [`VcardLine::decode`] maps the name to a [`VcardPropKind`], asks the spec
+//! for the in-force value kind (version plus any declared `VALUE`), then routes
+//! to that kind's decoder. The parameter name dispatch is the match in
 //! [`VcardParamNode::decode`]. Value escapes are resolved by the sibling
-//! [`unescape`](crate::tree::codec::unescape) codec; content transfer encodings
-//! (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are left to the feature helpers.
+//! [`unescape`](crate::tree::codec::unescape) codec; content transfer
+//! encodings (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are left to the
+//! feature helpers.
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -212,8 +213,8 @@ impl VcardValueNode<'_> {
             .unwrap_or_default()
     }
 
-    /// The `i`th component's first value as raw unescaped bytes, not transcoded,
-    /// for a value carrying a foreign charset.
+    /// The `i`th component's first value as raw unescaped bytes, not
+    /// transcoded, for a value carrying a foreign charset.
     pub fn decode_bytes_at(&self, i: usize) -> Cow<'_, [u8]> {
         self.components
             .get(i)
@@ -299,7 +300,8 @@ mod tests {
 
     #[test]
     fn the_value_param_selects_the_value_kind() {
-        // BDAY defaults to a date, but VALUE=text forces the text reading.
+        // NOTE: BDAY defaults to a date, but VALUE=text forces the text
+        // reading.
         let cst = VcardCst::parse(
             "BEGIN:VCARD\r\nVERSION:4.0\r\nBDAY;VALUE=text:circa 1800\r\nEND:VCARD\r\n",
         )
@@ -309,8 +311,8 @@ mod tests {
             VcardValue::Text(VcardText(Cow::Borrowed("circa 1800"))),
         );
 
-        // A 2.1 PHOTO is inline base64 by default, but a plain URI when the
-        // line declares VALUE=uri (the old is_uri_reference path, now
+        // NOTE: A 2.1 PHOTO is inline base64 by default, but a plain URI when
+        // the line declares VALUE=uri (the old is_uri_reference path, now
         // spec-derived).
         let cst = VcardCst::parse(
             "BEGIN:VCARD\r\nVERSION:2.1\r\nPHOTO;VALUE=URI:http://x/p.png\r\nEND:VCARD\r\n",
@@ -324,7 +326,7 @@ mod tests {
 
     #[test]
     fn branches_geo_and_binary_on_version() {
-        // 2.1: GEO is a comma pair; PHOTO is inline base64.
+        // NOTE: 2.1: GEO is a comma pair; PHOTO is inline base64.
         let v21 = concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -346,7 +348,7 @@ mod tests {
             VcardValue::Binary(VcardBinary::Base64(Cow::Borrowed("Zm9v"))),
         );
 
-        // 3.0: GEO is a semicolon pair.
+        // NOTE: 3.0: GEO is a semicolon pair.
         let v30 = "BEGIN:VCARD\r\nVERSION:3.0\r\nGEO:37.0;-122.0\r\nEND:VCARD\r\n";
         let cst = VcardCst::parse(v30).unwrap();
         let card = cst.decode();
@@ -358,7 +360,8 @@ mod tests {
             }),
         );
 
-        // 4.0: GEO is a URI; its comma is literal, so it is not truncated.
+        // NOTE: 4.0: GEO is a URI; its comma is literal, so it is not
+        // truncated.
         let v40 = "BEGIN:VCARD\r\nVERSION:4.0\r\nGEO:geo:37.0,-122.0\r\nEND:VCARD\r\n";
         let cst = VcardCst::parse(v40).unwrap();
         let card = cst.decode();
@@ -372,8 +375,9 @@ mod tests {
     fn geo_and_binary_lenses_agree_with_whole_card_decode() {
         use crate::tree::prop::{geo::GEO, photo::PHOTO};
 
-        // The version-specific value shapes that decode() resolves must come
-        // back identically through the typed lens, not as a version-blind URI.
+        // NOTE: The version-specific value shapes that decode() resolves must
+        // come back identically through the typed lens, not as a version-blind
+        // URI.
         for input in [
             concat!(
                 "BEGIN:VCARD\r\n",
@@ -424,8 +428,8 @@ mod tests {
     fn keeps_a_quoted_printable_value_and_its_encoding_param_undecoded() {
         use crate::param::VcardParam;
 
-        // Core transforms no content: the `=XX` octets stay in the value and the
-        // ENCODING param is kept, so a consumer can decode via the
+        // NOTE: Core transforms no content: the `=XX` octets stay in the value
+        // and the ENCODING param is kept, so a consumer can decode via the
         // `quoted-printable` feature helper.
         let input = concat!(
             "BEGIN:VCARD\r\n",
@@ -451,7 +455,7 @@ mod tests {
     fn applies_version_specific_escaping() {
         use crate::tree::prop::note::NOTE;
 
-        // 2.1: only `\;` is an escape; `\n` stays a literal backslash-n.
+        // NOTE: 2.1: only `\;` is an escape; `\n` stays a literal backslash-n.
         let cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE:a\\nb\\;c\r\nEND:VCARD\r\n")
             .unwrap();
         let card = cst.decode();
@@ -460,7 +464,7 @@ mod tests {
             VcardValue::Text(VcardText(Cow::Borrowed("a\\nb;c"))),
         );
 
-        // 3.0: `\n` is a newline.
+        // NOTE: 3.0: `\n` is a newline.
         let cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE:a\\nb\\;c\r\nEND:VCARD\r\n")
             .unwrap();
         let card = cst.decode();
@@ -469,7 +473,7 @@ mod tests {
             VcardValue::Text(VcardText(Cow::Borrowed("a\nb;c"))),
         );
 
-        // 2.1 in-place edit escapes only `;`, leaving `,` literal.
+        // NOTE: 2.1 in-place edit escapes only `;`, leaving `,` literal.
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE:x\r\nEND:VCARD\r\n").unwrap();
         card.prop_mut::<NOTE>().unwrap().set_text("a,b;c");

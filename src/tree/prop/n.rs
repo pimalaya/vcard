@@ -121,12 +121,14 @@ impl VcardNCursor<'_, '_> {
         self.line.value.set_at(2, values);
     }
 
-    /// Set the honorific prefixes, escaping and preserving the rest of the line.
+    /// Set the honorific prefixes, escaping and preserving the rest of the
+    /// line.
     pub fn set_prefixes<S: AsRef<str>>(&mut self, values: &[S]) {
         self.line.value.set_at(3, values);
     }
 
-    /// Set the honorific suffixes, escaping and preserving the rest of the line.
+    /// Set the honorific suffixes, escaping and preserving the rest of the
+    /// line.
     pub fn set_suffixes<S: AsRef<str>>(&mut self, values: &[S]) {
         self.line.value.set_at(4, values);
     }

@@ -4,10 +4,11 @@
 //!
 //! Backs the binary-bearing properties (`PHOTO`, `LOGO`, `SOUND`, `KEY`) in
 //! vCard 2.1 and 3.0, where the value is either an external URI reference or
-//! inline base64. vCard 4.0 carries these as `data:` URIs instead, decoded to
+//! inline base64 (the URI/binary value, RFC 6350 6.9). vCard 4.0 carries these
+//! as `data:` URIs instead, decoded to
 //! [`VcardUri`](crate::value::uri::VcardUri). The form is told by the line's
 //! `VALUE` / `ENCODING` parameters; the payload is kept verbatim (base64 is not
-//! decoded to bytes). Pure data with no escaping knowledge.
+//! decoded to bytes). Pure data; escaping lives entirely on the syntax side.
 
 use alloc::borrow::Cow;
 

@@ -1,6 +1,6 @@
-# 📇 vcard-rs [![Documentation](https://img.shields.io/docsrs/vcard-rs?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-rs/latest/vcard-rs) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
+# 📇 vcard-rs [![Documentation](https://img.shields.io/docsrs/vcard-rs?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-rs/latest/vcard) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-Version-agnostic [vCard](https://www.rfc-editor.org/rfc/rfc6350) library in Rust.
+[vCard](https://www.rfc-editor.org/rfc/rfc6350) Rust library
 
 `vcard-rs` is one decoded model and one byte-faithful syntax tree that read and write vCard 2.1 (versitcard), 3.0 ([RFC 2426](https://www.rfc-editor.org/rfc/rfc2426)) and 4.0 ([RFC 6350](https://www.rfc-editor.org/rfc/rfc6350)) alike. The card version is a decoded indicator, never a type parameter or a separate dialect: the syntax tree ignores it, and only the codec and the per-property spec branch on it where escaping or a value's shape genuinely differ. Parse raw bytes into the tree, edit one property, and every untouched byte round-trips.
 

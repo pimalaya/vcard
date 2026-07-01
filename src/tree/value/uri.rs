@@ -1,7 +1,7 @@
 //! # URI value codec (RFC 6350 4.2)
 //!
-//! [`Codec`] for a URI value. A URI's comma is literal, not a list separator, so
-//! the whole component is kept (not truncated at `,`).
+//! [`Codec`] for a URI value. A URI's comma is literal, not a list separator,
+//! so the whole component is kept (not truncated at `,`).
 
 use crate::{
     tree::{

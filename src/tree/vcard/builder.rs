@@ -8,10 +8,10 @@
 //! half of "liberal in, strict out": the name is pinned by the marker's
 //! [`VcardPropSpec`], and [`build`](VcardPropBuilder::build) runs the shared
 //! per-property check ([`validate_prop`](crate::tree::vcard::validate)) so the
-//! value kind and every known parameter must be allowed for the version (unknown,
-//! extension parameters pass). To emit something the spec forbids, construct
-//! the open [`VcardProp`] by hand. The version is a value the builder carries,
-//! never a type parameter.
+//! value kind and every known parameter must be allowed for the version
+//! (unknown, extension parameters pass). To emit something the spec forbids,
+//! construct the open [`VcardProp`] by hand. The version is a value the
+//! builder carries, never a type parameter.
 //!
 //! # Example
 //!
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn refuses_a_value_kind_the_property_does_not_allow() {
-        // FN is text-only, so a URI value is rejected.
+        // NOTE: FN is text-only, so a URI value is rejected.
         let built = VcardPropBuilder::<FN>::new(VcardVersion::V4_0).build(VcardValue::Uri(
             crate::value::uri::VcardUri(Cow::Borrowed("x")),
         ));
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn refuses_a_param_the_property_does_not_allow() {
-        // FN does not allow MEDIATYPE.
+        // NOTE: FN does not allow MEDIATYPE.
         let built = VcardPropBuilder::<FN>::new(VcardVersion::V4_0)
             .param(VcardParam::MediaType(Cow::Borrowed("text/plain")))
             .build(VcardValue::Text(VcardText(Cow::Borrowed("John"))));

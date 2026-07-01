@@ -62,8 +62,8 @@
 //! The syntax tree ([`tree`], gated behind the `parser` feature, on by default)
 //! is everything byte-faithful. Its hub is [`VcardCst`](tree::cst::VcardCst), a
 //! tree of generic nodes that reproduces the wire bytes exactly.
-//! [`parse`](tree::cst::VcardCst::parse) accepts bytes or a string and reads one
-//! card (or a bare RFC 2425 record with no `BEGIN`/`END`);
+//! [`parse`](tree::cst::VcardCst::parse) accepts bytes or a string and reads
+//! one card (or a bare RFC 2425 record with no `BEGIN`/`END`);
 //! [`parse_many`](tree::cst::VcardCst::parse_many) iterates a multi-card file.
 //! [`decode`](tree::codec::decode) projects a CST onto the decoded
 //! [`Vcard`](vcard::Vcard); [`encode`](tree::codec::encode) (and `From<Vcard>`)
@@ -76,8 +76,8 @@
 //! vCard 2.1 `CHARSET`) survives byte for byte; a name or parameter must be
 //! UTF-8, as every version's grammar guarantees. Because of that,
 //! [`to_bytes`](tree::cst::VcardCst::to_bytes) is the byte-faithful serializer,
-//! while [`Display`](core::fmt::Display) / `to_string` are a convenience that is
-//! lossy only for a non-UTF-8 value.
+//! while [`Display`](core::fmt::Display) / `to_string` are a convenience that
+//! is lossy only for a non-UTF-8 value.
 //!
 //! ## The spec layer
 //!
@@ -100,8 +100,8 @@
 //! The core transforms no content: a `QUOTED-PRINTABLE` or `BASE64` transfer
 //! encoding and a `CHARSET` are surfaced raw, with their parameters kept, so
 //! nothing is silently lost or transcoded (only the value grammar, escapes and
-//! line folding, is resolved). Decoding them is opt-in, one small `no_std` crate
-//! per feature (see [Cargo features](#cargo-features)):
+//! line folding, is resolved). Decoding them is opt-in, one small `no_std`
+//! crate per feature (see [Cargo features](#cargo-features)):
 //! [`quoted_printable`](tree::value::VcardValueCursor::quoted_printable) and
 //! [`charset`](tree::value::VcardValueCursor::charset) on the value cursor, and
 //! [`decode_base64`](value::binary::VcardBinary::decode_base64) on the binary

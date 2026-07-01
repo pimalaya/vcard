@@ -29,7 +29,11 @@ fn parses_and_round_trips() {
             let output = card.to_string();
             let reparsed =
                 VcardCst::parse(&output).unwrap_or_else(|e| panic!("reparse {name}: {e}"));
-            assert_eq!(reparsed.to_string(), output, "not a serialize fixpoint: {name}");
+            assert_eq!(
+                reparsed.to_string(),
+                output,
+                "not a serialize fixpoint: {name}"
+            );
 
             // Decoding the whole card must not panic.
             let _ = card.decode();

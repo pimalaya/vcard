@@ -1,16 +1,16 @@
 //! # Encode (model to syntax)
 //!
-//! The write side of the structural bridge: project the decoded model onto a raw
-//! syntax tree. A value's [`Codec`] impl encodes it into a [`VcardValueNode`], a
-//! [`VcardParam`] encodes into a [`VcardParamNode`], a [`VcardProp`] encodes into
-//! a [`VcardLine`] (its name taken verbatim from the property, its value
-//! delegated to the value codec), and a [`Vcard`] encodes into a whole
-//! [`VcardCst`]. The whole card is encoded for its version's [`Escaper`], which
-//! the value codecs use to escape every leaf and to pick any version-specific
-//! value shape; byte-preserving edits are the cursors' job, not this module's.
-//! [`Display`](core::fmt::Display) for [`Vcard`] renders a decoded card straight
-//! to its serialized bytes through here. Value leaves are escaped by the sibling
-//! [`escape`](crate::tree::codec::escape) codec.
+//! The write side of the structural bridge: project the decoded model onto a
+//! raw syntax tree. A value's [`Codec`] impl encodes it into a
+//! [`VcardValueNode`], a [`VcardParam`] encodes into a [`VcardParamNode`], a
+//! [`VcardProp`] encodes into a [`VcardLine`] (its name taken verbatim from the
+//! property, its value delegated to the value codec), and a [`Vcard`] encodes
+//! into a whole [`VcardCst`]. The whole card is encoded for its version's
+//! [`Escaper`], which the value codecs use to escape every leaf and to pick any
+//! version-specific value shape; byte-preserving edits are the cursors' job,
+//! not this module's. [`Display`](core::fmt::Display) for [`Vcard`] renders a
+//! decoded card straight to its serialized bytes through here. Value leaves are
+//! escaped by the sibling [`escape`](crate::tree::codec::escape) codec.
 
 use core::fmt;
 
@@ -131,7 +131,8 @@ impl fmt::Display for Vcard<'_> {
     }
 }
 
-/// A one-component, one-value syntax node, escaping the value by the given mode.
+/// A one-component, one-value syntax node, escaping the value by the given
+/// mode.
 pub(crate) fn scalar_node(value: &str, escaper: Escaper) -> VcardValueNode<'static> {
     VcardValueNode {
         escaper,
@@ -199,8 +200,8 @@ mod tests {
 
     #[test]
     fn encodes_the_geo_pair_in_the_cards_own_version() {
-        // A 2.1 GEO decodes to a coordinate pair; re-encoding for 2.1 must write
-        // it back as a comma pair, not the 3.0 semicolon form.
+        // NOTE: A 2.1 GEO decodes to a coordinate pair; re-encoding for 2.1
+        // must write it back as a comma pair, not the 3.0 semicolon form.
         let cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nGEO:37.0,-122.0\r\nEND:VCARD\r\n")
             .unwrap();
         let card = cst.decode();
@@ -210,7 +211,7 @@ mod tests {
             card.to_string(),
         );
 
-        // The same pair round-trips through 3.0 with a semicolon.
+        // NOTE: The same pair round-trips through 3.0 with a semicolon.
         let cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nGEO:37.0;-122.0\r\nEND:VCARD\r\n")
             .unwrap();
         let card = cst.decode();

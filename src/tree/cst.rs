@@ -3,16 +3,17 @@
 //! The core representation: a whole vCard as generic, byte-faithful syntax.
 //!
 //! [`VcardCst`] is the hub of the crate. It models a card as its real lines: an
-//! optional `BEGIN` / `END` envelope (absent for a bare RFC 2425 record) and the
-//! property lines between them (the `VERSION` line among them), made of the
+//! optional `BEGIN` / `END` envelope (absent for a bare RFC 2425 record) and
+//! the property lines between them (the `VERSION` line among them), made of the
 //! nodes in the sibling modules ([`line`](crate::tree::line),
 //! [`param`](crate::tree::param), [`value`](crate::tree::value),
 //! [`leaf`](crate::tree::leaf)). It knows nothing about what a property
 //! *means*. It is filled from bytes (`parse`) or from typed properties
-//! (`push`), exports its bytes byte-faithfully ([`to_bytes`](VcardCst::to_bytes),
-//! or the lossy-for-non-UTF-8 [`Display`](core::fmt::Display) / `to_string`),
-//! and offers typed access by lens (`prop`, `prop_mut`, `remove`). The semantic
-//! projection ([`decode`](VcardCst::decode)) and the codec live in the
+//! (`push`), exports its bytes byte-faithfully
+//! ([`to_bytes`](VcardCst::to_bytes), or the lossy-for-non-UTF-8
+//! [`Display`](core::fmt::Display) / `to_string`), and offers typed access by
+//! lens (`prop`, `prop_mut`, `remove`). The semantic projection
+//! ([`decode`](VcardCst::decode)) and the codec live in the
 //! [`decode`](crate::tree::codec::decode) /
 //! [`encode`](crate::tree::codec::encode) siblings.
 //!
@@ -26,7 +27,8 @@
 //! use vcard::tree::prop::r#fn::FN;
 //! use vcard::version::VcardVersion;
 //!
-//! // 1. Parse raw bytes into the byte-faithful syntax tree (round-trips exactly).
+//! // 1. Parse raw bytes into the byte-faithful syntax tree (round-trips
+//! // exactly).
 //! let raw = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n";
 //! let mut cst = VcardCst::parse(raw).unwrap();
 //! assert_eq!(cst.to_string(), raw);
@@ -45,8 +47,8 @@
 //! ```
 //!
 //! Build a property from the strict builder, validate a whole card into a
-//! [`Valid`](crate::tree::vcard::validate::Valid) proof, then turn it back into a
-//! CST:
+//! [`Valid`](crate::tree::vcard::validate::Valid) proof, then turn it back into
+//! a CST:
 //!
 //! ```rust
 //! use vcard::tree::cst::VcardCst;
@@ -170,8 +172,8 @@ impl<'a> VcardCst<'a> {
     }
 
     /// Parse every card in the input, lazily, one item per card (or the parse
-    /// error that stopped iteration). Blank lines between cards are skipped. For
-    /// multi-card `.vcf` files and CardDAV address books.
+    /// error that stopped iteration). Blank lines between cards are skipped.
+    /// For multi-card `.vcf` files and CardDAV address books.
     ///
     /// ```rust
     /// use vcard::tree::cst::VcardCst;
@@ -424,8 +426,8 @@ mod tests {
     fn round_trips_a_non_utf8_value_byte_for_byte() {
         use crate::tree::prop::note::NOTE;
 
-        // A vCard 2.1 NOTE in ISO-8859-1: the 0xE9 byte ('é' in Latin-1) is not
-        // valid UTF-8, so this card could not be a &str at all.
+        // NOTE: A vCard 2.1 NOTE in ISO-8859-1: the 0xE9 byte ('é' in Latin-1)
+        // is not valid UTF-8, so this card could not be a &str at all.
         let mut raw = Vec::new();
         raw.extend_from_slice(b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;CHARSET=ISO-8859-1:caf");
         raw.push(0xE9);
@@ -433,11 +435,11 @@ mod tests {
 
         let cst = VcardCst::parse(&raw).unwrap();
 
-        // to_bytes() is byte-faithful, including the raw 0xE9 octet.
+        // NOTE: to_bytes() is byte-faithful, including the raw 0xE9 octet.
         assert_eq!(cst.to_bytes(), raw);
 
-        // CHARSET rides along as a plain parameter; the value bytes are reachable
-        // raw through the lens cursor, not transcoded.
+        // NOTE: CHARSET rides along as a plain parameter; the value bytes are
+        // reachable raw through the lens cursor, not transcoded.
         let mut cst = cst;
         assert_eq!(
             cst.prop_mut::<NOTE>().unwrap().bytes().as_ref(),
@@ -454,8 +456,8 @@ mod tests {
     fn rejects_a_non_utf8_property_name() {
         use crate::tree::error::VcardParseError;
 
-        // Only a value may carry a foreign charset; a non-UTF-8 name or parameter
-        // is a hard parse error.
+        // NOTE: Only a value may carry a foreign charset; a non-UTF-8 name or
+        // parameter is a hard parse error.
         let mut raw = Vec::new();
         raw.extend_from_slice(b"BEGIN:VCARD\r\nVERSION:4.0\r\nX-");
         raw.push(0xFF);
@@ -469,7 +471,7 @@ mod tests {
 
     #[test]
     fn parses_a_bare_directory_record_without_an_envelope() {
-        // An RFC 2425 record with no BEGIN:VCARD wrapper: every line is a
+        // NOTE: An RFC 2425 record with no BEGIN:VCARD wrapper: every line is a
         // property and no envelope is synthesised, so it round-trips exactly.
         let raw = "cn:Babs Jensen\r\nemail:babs@umich.edu\r\n";
         let cst = VcardCst::parse(raw).unwrap();
@@ -484,8 +486,9 @@ mod tests {
     fn parse_many_refuses_a_bare_record() {
         use crate::tree::error::VcardParseError;
 
-        // Without an envelope there is no reliable boundary between records, so
-        // the multi-card reader rejects a bare record rather than guess.
+        // NOTE: Without an envelope there is no reliable boundary between
+        // records, so the multi-card reader rejects a bare record rather than
+        // guess.
         let raw = "cn:Babs Jensen\r\nemail:babs@umich.edu\r\n";
         let first = VcardCst::parse_many(raw).next().unwrap();
 
@@ -496,7 +499,7 @@ mod tests {
     fn parses_many_cards_from_one_input() {
         let a = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n";
         let b = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:B\r\nEND:VCARD\r\n";
-        // Two cards separated by a blank line, which the parser skips.
+        // NOTE: Two cards separated by a blank line, which the parser skips.
         let input = concat!(
             "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n",
             "\r\n",
@@ -514,8 +517,8 @@ mod tests {
 
     #[test]
     fn keeps_a_nested_agent_card_intact() {
-        // A 2.1 inline AGENT embeds a whole vCard; its inner END must not close
-        // the outer card, and the whole thing round-trips byte for byte.
+        // NOTE: A 2.1 inline AGENT embeds a whole vCard; its inner END must not
+        // close the outer card, and the whole thing round-trips byte for byte.
         let raw = concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -551,7 +554,8 @@ mod tests {
         });
 
         let out = card.to_string();
-        // existing lines kept verbatim; only the appended one is canonical.
+        // NOTE: existing lines kept verbatim; only the appended one is
+        // canonical.
         assert!(out.contains("N;PID=1:Doe;John;;Dr.;\r\n"), "{out}");
         assert!(out.contains("EMAIL:john@doe.example\r\n"), "{out}");
     }
@@ -600,18 +604,18 @@ mod tests {
             }],
         };
 
-        // 2.1 escapes only `;`, leaving `,` literal.
+        // NOTE: 2.1 escapes only `;`, leaving `,` literal.
         assert_eq!(
             note(VcardVersion::V2_1).to_string(),
             "BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE:a,b\\;c\r\nEND:VCARD\r\n",
         );
-        // 4.0 escapes both `,` and `;` (modern rules).
+        // NOTE: 4.0 escapes both `,` and `;` (modern rules).
         assert_eq!(
             note(VcardVersion::V4_0).to_string(),
             "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a\\,b\\;c\r\nEND:VCARD\r\n",
         );
 
-        // Pushing onto a parsed 2.1 card uses the card's 2.1 escaping.
+        // NOTE: Pushing onto a parsed 2.1 card uses the card's 2.1 escaping.
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nFN:X\r\nEND:VCARD\r\n").unwrap();
         card.push(VcardProp {
@@ -646,7 +650,7 @@ mod tests {
             VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
         );
 
-        // the canonical rebuild reproduces the (already-canonical) card.
+        // NOTE: the canonical rebuild reproduces the (already-canonical) card.
         assert_eq!(vcard.to_string(), CARD);
     }
 
@@ -688,16 +692,17 @@ mod tests {
 
     #[test]
     fn parses_version_anywhere_keeping_its_position() {
-        // VERSION on the third line, as RFC 2426 example cards do.
+        // NOTE: VERSION on the third line, as RFC 2426 example cards do.
         let card = "BEGIN:VCARD\r\nBDAY:1980-01-02\r\nVERSION:3.0\r\nFN:X\r\nEND:VCARD\r\n";
         let cst = VcardCst::parse(card).unwrap();
 
-        // byte-faithful: VERSION keeps its source position.
+        // NOTE: byte-faithful: VERSION keeps its source position.
         assert_eq!(cst.to_string(), card);
 
         let vcard = cst.decode();
         assert_eq!(vcard.version, VcardVersion::V3_0);
-        // VERSION is the indicator, not a property: only BDAY and FN remain.
+        // NOTE: VERSION is the indicator, not a property: only BDAY and FN
+        // remain.
         assert_eq!(vcard.properties.len(), 2);
     }
 
@@ -706,9 +711,10 @@ mod tests {
         let card = "BEGIN:VCARD\r\nFN:X\r\nEND:VCARD\r\n";
         let cst = VcardCst::parse(card).unwrap();
 
-        // The raw card round-trips byte for byte (no VERSION line invented)...
+        // NOTE: The raw card round-trips byte for byte (no VERSION line
+        // invented)...
         assert_eq!(cst.to_string(), card);
-        // ...but the decoded model normalises a missing version to 4.0.
+        // NOTE: ...but the decoded model normalises a missing version to 4.0.
         assert_eq!(cst.decode().version, VcardVersion::V4_0);
     }
 
@@ -717,12 +723,12 @@ mod tests {
         let folded = "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long\r\n  note\r\nEND:VCARD\r\n";
         let card = VcardCst::parse(folded).unwrap();
 
-        // the folded value is unfolded on parse, and serialized unfolded.
+        // NOTE: the folded value is unfolded on parse, and serialized unfolded.
         assert_eq!(
             card.to_string(),
             "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long note\r\nEND:VCARD\r\n",
         );
-        // re-parsing the output is then byte-stable (a fixpoint).
+        // NOTE: re-parsing the output is then byte-stable (a fixpoint).
         let output = card.to_string();
         let reparsed = VcardCst::parse(&output).unwrap();
         assert_eq!(reparsed.to_string(), output);
@@ -730,12 +736,14 @@ mod tests {
 
     #[test]
     fn tolerates_blank_lines_and_a_missing_final_break() {
-        // a stray blank line after VERSION, and no trailing break after END.
+        // NOTE: a stray blank line after VERSION, and no trailing break after
+        // END.
         let input = "BEGIN:VCARD\r\nVERSION:4.0\r\n\r\nFN:John\r\nEND:VCARD";
         let card = VcardCst::parse(input).unwrap();
 
         assert_eq!(card.decode().properties.len(), 1);
-        // the blank line is dropped; the missing final break is preserved.
+        // NOTE: the blank line is dropped; the missing final break is
+        // preserved.
         assert_eq!(
             card.to_string(),
             "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John\r\nEND:VCARD",
