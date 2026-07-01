@@ -30,9 +30,25 @@ impl VcardValueCursor<'_, '_> {
     }
 
     /// Set the value to a single text, escaping and preserving any other
-    /// components.
+    /// components. Writes UTF-8; to keep a foreign charset, transcode yourself
+    /// and use [`set_bytes`](Self::set_bytes).
     pub fn set_text(&mut self, value: impl AsRef<str>) {
         self.line.value.set_at(0, &[value]);
+    }
+
+    /// The whole value's raw bytes (component 0, value 0): escapes resolved and
+    /// any `QUOTED-PRINTABLE` `=XX` octets decoded, but not transcoded, for a
+    /// value carrying a foreign charset.
+    pub fn bytes(&self) -> Cow<'_, [u8]> {
+        self.line.value_bytes()
+    }
+
+    /// Set the value to raw bytes (the foreign-charset escape hatch), escaping
+    /// structural separators but writing the bytes verbatim and preserving any
+    /// other components. The card's `CHARSET` parameter is left untouched: it is
+    /// the caller's to keep consistent.
+    pub fn set_bytes(&mut self, value: impl AsRef<[u8]>) {
+        self.line.value.set_bytes_at(0, &[value]);
     }
 
     /// The value's first component as a decoded list (its `,`-separated
@@ -77,6 +93,43 @@ mod tests {
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John\r\nEND:VCARD\r\n").unwrap();
         card.prop_mut::<FN>().unwrap().set_text("Jane, Q");
         assert!(card.to_string().contains("FN:Jane\\, Q\r\n"));
+    }
+
+    #[test]
+    fn writes_and_reads_a_foreign_charset_value_as_raw_bytes() {
+        use crate::tree::prop::note::NOTE;
+
+        let mut card = VcardCst::parse(
+            "BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;CHARSET=ISO-8859-1:x\r\nEND:VCARD\r\n",
+        )
+        .unwrap();
+
+        // "café" in ISO-8859-1: the trailing 0xE9 is not valid UTF-8.
+        let latin1 = [b'c', b'a', b'f', 0xE9];
+        card.prop_mut::<NOTE>().unwrap().set_bytes(latin1);
+
+        assert_eq!(card.prop_mut::<NOTE>().unwrap().bytes().as_ref(), &latin1);
+        assert!(card.to_bytes().windows(4).any(|window| window == latin1));
+    }
+
+    #[test]
+    fn recovers_quoted_printable_foreign_charset_bytes() {
+        use crate::tree::prop::note::NOTE;
+
+        // 2.1 NOTE in ISO-8859-1, quoted-printable: =E9 is the Latin-1 'é' octet.
+        let mut card = VcardCst::parse(concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:2.1\r\n",
+            "NOTE;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:caf=E9\r\n",
+            "END:VCARD\r\n",
+        ))
+        .unwrap();
+
+        // bytes() resolves QP, handing back the raw Latin-1 bytes to transcode.
+        assert_eq!(
+            card.prop_mut::<NOTE>().unwrap().bytes().as_ref(),
+            &[b'c', b'a', b'f', 0xE9],
+        );
     }
 
     #[test]

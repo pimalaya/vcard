@@ -21,8 +21,8 @@ use crate::{
     tree::{
         codec::{
             Codec,
-            quoted_printable::qp_decode,
-            unescape::{unescape, unescape_with},
+            quoted_printable::{qp_decode, qp_decode_bytes},
+            unescape::{unescape, unescape_bytes, unescape_with},
         },
         cst::VcardCst,
         line::VcardLine,
@@ -127,6 +127,23 @@ impl VcardLine<'_> {
             .and_then(|value| value.get().parse::<VcardValueKind>().ok())
     }
 
+    /// The first value's raw bytes with escapes resolved and, when the line
+    /// declares `QUOTED-PRINTABLE`, its `=XX` octets decoded; still in the value's
+    /// own (possibly foreign) charset, never transcoded. The read side of the
+    /// [`set_bytes`](crate::tree::value::VcardValueCursor::set_bytes) escape hatch.
+    pub(crate) fn value_bytes(&self) -> Cow<'_, [u8]> {
+        let raw = self.value.decode_bytes_at(0);
+
+        if !self.is_quoted_printable() {
+            return raw;
+        }
+
+        match raw {
+            Cow::Borrowed(bytes) => qp_decode_bytes(bytes),
+            Cow::Owned(bytes) => Cow::Owned(qp_decode_bytes(&bytes).into_owned()),
+        }
+    }
+
     /// Whether the line declares the `QUOTED-PRINTABLE` encoding, as an
     /// `ENCODING=` parameter or a bare token (the 2.1 short form).
     fn is_quoted_printable(&self) -> bool {
@@ -208,10 +225,20 @@ impl VcardValueNode<'_> {
             .map(|leaves| {
                 leaves
                     .iter()
-                    .map(|leaf| unescape_with(leaf.get(), self.escaper))
+                    .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// The `i`th component's first value as raw unescaped bytes, not transcoded,
+    /// for a value carrying a foreign charset.
+    pub fn decode_bytes_at(&self, i: usize) -> Cow<'_, [u8]> {
+        self.components
+            .get(i)
+            .and_then(|leaves| leaves.first())
+            .map(|leaf| unescape_bytes(leaf.as_bytes(), self.escaper))
+            .unwrap_or(Cow::Borrowed(b""))
     }
 
     /// Decode the `i`th component's first value (empty when there is none).
@@ -219,7 +246,7 @@ impl VcardValueNode<'_> {
         self.components
             .get(i)
             .and_then(|leaves| leaves.first())
-            .map(|leaf| unescape_with(leaf.get(), self.escaper))
+            .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
             .unwrap_or(Cow::Borrowed(""))
     }
 
@@ -235,11 +262,13 @@ impl VcardValueNode<'_> {
             return self.decode_scalar_at(i);
         }
 
-        let raw = leaves
-            .iter()
-            .map(|leaf| leaf.get())
-            .collect::<Vec<_>>()
-            .join(",");
+        let mut raw = Vec::new();
+        for (j, leaf) in leaves.iter().enumerate() {
+            if j > 0 {
+                raw.push(b',');
+            }
+            raw.extend_from_slice(leaf.as_bytes());
+        }
 
         Cow::Owned(unescape_with(&raw, self.escaper).into_owned())
     }
@@ -496,7 +525,7 @@ mod tests {
 
     #[test]
     fn decodes_components_into_scalar_and_list() {
-        let node = VcardValueNode::parse("a,b;c");
+        let node = VcardValueNode::parse(b"a,b;c");
         assert_eq!(
             node.decode_at(0),
             vec![Cow::Borrowed("a"), Cow::Borrowed("b")],
@@ -507,7 +536,7 @@ mod tests {
 
     #[test]
     fn decodes_the_structured_n_value() {
-        let node = VcardValueNode::parse("Doe;John;;Dr.;");
+        let node = VcardValueNode::parse(b"Doe;John;;Dr.;");
         let n = VcardN::decode(&node);
         assert_eq!(n.family, vec![Cow::Borrowed("Doe")]);
         assert_eq!(n.given, vec![Cow::Borrowed("John")]);

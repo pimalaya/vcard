@@ -20,7 +20,7 @@ impl<'v> Codec<'v> for VcardUnknownValue<'v> {
                 .map(|component| {
                     component
                         .iter()
-                        .map(|value| unescape_with(value.get(), node.escaper))
+                        .map(|value| unescape_with(value.as_bytes(), node.escaper))
                         .collect()
                 })
                 .collect(),

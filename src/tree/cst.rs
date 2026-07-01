@@ -75,7 +75,11 @@
 
 use core::fmt;
 
-use alloc::{string::ToString, vec, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::{
     prop::VcardProp,
@@ -89,12 +93,13 @@ use crate::{
 /// source position.
 #[derive(Clone, Debug)]
 pub struct VcardCst<'a> {
-    /// The BEGIN line.
-    pub begin: VcardLine<'a>,
+    /// The BEGIN line, or `None` for a bare RFC 2425 directory record parsed
+    /// without a `BEGIN:VCARD` envelope.
+    pub begin: Option<VcardLine<'a>>,
     /// The property lines, in source order, including the `VERSION` line.
     pub props: Vec<VcardLine<'a>>,
-    /// The END line.
-    pub end: VcardLine<'a>,
+    /// The END line, absent exactly when [`begin`](Self::begin) is.
+    pub end: Option<VcardLine<'a>>,
 }
 
 impl<'a> VcardCst<'a> {
@@ -102,9 +107,9 @@ impl<'a> VcardCst<'a> {
     /// properties.
     pub fn v4() -> Self {
         Self {
-            begin: VcardLine::text("BEGIN", "VCARD"),
+            begin: Some(VcardLine::text("BEGIN", "VCARD")),
             props: vec![VcardLine::text("VERSION", &*VcardVersion::V4_0)],
-            end: VcardLine::text("END", "VCARD"),
+            end: Some(VcardLine::text("END", "VCARD")),
         }
     }
 
@@ -113,8 +118,52 @@ impl<'a> VcardCst<'a> {
     /// at all): the parser is liberal about its position, the way real cards
     /// are. Any input after the card's `END` line is ignored; use
     /// [`parse_many`](Self::parse_many) to read every card.
-    pub fn parse(input: &'a str) -> Result<Self, VcardParseError> {
-        Self::take_card(input).map(|(card, _rest)| card)
+    ///
+    /// A bare RFC 2425 directory record with no `BEGIN:VCARD` envelope is also
+    /// accepted: every line becomes a property and [`begin`](Self::begin) /
+    /// [`end`](Self::end) stay `None`, so it round-trips without a synthesised
+    /// envelope. This is only possible here, not in
+    /// [`parse_many`](Self::parse_many): without the envelope there is no
+    /// reliable boundary between records.
+    pub fn parse<T: AsRef<[u8]> + ?Sized>(input: &'a T) -> Result<Self, VcardParseError> {
+        let input = input.as_ref();
+        let (first, _rest) = VcardLine::take(input)?;
+
+        if first.name.get().eq_ignore_ascii_case("BEGIN") {
+            Self::take_card(input).map(|(card, _rest)| card)
+        } else {
+            Self::parse_bare(input)
+        }
+    }
+
+    /// Parse a bare directory record: every line is a property, with no
+    /// envelope. The escaping mode is stamped from a `VERSION` line if the
+    /// record happens to carry one, else the default.
+    fn parse_bare(input: &'a [u8]) -> Result<Self, VcardParseError> {
+        let mut props: Vec<VcardLine<'a>> = Vec::new();
+        let mut rest = trim_leading_eol(input);
+
+        while !rest.is_empty() {
+            let (line, tail) = VcardLine::take(rest)?;
+            props.push(line);
+            rest = trim_leading_eol(tail);
+        }
+
+        let escaper = props
+            .iter()
+            .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
+            .map(|line| Escaper::for_version_str(line.raw_value_str().as_ref()))
+            .unwrap_or_default();
+
+        for line in &mut props {
+            line.value.escaper = escaper;
+        }
+
+        Ok(Self {
+            begin: None,
+            props,
+            end: None,
+        })
     }
 
     /// Parse every card in the input, lazily, one item per card (or the parse
@@ -131,11 +180,13 @@ impl<'a> VcardCst<'a> {
     /// let cards: Result<Vec<_>, _> = VcardCst::parse_many(file).collect();
     /// assert_eq!(cards.unwrap().len(), 2);
     /// ```
-    pub fn parse_many(input: &'a str) -> impl Iterator<Item = Result<Self, VcardParseError>> {
-        let mut rest = input;
+    pub fn parse_many<T: AsRef<[u8]> + ?Sized>(
+        input: &'a T,
+    ) -> impl Iterator<Item = Result<Self, VcardParseError>> {
+        let mut rest = input.as_ref();
 
         core::iter::from_fn(move || {
-            rest = rest.trim_start_matches(['\r', '\n']);
+            rest = trim_leading_eol(rest);
             if rest.is_empty() {
                 return None;
             }
@@ -148,7 +199,7 @@ impl<'a> VcardCst<'a> {
                 Err(error) => {
                     // NOTE: stop after the first failure; a malformed card
                     // leaves no reliable boundary to resume from.
-                    rest = "";
+                    rest = b"";
                     Some(Err(error))
                 }
             }
@@ -159,7 +210,7 @@ impl<'a> VcardCst<'a> {
     /// rest. The card's `END` is the one at `BEGIN`/`END` depth zero, so a 2.1
     /// inline `AGENT` (a whole nested `BEGIN`..`END`) does not close the card
     /// early; the nested lines are kept verbatim so the card round-trips.
-    fn take_card(input: &'a str) -> Result<(Self, &'a str), VcardParseError> {
+    fn take_card(input: &'a [u8]) -> Result<(Self, &'a [u8]), VcardParseError> {
         let (begin, mut rest) = VcardLine::take(input)?;
 
         if !begin.name.get().eq_ignore_ascii_case("BEGIN") {
@@ -171,7 +222,9 @@ impl<'a> VcardCst<'a> {
 
         loop {
             if rest.is_empty() {
-                return Err(VcardParseError::MissingEnd(input.to_string()));
+                return Err(VcardParseError::MissingEnd(
+                    String::from_utf8_lossy(input).into_owned(),
+                ));
             }
 
             let (line, tail) = VcardLine::take(rest)?;
@@ -194,7 +247,7 @@ impl<'a> VcardCst<'a> {
                 let escaper = props
                     .iter()
                     .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
-                    .map(|line| Escaper::for_version_str(line.raw_value()))
+                    .map(|line| Escaper::for_version_str(line.raw_value_str().as_ref()))
                     .unwrap_or_default();
 
                 for line in &mut props {
@@ -203,9 +256,9 @@ impl<'a> VcardCst<'a> {
 
                 return Ok((
                     Self {
-                        begin,
+                        begin: Some(begin),
                         props,
-                        end: line,
+                        end: Some(line),
                     },
                     rest,
                 ));
@@ -231,7 +284,7 @@ impl<'a> VcardCst<'a> {
     /// [`V4_0`](VcardVersion::V4_0).
     pub fn version(&self) -> VcardVersion {
         self.version_line()
-            .and_then(|line| line.raw_value().parse().ok())
+            .and_then(|line| line.raw_value_str().parse().ok())
             .unwrap_or(VcardVersion::V4_0)
     }
 
@@ -241,7 +294,7 @@ impl<'a> VcardCst<'a> {
     pub fn push(&mut self, prop: VcardProp<'a>) -> &mut Self {
         let escaper = self
             .version_line()
-            .map(|line| Escaper::for_version_str(line.raw_value()))
+            .map(|line| Escaper::for_version_str(line.raw_value_str().as_ref()))
             .unwrap_or_default();
 
         self.props.push(prop.encode(escaper));
@@ -274,17 +327,65 @@ impl<'a> VcardCst<'a> {
             .find(|line| line.name.get().eq_ignore_ascii_case(&L::KIND))
             .map(|line| L::cursor(line))
     }
+
+    /// Own every borrowed leaf, detaching the card from the source bytes so it
+    /// can outlive them.
+    pub fn into_static(self) -> VcardCst<'static> {
+        VcardCst {
+            begin: self.begin.map(VcardLine::into_static),
+            props: self.props.into_iter().map(VcardLine::into_static).collect(),
+            end: self.end.map(VcardLine::into_static),
+        }
+    }
+
+    /// Serialize the card to raw bytes, exactly as parsed. Unlike
+    /// [`Display`](core::fmt::Display) (which is lossy for a value carrying a
+    /// non-UTF-8 charset), this is always byte-faithful.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+
+        if let Some(begin) = &self.begin {
+            begin.write_bytes(&mut out);
+        }
+        for prop in &self.props {
+            prop.write_bytes(&mut out);
+        }
+        if let Some(end) = &self.end {
+            end.write_bytes(&mut out);
+        }
+
+        out
+    }
+}
+
+/// Skip leading blank-line bytes (`\r` / `\n`) between cards.
+fn trim_leading_eol(mut bytes: &[u8]) -> &[u8] {
+    while let Some((first, rest)) = bytes.split_first() {
+        if matches!(first, b'\r' | b'\n') {
+            bytes = rest;
+        } else {
+            break;
+        }
+    }
+
+    bytes
 }
 
 impl fmt::Display for VcardCst<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.begin)?;
+        if let Some(begin) = &self.begin {
+            write!(f, "{begin}")?;
+        }
 
         for prop in &self.props {
             write!(f, "{prop}")?;
         }
 
-        write!(f, "{}", self.end)
+        if let Some(end) = &self.end {
+            write!(f, "{end}")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -314,6 +415,78 @@ mod tests {
     fn round_trips_byte_for_byte() {
         let card = VcardCst::parse(CARD).unwrap();
         assert_eq!(card.to_string(), CARD);
+    }
+
+    #[test]
+    fn round_trips_a_non_utf8_value_byte_for_byte() {
+        use crate::tree::prop::note::NOTE;
+
+        // A vCard 2.1 NOTE in ISO-8859-1: the 0xE9 byte ('é' in Latin-1) is not
+        // valid UTF-8, so this card could not be a &str at all.
+        let mut raw = Vec::new();
+        raw.extend_from_slice(b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;CHARSET=ISO-8859-1:caf");
+        raw.push(0xE9);
+        raw.extend_from_slice(b"\r\nEND:VCARD\r\n");
+
+        let cst = VcardCst::parse(&raw).unwrap();
+
+        // to_bytes() is byte-faithful, including the raw 0xE9 octet.
+        assert_eq!(cst.to_bytes(), raw);
+
+        // CHARSET rides along as a plain parameter; the value bytes are reachable
+        // raw through the lens cursor, not transcoded.
+        let mut cst = cst;
+        assert_eq!(
+            cst.prop_mut::<NOTE>().unwrap().bytes().as_ref(),
+            &[b'c', b'a', b'f', 0xE9],
+        );
+        assert!(
+            cst.decode().properties[0]
+                .params
+                .contains(&VcardParam::Charset(Cow::Borrowed("ISO-8859-1"))),
+        );
+    }
+
+    #[test]
+    fn rejects_a_non_utf8_property_name() {
+        use crate::tree::error::VcardParseError;
+
+        // Only a value may carry a foreign charset; a non-UTF-8 name or parameter
+        // is a hard parse error.
+        let mut raw = Vec::new();
+        raw.extend_from_slice(b"BEGIN:VCARD\r\nVERSION:4.0\r\nX-");
+        raw.push(0xFF);
+        raw.extend_from_slice(b":v\r\nEND:VCARD\r\n");
+
+        assert!(matches!(
+            VcardCst::parse(&raw),
+            Err(VcardParseError::NonUtf8Header(_)),
+        ));
+    }
+
+    #[test]
+    fn parses_a_bare_directory_record_without_an_envelope() {
+        // An RFC 2425 record with no BEGIN:VCARD wrapper: every line is a
+        // property and no envelope is synthesised, so it round-trips exactly.
+        let raw = "cn:Babs Jensen\r\nemail:babs@umich.edu\r\n";
+        let cst = VcardCst::parse(raw).unwrap();
+
+        assert!(cst.begin.is_none());
+        assert!(cst.end.is_none());
+        assert_eq!(cst.props.len(), 2);
+        assert_eq!(cst.to_string(), raw);
+    }
+
+    #[test]
+    fn parse_many_refuses_a_bare_record() {
+        use crate::tree::error::VcardParseError;
+
+        // Without an envelope there is no reliable boundary between records, so
+        // the multi-card reader rejects a bare record rather than guess.
+        let raw = "cn:Babs Jensen\r\nemail:babs@umich.edu\r\n";
+        let first = VcardCst::parse_many(raw).next().unwrap();
+
+        assert!(matches!(first, Err(VcardParseError::ExpectedBegin(_))));
     }
 
     #[test]

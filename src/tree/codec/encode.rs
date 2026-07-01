@@ -22,7 +22,7 @@ use crate::{
     tree::{
         codec::{Codec, escape::escape_with, mode::Escaper},
         cst::VcardCst,
-        leaf::VcardLeaf,
+        leaf::{VcardLeaf, VcardValueLeaf},
         line::VcardLine,
         param::VcardParamNode,
         value::VcardValueNode,
@@ -109,6 +109,19 @@ impl VcardValueNode<'_> {
 
         self.components[i] = encode_component(values, self.escaper);
     }
+
+    /// Set the `i`th component from raw value bytes (the foreign-charset escape
+    /// hatch), escaping structural separators but writing the bytes verbatim.
+    pub fn set_bytes_at<B: AsRef<[u8]>>(&mut self, i: usize, values: &[B]) {
+        while self.components.len() <= i {
+            self.components.push(Vec::new());
+        }
+
+        self.components[i] = values
+            .iter()
+            .map(|v| VcardValueLeaf::from(escape_with(v.as_ref(), self.escaper).into_owned()))
+            .collect();
+    }
 }
 
 /// Serialize the decoded card by encoding it into a CST (canonical).
@@ -130,10 +143,10 @@ pub(crate) fn scalar_node(value: &str, escaper: Escaper) -> VcardValueNode<'stat
 pub(crate) fn encode_component<S: AsRef<str>>(
     values: &[S],
     escaper: Escaper,
-) -> Vec<VcardLeaf<'static>> {
+) -> Vec<VcardValueLeaf<'static>> {
     values
         .iter()
-        .map(|v| VcardLeaf::from(escape_with(v.as_ref(), escaper).into_owned()))
+        .map(|v| VcardValueLeaf::from(escape_with(v.as_ref().as_bytes(), escaper).into_owned()))
         .collect()
 }
 

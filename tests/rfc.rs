@@ -10,7 +10,7 @@ use vcard::tree::cst::VcardCst;
 
 #[test]
 fn parses_and_round_trips() {
-    common::each_fixture("rfc", 16, |name, input| {
+    common::each_fixture("rfc", 17, |name, input| {
         let card = VcardCst::parse(input).unwrap_or_else(|e| panic!("parse {name}: {e}"));
 
         // Anything we parse must serialize to a fixpoint (stable under reparse).

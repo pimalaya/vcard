@@ -20,6 +20,9 @@ pub enum VcardParseError {
     MissingCrlf(String),
     /// A content line carried no colon separating the name from the value.
     MissingPropertyColon(String),
+    /// A content line's name or parameters were not valid UTF-8; only a value
+    /// may carry a foreign charset.
+    NonUtf8Header(String),
     /// A card did not open with a BEGIN:VCARD line.
     ExpectedBegin(String),
     /// A card was left open by a missing END:VCARD line.
@@ -34,6 +37,12 @@ impl fmt::Display for VcardParseError {
             }
             Self::MissingPropertyColon(data) => {
                 write!(f, "Content line is missing a value separator: {data}")
+            }
+            Self::NonUtf8Header(data) => {
+                write!(
+                    f,
+                    "Content line name or parameters are not valid UTF-8: {data}"
+                )
             }
             Self::ExpectedBegin(data) => {
                 write!(f, "Card does not open with a BEGIN line: {data}")

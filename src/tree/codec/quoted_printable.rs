@@ -14,7 +14,16 @@ pub(crate) fn qp_decode(input: Cow<'_, str>) -> Cow<'_, str> {
         return input;
     }
 
-    let bytes = input.as_bytes();
+    Cow::Owned(String::from_utf8_lossy(&qp_decode_bytes(input.as_bytes())).into_owned())
+}
+
+/// Decode QUOTED-PRINTABLE `=XX` octets at the byte level, keeping the raw bytes
+/// (for a value in a foreign charset). Borrows when there is no `=` to decode.
+pub(crate) fn qp_decode_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
+    if !bytes.contains(&b'=') {
+        return Cow::Borrowed(bytes);
+    }
+
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;
 
@@ -31,7 +40,7 @@ pub(crate) fn qp_decode(input: Cow<'_, str>) -> Cow<'_, str> {
         i += 1;
     }
 
-    Cow::Owned(String::from_utf8_lossy(&out).into_owned())
+    Cow::Owned(out)
 }
 
 /// The value of a hex digit, or `None`.
