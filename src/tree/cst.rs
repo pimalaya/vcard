@@ -2,16 +2,18 @@
 //!
 //! The core representation: a whole vCard as generic, byte-faithful syntax.
 //!
-//! [`VcardCst`] is the hub of the crate. It models a card as four real lines
-//! (the `BEGIN` / `VERSION` envelope, the property lines, the `END`), made of
-//! the nodes in the sibling modules ([`line`](crate::tree::line),
+//! [`VcardCst`] is the hub of the crate. It models a card as its real lines: an
+//! optional `BEGIN` / `END` envelope (absent for a bare RFC 2425 record) and the
+//! property lines between them (the `VERSION` line among them), made of the
+//! nodes in the sibling modules ([`line`](crate::tree::line),
 //! [`param`](crate::tree::param), [`value`](crate::tree::value),
 //! [`leaf`](crate::tree::leaf)). It knows nothing about what a property
 //! *means*. It is filled from bytes (`parse`) or from typed properties
-//! (`push`), exports raw contents ([`Display`](core::fmt::Display) /
-//! `to_string`), and offers typed access by lens (`prop`, `prop_mut`,
-//! `remove`). The semantic projection ([`decode`](VcardCst::decode)) and the
-//! codec live in the [`decode`](crate::tree::codec::decode) /
+//! (`push`), exports its bytes byte-faithfully ([`to_bytes`](VcardCst::to_bytes),
+//! or the lossy-for-non-UTF-8 [`Display`](core::fmt::Display) / `to_string`),
+//! and offers typed access by lens (`prop`, `prop_mut`, `remove`). The semantic
+//! projection ([`decode`](VcardCst::decode)) and the codec live in the
+//! [`decode`](crate::tree::codec::decode) /
 //! [`encode`](crate::tree::codec::encode) siblings.
 //!
 //! # Examples
@@ -87,10 +89,11 @@ use crate::{
     version::VcardVersion,
 };
 
-/// A whole card as raw syntax: a `BEGIN` line, the property lines (the
-/// `VERSION` line among them, wherever it falls), and an `END` line. All are
-/// real lines so nothing is reconstructed by rule, and `VERSION` keeps its
-/// source position.
+/// A whole card as raw syntax: an optional `BEGIN` / `END` envelope and the
+/// property lines between them (the `VERSION` line among them, wherever it
+/// falls). All are real lines so nothing is reconstructed by rule, `VERSION`
+/// keeps its source position, and the envelope is absent only for a bare RFC
+/// 2425 directory record.
 #[derive(Clone, Debug)]
 pub struct VcardCst<'a> {
     /// The BEGIN line, or `None` for a bare RFC 2425 directory record parsed

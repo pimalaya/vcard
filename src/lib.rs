@@ -9,7 +9,9 @@
 //! indicator, never a type parameter or a separate dialect: the syntax tree
 //! ignores it, and only the codec and the per-property spec branch on it where
 //! escaping or a value's shape genuinely differ. The crate is `no_std` (with
-//! `alloc`) and dependency-free.
+//! `alloc`); its core is dependency-free, and the only dependencies are the
+//! small `no_std` crates behind the opt-in content-decoding features
+//! ([Cargo features](#cargo-features)).
 //!
 //! ## Example
 //!
@@ -59,13 +61,23 @@
 //!
 //! The syntax tree ([`tree`], gated behind the `parser` feature, on by default)
 //! is everything byte-faithful. Its hub is [`VcardCst`](tree::cst::VcardCst), a
-//! tree of generic nodes that reproduces the wire bytes exactly. Parsing fills
-//! a CST; [`decode`](tree::codec::decode) projects it onto the decoded
+//! tree of generic nodes that reproduces the wire bytes exactly.
+//! [`parse`](tree::cst::VcardCst::parse) accepts bytes or a string and reads one
+//! card (or a bare RFC 2425 record with no `BEGIN`/`END`);
+//! [`parse_many`](tree::cst::VcardCst::parse_many) iterates a multi-card file.
+//! [`decode`](tree::codec::decode) projects a CST onto the decoded
 //! [`Vcard`](vcard::Vcard); [`encode`](tree::codec::encode) (and `From<Vcard>`)
 //! projects the model back to a canonical CST. Per-property lens markers
 //! ([`VcardPropLens`](tree::prop::VcardPropLens)) read or edit a single line
 //! through the byte-preserving [`cursor`](tree::value::VcardValueCursor)s, so
 //! editing one property leaves every other byte intact.
+//!
+//! A property *value* is held as raw bytes, so a value in a foreign charset (a
+//! vCard 2.1 `CHARSET`) survives byte for byte; a name or parameter must be
+//! UTF-8, as every version's grammar guarantees. Because of that,
+//! [`to_bytes`](tree::cst::VcardCst::to_bytes) is the byte-faithful serializer,
+//! while [`Display`](core::fmt::Display) / `to_string` are a convenience that is
+//! lossy only for a non-UTF-8 value.
 //!
 //! ## The spec layer
 //!
@@ -82,6 +94,29 @@
 //! a second strict type. A card that passes earns a
 //! [`Valid`](tree::vcard::validate::Valid) proof, and both `Vcard` and
 //! `Valid<Vcard>` convert back into a [`VcardCst`](tree::cst::VcardCst).
+//!
+//! ## Content encodings
+//!
+//! The core transforms no content: a `QUOTED-PRINTABLE` or `BASE64` transfer
+//! encoding and a `CHARSET` are surfaced raw, with their parameters kept, so
+//! nothing is silently lost or transcoded (only the value grammar, escapes and
+//! line folding, is resolved). Decoding them is opt-in, one small `no_std` crate
+//! per feature (see [Cargo features](#cargo-features)):
+//! [`quoted_printable`](tree::value::VcardValueCursor::quoted_printable) and
+//! [`charset`](tree::value::VcardValueCursor::charset) on the value cursor, and
+//! [`decode_base64`](value::binary::VcardBinary::decode_base64) on the binary
+//! value.
+//!
+//! ## Cargo features
+//!
+//! - `parser` (default): the byte-faithful [`tree`] and its codec. Everything
+//!   under [`tree`] is gated on it; the decoded model is always available.
+//! - `quoted-printable` (default): decode `QUOTED-PRINTABLE` value octets, via
+//!   the `quoted_printable` crate.
+//! - `base64` (default): decode inline `BASE64` binary values, via the `base64`
+//!   crate.
+//! - `encoding` (default): transcode a foreign `CHARSET` value to text, via the
+//!   `encoding_rs` crate (the WHATWG Encoding Standard).
 
 extern crate alloc;
 

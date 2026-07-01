@@ -1,0 +1,13 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Ludwig-Götz Graßl
+N:Graßl;Ludwig-Götz;;;
+X-MAIDENNAME:Schoen
+BDAY:1943-02-07
+BIRTHPLACE:Kaltennordheim
+TITLE:Rentner
+CATEGORIES:Piratenpartei
+TZ:+0100
+EMAIL;TYPE=INTERNET;TYPE=HOME;TYPE=PREF:ludwig-goetz@ludwig-goetz-grassl.org
+NOTE:Interessen: Stofftiere, Basketball\nLieblingsessen: Reiberouladen
+END:VCARD

@@ -11,6 +11,12 @@
 //! component-level access for the structured kinds (`ADR`, `GENDER`, `ORG`,
 //! `CLIENTPIDMAP`); the bespoke [`VcardNCursor`](crate::tree::prop::n::VcardNCursor)
 //! names `N`'s components.
+//!
+//! Beside the UTF-8 text accessors it offers a raw byte hatch
+//! ([`bytes`](VcardValueCursor::bytes) / [`set_bytes`](VcardValueCursor::set_bytes))
+//! for a value in a foreign charset, and, behind the content-encoding features,
+//! the [`quoted_printable`](VcardValueCursor::quoted_printable) and
+//! [`charset`](VcardValueCursor::charset) decoders.
 
 use alloc::{borrow::Cow, vec::Vec};
 

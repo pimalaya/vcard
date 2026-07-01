@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:4.0
+
+NOTE:This is a long description
+  that exists o
+ n a long line.
+
+END:VCARD
+

@@ -1,23 +1,24 @@
-# 📇 vcard-types [![Documentation](https://img.shields.io/docsrs/vcard-types?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-types/latest/vcard-types) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
+# 📇 vcard-rs [![Documentation](https://img.shields.io/docsrs/vcard-rs?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-rs/latest/vcard-rs) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-Pure, parser-free [vCard](https://www.rfc-editor.org/rfc/rfc6350) model in Rust.
+Version-agnostic [vCard](https://www.rfc-editor.org/rfc/rfc6350) library in Rust.
 
-`vcard-types` is the in-memory representation of a vCard and nothing else: no separators, line folding, or escaping, which all belong to the parser. Build a card by plugging the public types together, every field is public and the aggregate is `Default`; parsing and serialising live in sibling crates.
+`vcard-rs` is one decoded model and one byte-faithful syntax tree that read and write vCard 2.1 (versitcard), 3.0 ([RFC 2426](https://www.rfc-editor.org/rfc/rfc2426)) and 4.0 ([RFC 6350](https://www.rfc-editor.org/rfc/rfc6350)) alike. The card version is a decoded indicator, never a type parameter or a separate dialect: the syntax tree ignores it, and only the codec and the per-property spec branch on it where escaping or a value's shape genuinely differ. Parse raw bytes into the tree, edit one property, and every untouched byte round-trips.
 
 ```rust
-use vcard_types::rfc6350::{Vcard, VcardProperty, VcardUriOrText};
-use vcard_types::rfc6474::VcardBirthplace;
+use vcard::tree::cst::VcardCst;
+use vcard::tree::prop::r#fn::FN;
 
-let mut card = Vcard {
-    r#fn: vec![VcardProperty { value: "Jane Doe".into(), ..Default::default() }],
-    email: vec![VcardProperty { value: "jane@example.org".into(), ..Default::default() }],
-    ..Default::default()
-};
+let mut card = VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n").unwrap();
 
-// extension properties convert in with `From`
-card.extensions.push(
-    VcardBirthplace { value: VcardUriOrText::Text("Paris, France".into()), ..Default::default() }.into(),
-);
+// read a property through its typed lens
+assert_eq!(&*card.prop::<FN>().unwrap().0, "John Doe");
+
+// edit it in place; every other byte is preserved
+card.prop_mut::<FN>().unwrap().set_text("Jane Doe");
+assert_eq!(card.to_string(), "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n");
+
+// or project onto the version-agnostic decoded model
+let decoded = card.decode();
 ```
 
 ## Table of contents
@@ -33,27 +34,27 @@ card.extensions.push(
 
 ## Features
 
-- `no_std` (plus `alloc`), with no dependencies.
-- **Complete** RFC 6350 vocabulary: every property, parameter and value type, organised by the spec's own sections under `rfc6350`.
-- **Faithful** typing: each property carries exactly the value type the RFC permits, a concrete type when one is allowed, a small choice enum (`VcardUriOrText`, `VcardDateOrText`, `VcardTzValue`) when several are.
-- **Extensible**: the extension RFCs (`rfc6474`, `rfc6715`, `rfc8605`, `rfc9554`, `rfc9555`) ship opt-in typed views that convert into one generic `VcardExtension` with `From`, so the core never depends on the supported set and there is no closed `Other` enum.
-- **Parser-free**: the model holds decoded values only; grammar (folding, escaping, separators) belongs to the sibling `vcard-parser` and `vcard-builder` crates.
+- `no_std` (plus `alloc`); the core is dependency-free, the only dependencies are the small `no_std` crates behind the opt-in content-decoding features.
+- **One model, every version**: a single decoded `Vcard` and a single parser for 2.1 / 3.0 / 4.0, with no per-version modules; the version is a value the syntax tree never consults.
+- **Byte-faithful**: `VcardCst` reproduces the wire bytes exactly, so parse, edit and serialise round-trips byte for byte; a property value is kept as raw bytes, so a value in a foreign `CHARSET` survives (names and parameters must be UTF-8).
+- **Liberal in, strict out** (Postel): one liberal parser accepts any real card, including unknown properties, parameters and value types; strictness is opt-in, as the spec-driven builder and `validate` (an RFC 6350 conformance check that still permits extensions).
+- **Spec-driven**: each property carries its allowed versions, cardinality, value types and parameters per RFC 6350, consulted by the decoder, the validator and the builder alike.
+- **Opt-in content decoders**, one small `no_std` crate per feature: `quoted-printable` (`=XX` octets), `base64` (inline binary values), and `encoding` (foreign `CHARSET` transcoding via [`encoding_rs`](https://crates.io/crates/encoding_rs)).
 
 ## Installation
 
 ```toml
 [dependencies]
-vcard-types = "0.0.1"
+vcard-rs = "0.0.1"
 ```
 
 ## Usage
 
-The crate is data only; its modules mirror the specifications:
+The crate has two layers. The decoded model is always available; the syntax tree is behind the default `parser` feature.
 
-- `rfc6350`: the card (`Vcard`), the property and parameter wrappers (`VcardProperty`, `VcardParameters`), the section 4 value types, and the structured values grouped by the property sections (`VcardName`, `VcardAddress`, `VcardGender`, ...).
-- `rfc6474`, `rfc6715`, `rfc8605`, `rfc9554`, `rfc9555`: typed views for each extension RFC, each with a `From<View> for VcardExtension`.
-
-Build a `Vcard` from its public fields (see the example above), or receive one parsed by `vcard-parser`; serialise it back to vCard text with `vcard-builder`.
+- Decoded model (`vcard`, `version`, `prop`, `param`, `value`): pure data with no dependency on the syntax side, so it can be depended on alone. A `Vcard` is a version plus a list of `VcardProp` (a name, parameters and one value); parameters and values are open payload enums with an `Unknown` arm, so anything outside the model survives.
+- Syntax tree (`tree`): `tree::cst::VcardCst::parse` reads bytes or text (one card, a bare RFC 2425 record with no `BEGIN`/`END`, or every card via `parse_many`); `to_bytes` serialises byte-faithfully (`Display` / `to_string` is a lossy-for-non-UTF-8 convenience); `decode` projects onto the model and `encode` (or `From<Vcard>`) projects back; per-property lenses (`prop`, `prop_mut`) read and edit one line through byte-preserving cursors. The strict-out layer lives in `tree::vcard`: the `VcardPropBuilder` and `Vcard::validate`.
+- Content decoders (behind `quoted-printable`, `base64`, `encoding`): the core surfaces a transfer-encoded or foreign-charset value raw, with its parameters kept, and these opt-in helpers decode it (`VcardValueCursor::quoted_printable` / `charset`, and `VcardBinary::decode_base64`).
 
 ## License
 
@@ -73,7 +74,7 @@ This project is developed with AI assistance. This section documents how, so use
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
 - **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
 - **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 26/06/2026
+- **Last reviewed**: 01/07/2026
 
 ## Social
 
