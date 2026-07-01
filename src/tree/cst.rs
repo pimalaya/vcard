@@ -475,6 +475,38 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_fuzz_regressions() {
+        // Inputs the coverage-guided fuzzer found where a parsed card serialized
+        // to bytes that either failed to reparse or reparsed to different bytes.
+        // Every one must now parse, and its serialization must be a byte-stable
+        // fixpoint (its own output reparses identically).
+        let cases: &[&[u8]] = &[
+            // QP value left ending in `=` (a dangling soft-break marker) would,
+            // once serialized, re-trigger soft-break joining and swallow the END
+            // line on reparse. Two ways in: a soft-break join over a blank
+            // continuation (`x==` -> `x=`)...
+            b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;ENCODING=QUOTED-PRINTABLE:x==\r\n\r\nEND:VCARD\r\n",
+            // ...and a folded continuation that appends the `=` (`Luo` + ` =`).
+            b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;ENCODING=QUOTED-PRINTABLE:Luo\r\n =\r\nEND:VCARD\r\n",
+            // A dropped blank line before a space-prefixed (fold-looking) line
+            // must not let that line fold into the previous one on reparse.
+            b"BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a\r\n\r\n FN:b\r\nEND:VCARD\r\n",
+            // A line whose content starts with folding whitespace or a stray CR
+            // must strip to a stable form (leading `\t`/`\r` here).
+            b"\t\r:",
+        ];
+
+        for raw in cases {
+            let cst = VcardCst::parse(raw).unwrap_or_else(|e| panic!("parse {raw:?}: {e}"));
+            let bytes = cst.to_bytes();
+
+            let reparsed =
+                VcardCst::parse(&bytes).unwrap_or_else(|e| panic!("reparse {raw:?}: {e}"));
+            assert_eq!(reparsed.to_bytes(), bytes, "not idempotent: {raw:?}");
+        }
+    }
+
+    #[test]
     fn parses_a_bare_directory_record_without_an_envelope() {
         // NOTE: An RFC 2425 record with no BEGIN:VCARD wrapper: every line is a
         // property and no envelope is synthesised, so it round-trips exactly.

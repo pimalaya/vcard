@@ -117,4 +117,13 @@ mod tests {
         assert_eq!(unescape(r"a\,b\;c\nd"), "a,b;c\nd");
         assert!(matches!(unescape("plain"), Cow::Borrowed("plain")));
     }
+
+    #[test]
+    fn unescapes_only_the_semicolon_in_v2_1() {
+        use crate::tree::codec::{mode::Escaper, unescape::unescape_with};
+
+        // vCard 2.1 resolves `\;` only; `\n` keeps its literal backslash, and a
+        // trailing backslash stays.
+        assert_eq!(unescape_with(br"a\;b\nc\", Escaper::V2_1), "a;b\\nc\\");
+    }
 }

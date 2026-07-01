@@ -221,4 +221,20 @@ mod tests {
         card.prop_mut::<ADR>().unwrap().set_street(&["New St"]);
         assert!(card.to_string().contains("ADR:;;New St;;;;\r\n"));
     }
+
+    #[test]
+    fn exercises_every_generic_accessor() {
+        use crate::tree::prop::note::NOTE;
+
+        let mut card =
+            VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a,b\r\nEND:VCARD\r\n").unwrap();
+        let mut cursor = card.prop_mut::<NOTE>().unwrap();
+
+        let _ = cursor.text();
+        let _ = cursor.list();
+        let _ = cursor.component(0);
+        cursor.set_text("x");
+        cursor.set_list(&["a", "b"]);
+        cursor.set_component(1, &["y"]);
+    }
 }

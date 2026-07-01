@@ -15,9 +15,3 @@ mkdir -p fuzz/corpus/parse && cp tests/corpus/*/*.vcf fuzz/corpus/parse/
 ```
 
 Off NixOS, `cargo install cargo-fuzz` and a nightly toolchain give the same `cargo fuzz run parse`.
-
-For a quick, dependency-free smoke test on stable Rust (no libFuzzer), use the example instead:
-
-```sh
-cargo run --release --example fuzz_smoke -- 1000000
-```

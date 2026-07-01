@@ -82,6 +82,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_versions() {
-        assert!("5.0".parse::<VcardVersion>().is_err());
+        let error = "5.0".parse::<VcardVersion>().unwrap_err();
+        assert!(error.to_string().contains("5.0"));
     }
 }

@@ -290,13 +290,17 @@ impl From<Valid<Vcard<'_>>> for VcardCst<'static> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{borrow::Cow, vec, vec::Vec};
+    use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
 
     use crate::{
-        param::VcardParam,
+        param::{VcardParam, VcardParamKind},
         prop::{VcardProp, VcardPropKind},
-        tree::vcard::validate::VcardValidateError,
-        value::{VcardValue, n::VcardN, text::VcardText, uri::VcardUri},
+        tree::{
+            cst::VcardCst,
+            prop::VcardPropCardinality,
+            vcard::validate::{Valid, VcardValidateError},
+        },
+        value::{VcardValue, VcardValueKind, n::VcardN, text::VcardText, uri::VcardUri},
         vcard::Vcard,
         version::VcardVersion,
     };
@@ -391,5 +395,165 @@ mod tests {
                 ..
             },
         )));
+    }
+
+    #[test]
+    fn flags_a_property_absent_from_the_version() {
+        // NOTE: AGENT is 2.1 / 3.0 only, so in 4.0 it is undefined.
+        let errors = card(
+            VcardVersion::V4_0,
+            vec![
+                prop(
+                    "FN",
+                    vec![],
+                    VcardValue::Text(VcardText(Cow::Borrowed("X"))),
+                ),
+                prop(
+                    "AGENT",
+                    vec![],
+                    VcardValue::Text(VcardText(Cow::Borrowed("a"))),
+                ),
+            ],
+        )
+        .validate()
+        .unwrap_err();
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            VcardValidateError::PropVersion {
+                prop: VcardPropKind::Agent,
+                ..
+            },
+        )));
+    }
+
+    #[test]
+    fn flags_a_disallowed_parameter() {
+        // NOTE: FN is text-only and does not allow MEDIATYPE.
+        let errors = card(
+            VcardVersion::V4_0,
+            vec![prop(
+                "FN",
+                vec![VcardParam::MediaType(Cow::Borrowed("text/plain"))],
+                VcardValue::Text(VcardText(Cow::Borrowed("X"))),
+            )],
+        )
+        .validate()
+        .unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|error| matches!(error, VcardValidateError::Param { .. },))
+        );
+    }
+
+    #[test]
+    fn flags_a_property_that_appears_too_often() {
+        // NOTE: 4.0 N is at-most-one; two N properties is too many.
+        let errors = card(
+            VcardVersion::V4_0,
+            vec![
+                prop(
+                    "FN",
+                    vec![],
+                    VcardValue::Text(VcardText(Cow::Borrowed("X"))),
+                ),
+                prop("N", vec![], VcardValue::N(VcardN::default())),
+                prop("N", vec![], VcardValue::N(VcardN::default())),
+            ],
+        )
+        .validate()
+        .unwrap_err();
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            VcardValidateError::Cardinality {
+                prop: VcardPropKind::N,
+                count: 2,
+                ..
+            },
+        )));
+    }
+
+    #[test]
+    fn rejects_a_v4_only_parameter_in_2_1() {
+        // NOTE: PID is 4.0-only, so on a 2.1 property it is disallowed.
+        let errors = card(
+            VcardVersion::V2_1,
+            vec![
+                prop("N", vec![], VcardValue::N(VcardN::default())),
+                prop(
+                    "FN",
+                    vec![],
+                    VcardValue::Text(VcardText(Cow::Borrowed("X"))),
+                ),
+                prop(
+                    "TEL",
+                    vec![VcardParam::Pid(vec![Cow::Borrowed("1")])],
+                    VcardValue::Text(VcardText(Cow::Borrowed("123"))),
+                ),
+            ],
+        )
+        .validate()
+        .unwrap_err();
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            VcardValidateError::Param {
+                param: VcardParamKind::Pid,
+                ..
+            },
+        )));
+    }
+
+    #[test]
+    fn displays_every_validate_error_variant() {
+        let errors = [
+            VcardValidateError::PropVersion {
+                prop: VcardPropKind::Agent,
+                version: VcardVersion::V4_0,
+            },
+            VcardValidateError::ValueKind {
+                prop: VcardPropKind::Fn,
+                found: Some(VcardValueKind::Uri),
+            },
+            VcardValidateError::ValueKind {
+                prop: VcardPropKind::Fn,
+                found: None,
+            },
+            VcardValidateError::Param {
+                prop: VcardPropKind::Fn,
+                param: VcardParamKind::MediaType,
+            },
+            VcardValidateError::Cardinality {
+                prop: VcardPropKind::N,
+                cardinality: VcardPropCardinality::AtMostOne,
+                count: 2,
+            },
+        ];
+        for error in errors {
+            assert!(!error.to_string().is_empty());
+        }
+    }
+
+    #[test]
+    fn valid_proof_derefs_unwraps_and_converts() {
+        let vcard = card(
+            VcardVersion::V4_0,
+            vec![prop(
+                "FN",
+                vec![],
+                VcardValue::Text(VcardText(Cow::Borrowed("John"))),
+            )],
+        );
+
+        // TryFrom mints the proof; Deref reads through it.
+        let valid = Valid::try_from(vcard.clone()).expect("a conformant card");
+        assert_eq!(valid.version, VcardVersion::V4_0);
+
+        // A proof converts back into a byte tree.
+        let cst = VcardCst::from(valid);
+        assert!(cst.to_string().contains("FN:John"));
+
+        // into_inner yields the card back.
+        let inner = vcard.validate().unwrap().into_inner();
+        assert_eq!(inner.version, VcardVersion::V4_0);
     }
 }

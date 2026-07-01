@@ -99,3 +99,22 @@ impl<'a> From<Cow<'a, str>> for VcardValueLeaf<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloc::vec::Vec;
+
+    use crate::tree::leaf::{VcardLeaf, VcardValueLeaf};
+
+    #[test]
+    fn replaces_leaf_contents() {
+        let mut text = VcardLeaf::from("a");
+        text.set("b");
+        assert_eq!(text.get(), "b");
+
+        let mut bytes = VcardValueLeaf::from(b"a".as_slice());
+        bytes.set(Vec::from(b"c".as_slice()));
+        assert_eq!(bytes.as_bytes(), b"c");
+        assert_eq!(bytes.to_str_lossy(), "c");
+    }
+}

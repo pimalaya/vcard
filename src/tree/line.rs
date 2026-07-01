@@ -88,6 +88,12 @@ impl<'a> VcardLine<'a> {
             break (content, eol, next);
         };
 
+        // A line that begins with folding whitespace but has no line to continue
+        // (a dangling continuation, e.g. left after a dropped blank line) would
+        // fold into the previous line on reparse; strip the leading whitespace so
+        // it stays its own line and serialization round-trips.
+        let first = strip_leading_wsp(first);
+
         // NOTE: QUOTED-PRINTABLE soft line breaks: a line whose head declares
         // ENCODING=QUOTED-PRINTABLE and whose value ends with `=` continues on
         // the next physical line. Param-driven, so it applies to any version's
@@ -212,10 +218,24 @@ impl<'a> VcardLine<'a> {
             .map_err(|_| VcardParseError::NonUtf8Header(lossy(&content[..colon])))?;
         let (name, params) = split_head(head);
 
+        let mut value = &content[colon + 1..];
+
+        // A QUOTED-PRINTABLE value ending in `=` is a dangling soft-break marker,
+        // however it got there (a soft-break join, a folded continuation, or raw
+        // input): valid content would encode a literal `=` as `=3D`. Left in, it
+        // would re-trigger soft-break joining on reparse and swallow the next
+        // line, so serialization would not round-trip; strip it. This never
+        // touches base64 padding, since `ENCODING=BASE64` is not quoted-printable.
+        if head_is_quoted_printable(content) {
+            while value.last() == Some(&b'=') {
+                value = &value[..value.len() - 1];
+            }
+        }
+
         Ok(VcardLine {
             name: VcardLeaf::from(name),
             params,
-            value: VcardValueNode::parse(&content[colon + 1..]),
+            value: VcardValueNode::parse(value),
             eol: VcardLeaf::from(str::from_utf8(eol).unwrap_or("")),
         })
     }
@@ -277,6 +297,16 @@ fn physical_line(rest: &[u8]) -> (&[u8], &[u8], &[u8]) {
 /// Whether `rest` begins with a folding whitespace (space or tab).
 fn starts_with_wsp(rest: &[u8]) -> bool {
     matches!(rest.first(), Some(b' ' | b'\t'))
+}
+
+/// Strip any leading folding whitespace (space, tab) or stray line-break byte
+/// (`\r`, `\n`) from a line's content, so its name never begins with a byte that
+/// another layer (folding, blank-line skipping) would re-strip on reparse.
+fn strip_leading_wsp(mut bytes: &[u8]) -> &[u8] {
+    while matches!(bytes.first(), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+        bytes = &bytes[1..];
+    }
+    bytes
 }
 
 /// Whether a line's head (its name and parameters, before the `:`) declares the
@@ -364,6 +394,56 @@ mod tests {
         let (line, rest) = VcardLine::take(b"END:VCARD").unwrap();
         assert_eq!(line.name.get(), "END");
         assert_eq!(line.to_string(), "END:VCARD");
+        assert_eq!(rest, b"");
+    }
+
+    #[test]
+    fn joins_a_quoted_printable_soft_broken_line() {
+        // Two soft breaks: the first continuation itself ends with `=` (the
+        // Some arm), the second does not (the None arm).
+        let (line, _) =
+            VcardLine::take(b"NOTE;ENCODING=QUOTED-PRINTABLE:caf=\r\n=C3=\r\n=A9\r\nEND:VCARD\r\n")
+                .unwrap();
+        assert_eq!(line.name.get(), "NOTE");
+        assert_eq!(line.raw_value_str(), "caf=C3=A9");
+        assert_eq!(line.raw_value(), b"caf=C3=A9");
+    }
+
+    #[test]
+    fn errors_when_there_is_no_content_line() {
+        assert!(VcardLine::take(b"").is_err());
+        assert!(VcardLine::take(b"\r\n\r\n").is_err());
+    }
+
+    #[test]
+    fn rejects_a_non_utf8_head() {
+        let mut raw = b"X-".to_vec();
+        raw.push(0xff);
+        raw.extend_from_slice(b":v\r\n");
+        assert!(VcardLine::take(&raw).is_err());
+    }
+
+    #[test]
+    fn finds_a_parameter_mutably() {
+        use crate::tree::param::r#type::TYPE;
+
+        let (mut line, _) = VcardLine::take(b"TEL;TYPE=home:123\r\n").unwrap();
+        assert!(line.param_mut::<TYPE>().is_some());
+    }
+
+    #[test]
+    fn a_trailing_equals_without_a_colon_is_not_quoted_printable() {
+        // `abc=` ends with `=` but has no colon, so the QP soft-break check bails
+        // and the line then fails for want of a value separator.
+        assert!(VcardLine::take(b"abc=\r\n").is_err());
+    }
+
+    #[test]
+    fn quoted_printable_join_stops_at_an_empty_tail() {
+        // The final continuation ends with `=` and nothing follows, so the join
+        // loop exits via the empty-tail guard rather than a non-`=` line.
+        let (line, rest) = VcardLine::take(b"NOTE;ENCODING=QUOTED-PRINTABLE:a=\r\nb=\r\n").unwrap();
+        assert_eq!(line.raw_value_str(), "ab");
         assert_eq!(rest, b"");
     }
 }

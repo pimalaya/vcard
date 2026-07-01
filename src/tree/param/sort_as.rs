@@ -12,10 +12,9 @@ use crate::{
 };
 
 /// The `SORT-AS` parameter lens.
-#[allow(non_camel_case_types)]
-pub struct SORT_AS;
+pub struct SORTAS;
 
-impl VcardParamLens for SORT_AS {
+impl VcardParamLens for SORTAS {
     const KIND: VcardParamKind = VcardParamKind::SortAs;
 
     type Target<'v> = Vec<Cow<'v, str>>;

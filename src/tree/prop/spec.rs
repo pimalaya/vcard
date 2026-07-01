@@ -143,3 +143,26 @@ pub(crate) fn prop_spec(prop: VcardPropKind) -> VcardPropSpecFns {
         Xml => spec_fns::<xml::XML>(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        prop::VcardPropKind, tree::prop::prop_spec, value::VcardValueKind, version::VcardVersion,
+    };
+
+    #[test]
+    fn every_property_spec_answers_for_every_version() {
+        for kind in VcardPropKind::ALL {
+            let spec = prop_spec(kind);
+
+            for version in [VcardVersion::V2_1, VcardVersion::V3_0, VcardVersion::V4_0] {
+                let _ = (spec.allowed_versions)();
+                let _ = (spec.cardinality)(version);
+                let _ = (spec.allowed_values)(version);
+                let _ = (spec.allowed_params)(version);
+                let _ = (spec.value)(version, None);
+                let _ = (spec.value)(version, Some(VcardValueKind::Uri));
+            }
+        }
+    }
+}
