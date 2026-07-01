@@ -15,17 +15,6 @@ fn fixture(name: &str) -> String {
     String::from_utf8(fs::read(path).unwrap()).unwrap()
 }
 
-/// A 2.1 `AGENT` embeds a whole vCard as its value. Parsing stops at the nested
-/// `END:VCARD`, dropping the outer one and reading the nested card as stray
-/// properties, so the card does not round-trip byte for byte.
-#[test]
-#[ignore = "nested AGENT vCard is truncated at the inner END:VCARD"]
-fn nested_agent_vcard_round_trips() {
-    let input = fixture("vcard21_agent_nested.vcf");
-    let card = VcardCst::parse(&input).expect("parse");
-    assert_eq!(card.to_string(), input);
-}
-
 /// A bare RFC 2425 directory record has no `BEGIN:VCARD` envelope. The parser
 /// requires one, so the record is rejected outright.
 #[test]

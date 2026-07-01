@@ -108,11 +108,58 @@ impl<'a> VcardCst<'a> {
         }
     }
 
-    /// Parse exactly one card from raw text, borrowing it for the Cst lifetime.
+    /// Parse the first card from raw text, borrowing it for the Cst lifetime.
     /// `VERSION` is taken as an ordinary property wherever it appears (or not
     /// at all): the parser is liberal about its position, the way real cards
-    /// are.
+    /// are. Any input after the card's `END` line is ignored; use
+    /// [`parse_many`](Self::parse_many) to read every card.
     pub fn parse(input: &'a str) -> Result<Self, VcardParseError> {
+        Self::take_card(input).map(|(card, _rest)| card)
+    }
+
+    /// Parse every card in the input, lazily, one item per card (or the parse
+    /// error that stopped iteration). Blank lines between cards are skipped. For
+    /// multi-card `.vcf` files and CardDAV address books.
+    ///
+    /// ```rust
+    /// use vcard::tree::cst::VcardCst;
+    ///
+    /// let file = concat!(
+    ///     "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Alice\r\nEND:VCARD\r\n",
+    ///     "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Bob\r\nEND:VCARD\r\n",
+    /// );
+    /// let cards: Result<Vec<_>, _> = VcardCst::parse_many(file).collect();
+    /// assert_eq!(cards.unwrap().len(), 2);
+    /// ```
+    pub fn parse_many(input: &'a str) -> impl Iterator<Item = Result<Self, VcardParseError>> {
+        let mut rest = input;
+
+        core::iter::from_fn(move || {
+            rest = rest.trim_start_matches(['\r', '\n']);
+            if rest.is_empty() {
+                return None;
+            }
+
+            match Self::take_card(rest) {
+                Ok((card, tail)) => {
+                    rest = tail;
+                    Some(Ok(card))
+                }
+                Err(error) => {
+                    // NOTE: stop after the first failure; a malformed card
+                    // leaves no reliable boundary to resume from.
+                    rest = "";
+                    Some(Err(error))
+                }
+            }
+        })
+    }
+
+    /// Take one card off the front of `input`, returning it and the unconsumed
+    /// rest. The card's `END` is the one at `BEGIN`/`END` depth zero, so a 2.1
+    /// inline `AGENT` (a whole nested `BEGIN`..`END`) does not close the card
+    /// early; the nested lines are kept verbatim so the card round-trips.
+    fn take_card(input: &'a str) -> Result<(Self, &'a str), VcardParseError> {
         let (begin, mut rest) = VcardLine::take(input)?;
 
         if !begin.name.get().eq_ignore_ascii_case("BEGIN") {
@@ -120,6 +167,7 @@ impl<'a> VcardCst<'a> {
         }
 
         let mut props: Vec<VcardLine<'a>> = Vec::new();
+        let mut depth = 0usize;
 
         loop {
             if rest.is_empty() {
@@ -129,7 +177,17 @@ impl<'a> VcardCst<'a> {
             let (line, tail) = VcardLine::take(rest)?;
             rest = tail;
 
-            if line.name.get().eq_ignore_ascii_case("END") {
+            let name = line.name.get();
+
+            if name.eq_ignore_ascii_case("END") {
+                if let Some(next) = depth.checked_sub(1) {
+                    // NOTE: a nested END closes an embedded (AGENT) card, not
+                    // this one; keep it as a verbatim line.
+                    depth = next;
+                    props.push(line);
+                    continue;
+                }
+
                 // NOTE: VERSION can sit anywhere, so the escaping mode is only
                 // known once the whole card is parsed: stamp every value node
                 // with it.
@@ -143,11 +201,18 @@ impl<'a> VcardCst<'a> {
                     line.value.escaper = escaper;
                 }
 
-                return Ok(Self {
-                    begin,
-                    props,
-                    end: line,
-                });
+                return Ok((
+                    Self {
+                        begin,
+                        props,
+                        end: line,
+                    },
+                    rest,
+                ));
+            }
+
+            if name.eq_ignore_ascii_case("BEGIN") {
+                depth += 1;
             }
 
             props.push(line);
@@ -249,6 +314,45 @@ mod tests {
     fn round_trips_byte_for_byte() {
         let card = VcardCst::parse(CARD).unwrap();
         assert_eq!(card.to_string(), CARD);
+    }
+
+    #[test]
+    fn parses_many_cards_from_one_input() {
+        let a = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n";
+        let b = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:B\r\nEND:VCARD\r\n";
+        // Two cards separated by a blank line, which the parser skips.
+        let input = concat!(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n",
+            "\r\n",
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:B\r\nEND:VCARD\r\n",
+        );
+
+        let cards = VcardCst::parse_many(input)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert_eq!(cards.len(), 2);
+        assert_eq!(cards[0].to_string(), a);
+        assert_eq!(cards[1].to_string(), b);
+    }
+
+    #[test]
+    fn keeps_a_nested_agent_card_intact() {
+        // A 2.1 inline AGENT embeds a whole vCard; its inner END must not close
+        // the outer card, and the whole thing round-trips byte for byte.
+        let raw = concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:2.1\r\n",
+            "FN:Has Agent\r\n",
+            "AGENT:\r\n",
+            "BEGIN:VCARD\r\n",
+            "VERSION:2.1\r\n",
+            "N:Friday;Fred\r\n",
+            "TEL;WORK;VOICE:+1-213-555-1234\r\n",
+            "END:VCARD\r\n",
+            "END:VCARD\r\n",
+        );
+        assert_eq!(VcardCst::parse(raw).unwrap().to_string(), raw);
     }
 
     #[test]
