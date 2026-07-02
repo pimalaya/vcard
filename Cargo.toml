@@ -28,6 +28,21 @@ quoted_printable = { version = "0.5", default-features = false, optional = true 
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 encoding_rs = { version = "0.8", optional = true }
 
+[dev-dependencies]
+criterion = "0.5"
+# Peer parsers, for the comparative parse benchmark. calcard and vcard_parser
+# build a decoded model (compared against our parse + decode); ical_vcard is a
+# content-line parser (compared against our CST). The `vcard` crate is
+# builder-only, so it has no parse path to compare.
+calcard = "0.3"
+vcard_parser = "0.2"
+ical_vcard = "0.4"
+vparser = "1"
+
 [lib]
 name = "vcard"
 path = "src/lib.rs"
+
+[[bench]]
+name = "parse"
+harness = false
