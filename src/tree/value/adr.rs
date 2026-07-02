@@ -26,9 +26,8 @@ impl<'v> Codec<'v> for VcardAdr<'v> {
     }
 
     fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
-        VcardValueNode {
-            escaper,
-            components: vec![
+        VcardValueNode::from_components(
+            vec![
                 encode_component(&self.po_box, escaper),
                 encode_component(&self.extended, escaper),
                 encode_component(&self.street, escaper),
@@ -37,6 +36,7 @@ impl<'v> Codec<'v> for VcardAdr<'v> {
                 encode_component(&self.postal_code, escaper),
                 encode_component(&self.country, escaper),
             ],
-        }
+            escaper,
+        )
     }
 }

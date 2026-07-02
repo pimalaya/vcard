@@ -26,6 +26,7 @@ let decoded = card.decode();
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Benchmarks](#benchmarks)
 - [License](#license)
 - [AI disclosure](#ai-disclosure)
 - [Contributing](CONTRIBUTING.md)
@@ -55,6 +56,28 @@ The crate has two layers. The decoded model is always available; the syntax tree
 - Decoded model (`vcard`, `version`, `prop`, `param`, `value`): pure data with no dependency on the syntax side, so it can be depended on alone. A `Vcard` is a version plus a list of `VcardProp` (a name, parameters and one value); parameters and values are open payload enums with an `Unknown` arm, so anything outside the model survives.
 - Syntax tree (`tree`): `tree::cst::VcardCst::parse` reads bytes or text (one card, a bare RFC 2425 record with no `BEGIN`/`END`, or every card via `parse_many`); `to_bytes` serialises byte-faithfully (`Display` / `to_string` is a lossy-for-non-UTF-8 convenience); `decode` projects onto the model and `encode` (or `From<Vcard>`) projects back; per-property lenses (`prop`, `prop_mut`) read and edit one line through byte-preserving cursors. The strict-out layer lives in `tree::vcard`: the `VcardPropBuilder` and `Vcard::validate`.
 - Content decoders (behind `quoted-printable`, `base64`, `encoding`): the core surfaces a transfer-encoded or foreign-charset value raw, with its parameters kept, and these opt-in helpers decode it (`VcardValueCursor::quoted_printable` / `charset`, and `VcardBinary::decode_base64`).
+
+## Benchmarks
+
+Single-card [criterion](https://crates.io/crates/criterion) medians, run with `cargo bench --bench parse`. The comparison is level-matched: content-line parsers produce a token or line tree like our `VcardCst`, model parsers build a decoded object like our `parse + decode`, so each group compares like with like.
+
+Parsing into content lines (no decoding):
+
+| library | time | vs vcard-rs |
+| --- | --- | --- |
+| [`vparser`](https://crates.io/crates/vparser) | 0.57 µs | -61% |
+| **vcard-rs** (`VcardCst::parse`) | **1.47 µs** | base |
+| [`ical_vcard`](https://crates.io/crates/ical_vcard) | 2.82 µs | +92% |
+
+Parsing into a decoded model:
+
+| library | time | vs vcard-rs |
+| --- | --- | --- |
+| [`calcard`](https://crates.io/crates/calcard) | 4.40 µs | -1% |
+| **vcard-rs** (`parse + decode`) | **4.46 µs** | base |
+| [`vcard_parser`](https://crates.io/crates/vcard_parser) | 87.8 µs | +1869% |
+
+These numbers are a ballpark, not a strict ranking: the libraries produce different representations (borrowed vs owned, shallow vs validating), so they do different amounts of work. `vparser` is a zero-allocation pull tokenizer that builds no leaf or parameter structs, which is why it stays ahead at the content-line level; at the model level we are on par with `calcard`. The [`vcard`](https://crates.io/crates/vcard) crate is builder-only, so it has no parse path to compare.
 
 ## License
 

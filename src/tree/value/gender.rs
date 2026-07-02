@@ -22,12 +22,12 @@ impl<'v> Codec<'v> for VcardGender<'v> {
     }
 
     fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
-        VcardValueNode {
-            escaper,
-            components: vec![
+        VcardValueNode::from_components(
+            vec![
                 encode_component(&[self.sex.as_ref()], escaper),
                 encode_component(&[self.identity.as_ref()], escaper),
             ],
-        }
+            escaper,
+        )
     }
 }

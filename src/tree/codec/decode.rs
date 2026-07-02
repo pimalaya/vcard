@@ -20,10 +20,7 @@ use crate::{
     param::{VcardParam, VcardParamKind},
     prop::{VcardProp, VcardPropKind, VcardPropName},
     tree::{
-        codec::{
-            Codec,
-            unescape::{unescape, unescape_bytes, unescape_with},
-        },
+        codec::{Codec, unescape::unescape},
         cst::VcardCst,
         line::VcardLine,
         param::VcardParamNode,
@@ -196,63 +193,6 @@ impl VcardParamNode<'_> {
     /// The parameter's values, decoded.
     fn list(&self) -> Vec<Cow<'_, str>> {
         self.values.iter().map(|v| unescape(v.get())).collect()
-    }
-}
-
-impl VcardValueNode<'_> {
-    /// Decode the `i`th component into a clean (unescaped) value list.
-    pub fn decode_at(&self, i: usize) -> Vec<Cow<'_, str>> {
-        self.components
-            .get(i)
-            .map(|leaves| {
-                leaves
-                    .iter()
-                    .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    /// The `i`th component's first value as raw unescaped bytes, not
-    /// transcoded, for a value carrying a foreign charset.
-    pub fn decode_bytes_at(&self, i: usize) -> Cow<'_, [u8]> {
-        self.components
-            .get(i)
-            .and_then(|leaves| leaves.first())
-            .map(|leaf| unescape_bytes(leaf.as_bytes(), self.escaper))
-            .unwrap_or(Cow::Borrowed(b""))
-    }
-
-    /// Decode the `i`th component's first value (empty when there is none).
-    pub fn decode_scalar_at(&self, i: usize) -> Cow<'_, str> {
-        self.components
-            .get(i)
-            .and_then(|leaves| leaves.first())
-            .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
-            .unwrap_or(Cow::Borrowed(""))
-    }
-
-    /// Decode the `i`th component as a single value, rejoining its
-    /// `,`-separated pieces. For values like URIs whose comma is a literal part
-    /// of the value, not a list separator (so they must not be truncated).
-    pub fn decode_joined_at(&self, i: usize) -> Cow<'_, str> {
-        let Some(leaves) = self.components.get(i) else {
-            return Cow::Borrowed("");
-        };
-
-        if leaves.len() <= 1 {
-            return self.decode_scalar_at(i);
-        }
-
-        let mut raw = Vec::new();
-        for (j, leaf) in leaves.iter().enumerate() {
-            if j > 0 {
-                raw.push(b',');
-            }
-            raw.extend_from_slice(leaf.as_bytes());
-        }
-
-        Cow::Owned(unescape_with(&raw, self.escaper).into_owned())
     }
 }
 

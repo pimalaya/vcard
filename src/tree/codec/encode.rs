@@ -98,32 +98,6 @@ impl VcardParam<'_> {
     }
 }
 
-impl VcardValueNode<'_> {
-    /// Set the `i`th component, escaping each value. Pads with empty components
-    /// when needed; every other component is left untouched, so a parsed card
-    /// keeps its bytes.
-    pub fn set_at<S: AsRef<str>>(&mut self, i: usize, values: &[S]) {
-        while self.components.len() <= i {
-            self.components.push(Vec::new());
-        }
-
-        self.components[i] = encode_component(values, self.escaper);
-    }
-
-    /// Set the `i`th component from raw value bytes (the foreign-charset escape
-    /// hatch), escaping structural separators but writing the bytes verbatim.
-    pub fn set_bytes_at<B: AsRef<[u8]>>(&mut self, i: usize, values: &[B]) {
-        while self.components.len() <= i {
-            self.components.push(Vec::new());
-        }
-
-        self.components[i] = values
-            .iter()
-            .map(|v| VcardValueLeaf::from(escape_with(v.as_ref(), self.escaper).into_owned()))
-            .collect();
-    }
-}
-
 /// Serialize the decoded card by encoding it into a CST (canonical).
 impl fmt::Display for Vcard<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -134,10 +108,7 @@ impl fmt::Display for Vcard<'_> {
 /// A one-component, one-value syntax node, escaping the value by the given
 /// mode.
 pub(crate) fn scalar_node(value: &str, escaper: Escaper) -> VcardValueNode<'static> {
-    VcardValueNode {
-        escaper,
-        components: vec![encode_component(&[value], escaper)],
-    }
+    VcardValueNode::from_components(vec![encode_component(&[value], escaper)], escaper)
 }
 
 /// Escape and own a clean value list into one component, by escaping mode.

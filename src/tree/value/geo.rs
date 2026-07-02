@@ -47,9 +47,6 @@ impl<'v> Codec<'v> for VcardGeo<'v> {
             ]
         };
 
-        VcardValueNode {
-            escaper,
-            components,
-        }
+        VcardValueNode::from_components(components, escaper)
     }
 }

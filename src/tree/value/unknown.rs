@@ -5,7 +5,7 @@
 
 use crate::{
     tree::{
-        codec::{Codec, encode::encode_component, mode::Escaper, unescape::unescape_with},
+        codec::{Codec, encode::encode_component, mode::Escaper},
         value::VcardValueNode,
     },
     value::VcardUnknownValue,
@@ -14,27 +14,19 @@ use crate::{
 impl<'v> Codec<'v> for VcardUnknownValue<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardUnknownValue {
-            components: node
-                .components
-                .iter()
-                .map(|component| {
-                    component
-                        .iter()
-                        .map(|value| unescape_with(value.as_bytes(), node.escaper))
-                        .collect()
-                })
+            components: (0..node.component_count())
+                .map(|i| node.decode_at(i))
                 .collect(),
         }
     }
 
     fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
-        VcardValueNode {
-            escaper,
-            components: self
-                .components
+        VcardValueNode::from_components(
+            self.components
                 .iter()
                 .map(|component| encode_component(component, escaper))
                 .collect(),
-        }
+            escaper,
+        )
     }
 }

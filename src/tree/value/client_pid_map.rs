@@ -21,12 +21,12 @@ impl<'v> Codec<'v> for VcardClientPidMap<'v> {
     }
 
     fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
-        VcardValueNode {
-            escaper,
-            components: vec![
+        VcardValueNode::from_components(
+            vec![
                 encode_component(&[self.id.as_ref()], escaper),
                 encode_component(&[self.uri.as_ref()], escaper),
             ],
-        }
+            escaper,
+        )
     }
 }

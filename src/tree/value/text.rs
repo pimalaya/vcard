@@ -32,9 +32,6 @@ impl<'v> Codec<'v> for VcardTextList<'v> {
     }
 
     fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
-        VcardValueNode {
-            escaper,
-            components: vec![encode_component(&self.0, escaper)],
-        }
+        VcardValueNode::from_components(vec![encode_component(&self.0, escaper)], escaper)
     }
 }

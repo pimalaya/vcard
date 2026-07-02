@@ -55,10 +55,10 @@ impl<'a> VcardLine<'a> {
         Self {
             name: VcardLeaf(name.into()),
             params: Vec::new(),
-            value: VcardValueNode {
-                escaper: Escaper::Modern,
-                components: vec![vec![VcardValueLeaf::from(value.into())]],
-            },
+            value: VcardValueNode::from_components(
+                vec![vec![VcardValueLeaf::from(value.into())]],
+                Escaper::Modern,
+            ),
             eol: VcardLeaf(Cow::Borrowed("\r\n")),
         }
     }
@@ -152,23 +152,13 @@ impl<'a> VcardLine<'a> {
 
     /// The raw bytes of the line's first value, for simple single-value lines.
     pub fn raw_value(&self) -> &[u8] {
-        self.value
-            .components
-            .first()
-            .and_then(|component| component.first())
-            .map(|leaf| leaf.as_bytes())
-            .unwrap_or(b"")
+        self.value.first_value_bytes()
     }
 
     /// The raw first value as UTF-8 text, lossily; for the ASCII envelope
     /// values (`VERSION`) and diagnostics.
     pub fn raw_value_str(&self) -> Cow<'_, str> {
-        self.value
-            .components
-            .first()
-            .and_then(|component| component.first())
-            .map(|leaf| leaf.to_str_lossy())
-            .unwrap_or(Cow::Borrowed(""))
+        String::from_utf8_lossy(self.value.first_value_bytes())
     }
 
     /// Serialize the whole line to bytes, exactly as parsed.

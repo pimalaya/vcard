@@ -24,15 +24,15 @@ impl<'v> Codec<'v> for VcardN<'v> {
     }
 
     fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
-        VcardValueNode {
-            escaper,
-            components: vec![
+        VcardValueNode::from_components(
+            vec![
                 encode_component(&self.family, escaper),
                 encode_component(&self.given, escaper),
                 encode_component(&self.additional, escaper),
                 encode_component(&self.prefixes, escaper),
                 encode_component(&self.suffixes, escaper),
             ],
-        }
+            escaper,
+        )
     }
 }
