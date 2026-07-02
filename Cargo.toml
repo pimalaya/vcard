@@ -18,12 +18,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["parser", "quoted-printable", "base64", "encoding"]
-parser = []
+parser = ["dep:memchr"]
 quoted-printable = ["dep:quoted_printable"]
 base64 = ["dep:base64"]
 encoding = ["dep:encoding_rs"]
 
 [dependencies]
+memchr = { version = "2", default-features = false, optional = true }
 quoted_printable = { version = "0.5", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 encoding_rs = { version = "0.8", optional = true }

@@ -53,6 +53,21 @@ impl<'a> VcardParamNode<'a> {
                 .collect(),
         }
     }
+
+    /// Serialize the parameter (`name` or `name=value,value`) into `out`,
+    /// without the intermediate `String` a `Display`-based path would allocate.
+    pub(crate) fn write_bytes(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(self.name.get().as_bytes());
+
+        if let Some((first, rest)) = self.values.split_first() {
+            out.push(b'=');
+            out.extend_from_slice(first.get().as_bytes());
+            for value in rest {
+                out.push(b',');
+                out.extend_from_slice(value.get().as_bytes());
+            }
+        }
+    }
 }
 
 impl fmt::Display for VcardParamNode<'_> {

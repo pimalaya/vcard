@@ -35,17 +35,15 @@ pub struct VcardValueNode<'a> {
 }
 
 impl<'a> VcardValueNode<'a> {
-    /// Split a raw value into its components and their values (escape-aware).
+    /// Split a raw value into its `;`-separated components, each a list of its
+    /// `,`-separated value leaves (escape-aware). Fused and `memchr`-driven: it
+    /// jumps to the next separator or backslash instead of scanning every byte,
+    /// so a large separator-free value (e.g. base64) is skipped in one pass.
     pub fn parse(value: &'a [u8]) -> Self {
-        let components = split_components(value)
-            .into_iter()
-            .map(|component| {
-                split_values(component)
-                    .into_iter()
-                    .map(VcardValueLeaf::from)
-                    .collect()
-            })
-            .collect();
+        let mut components = Vec::new();
+        split_on(value, b';', |component| {
+            components.push(split_component(component));
+        });
 
         Self {
             components,
@@ -109,36 +107,35 @@ impl fmt::Display for VcardValueNode<'_> {
     }
 }
 
-/// Split a value into its `;`-separated components (escape-aware, variable
-/// length so counts round-trip).
-fn split_components(value: &[u8]) -> Vec<&[u8]> {
-    split_unescaped(value, b';')
+/// Split a component into its `,`-separated value leaves (escape-aware).
+fn split_component(component: &[u8]) -> Vec<VcardValueLeaf<'_>> {
+    let mut values = Vec::new();
+    split_on(component, b',', |value| {
+        values.push(VcardValueLeaf::from(value));
+    });
+    values
 }
 
-/// Split a component into its `,`-separated values (escape-aware).
-fn split_values(component: &[u8]) -> Vec<&[u8]> {
-    split_unescaped(component, b',')
-}
-
-/// Split on every unescaped `sep`, always yielding at least one piece.
-fn split_unescaped(bytes: &[u8], sep: u8) -> Vec<&[u8]> {
-    let mut pieces = Vec::new();
+/// Call `piece` for each span between unescaped `sep` bytes, always at least
+/// once. A backslash escapes the next byte (so `\;` / `\,` do not split), and
+/// `memchr` skips straight to the next `sep` or backslash instead of scanning
+/// byte by byte.
+fn split_on<'b>(bytes: &'b [u8], sep: u8, mut piece: impl FnMut(&'b [u8])) {
     let mut start = 0;
-    let mut escaped = false;
+    let mut i = 0;
 
-    for (i, &byte) in bytes.iter().enumerate() {
-        if escaped {
-            escaped = false;
-        } else if byte == b'\\' {
-            escaped = true;
-        } else if byte == sep {
-            pieces.push(&bytes[start..i]);
-            start = i + 1;
+    while let Some(offset) = memchr::memchr2(b'\\', sep, &bytes[i..]) {
+        let pos = i + offset;
+        if bytes[pos] == b'\\' {
+            i = (pos + 2).min(bytes.len());
+        } else {
+            piece(&bytes[start..pos]);
+            start = pos + 1;
+            i = pos + 1;
         }
     }
-    pieces.push(&bytes[start..]);
 
-    pieces
+    piece(&bytes[start..]);
 }
 
 #[cfg(test)]

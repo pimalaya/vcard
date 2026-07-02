@@ -19,12 +19,7 @@
 
 use core::{fmt, str};
 
-use alloc::{
-    borrow::Cow,
-    string::{String, ToString},
-    vec,
-    vec::Vec,
-};
+use alloc::{borrow::Cow, string::String, vec, vec::Vec};
 
 use crate::tree::{
     codec::mode::Escaper,
@@ -182,7 +177,7 @@ impl<'a> VcardLine<'a> {
 
         for param in &self.params {
             out.push(b';');
-            out.extend_from_slice(param.to_string().as_bytes());
+            param.write_bytes(out);
         }
 
         out.push(b':');
@@ -210,7 +205,7 @@ impl<'a> VcardLine<'a> {
     /// be valid UTF-8, as every version's grammar guarantees; only the value
     /// may carry a foreign charset, so it is kept as raw bytes.
     fn parse<'b>(content: &'b [u8], eol: &'b [u8]) -> Result<VcardLine<'b>, VcardParseError> {
-        let Some(colon) = content.iter().position(|&b| b == b':') else {
+        let Some(colon) = memchr::memchr(b':', content) else {
             return Err(VcardParseError::MissingPropertyColon(lossy(content)));
         };
 
@@ -279,7 +274,7 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
 /// ending), its line ending, and the remaining input. A final line with no
 /// trailing break is taken whole, with an empty ending.
 fn physical_line(rest: &[u8]) -> (&[u8], &[u8], &[u8]) {
-    let Some(lf) = rest.iter().position(|&b| b == b'\n') else {
+    let Some(lf) = memchr::memchr(b'\n', rest) else {
         return (rest, b"", b"");
     };
 
@@ -312,7 +307,7 @@ fn strip_leading_wsp(mut bytes: &[u8]) -> &[u8] {
 /// Whether a line's head (its name and parameters, before the `:`) declares the
 /// `QUOTED-PRINTABLE` encoding, as an `ENCODING=` parameter or a bare token.
 fn head_is_quoted_printable(line: &[u8]) -> bool {
-    let head = match line.iter().position(|&b| b == b':') {
+    let head = match memchr::memchr(b':', line) {
         Some(colon) => &line[..colon],
         None => return false,
     };
