@@ -1,25 +1,6 @@
 # 📇 vcard-rs [![Documentation](https://img.shields.io/docsrs/vcard-rs?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-rs/latest/vcard) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-[vCard](https://www.rfc-editor.org/rfc/rfc6350) Rust library
-
-`vcard-rs` is one decoded model and one byte-faithful syntax tree that read and write vCard 2.1 (versitcard), 3.0 ([RFC 2426](https://www.rfc-editor.org/rfc/rfc2426)) and 4.0 ([RFC 6350](https://www.rfc-editor.org/rfc/rfc6350)) alike. The card version is a decoded indicator, never a type parameter or a separate dialect: the syntax tree ignores it, and only the codec and the per-property spec branch on it where escaping or a value's shape genuinely differ. Parse raw bytes into the tree, edit one property, and every untouched byte round-trips.
-
-```rust
-use vcard::tree::cst::VcardCst;
-use vcard::tree::prop::r#fn::FN;
-
-let mut card = VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n").unwrap();
-
-// read a property through its typed lens
-assert_eq!(&*card.prop::<FN>().unwrap().0, "John Doe");
-
-// edit it in place; every other byte is preserved
-card.prop_mut::<FN>().unwrap().set_text("Jane Doe");
-assert_eq!(card.to_string(), "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n");
-
-// or project onto the version-agnostic decoded model
-let decoded = card.decode();
-```
+Rust library for parsing, validating, modifying and building [vCards](https://www.rfc-editor.org/rfc/rfc6350)
 
 ## Table of contents
 
@@ -35,12 +16,12 @@ let decoded = card.decode();
 
 ## Features
 
-- `no_std` (plus `alloc`); the core is dependency-free, the only dependencies are the small `no_std` crates behind the opt-in content-decoding features.
-- **One model, every version**: a single decoded `Vcard` and a single parser for 2.1 / 3.0 / 4.0, with no per-version modules; the version is a value the syntax tree never consults.
-- **Byte-faithful**: `VcardCst` reproduces the wire bytes exactly, so parse, edit and serialise round-trips byte for byte; a property value is kept as raw bytes, so a value in a foreign `CHARSET` survives (names and parameters must be UTF-8).
-- **Liberal in, strict out** (Postel): one liberal parser accepts any real card, including unknown properties, parameters and value types; strictness is opt-in, as the spec-driven builder and `validate` (an RFC 6350 conformance check that still permits extensions).
-- **Spec-driven**: each property carries its allowed versions, cardinality, value types and parameters per RFC 6350, consulted by the decoder, the validator and the builder alike.
-- **Opt-in content decoders**, one small `no_std` crate per feature: `quoted-printable` (`=XX` octets), `base64` (inline binary values), and `encoding` (foreign `CHARSET` transcoding via [`encoding_rs`](https://crates.io/crates/encoding_rs)).
+- All versions supported: **2.1**, **3.0** <sup>[rfc2426](https://www.rfc-editor.org/rfc/rfc2426)</sup> and **4.0** <sup>[rfc6350](https://www.rfc-editor.org/rfc/rfc6350)</sup>
+- **Faithful edition**: change a parameter or a value while leaving the rest untouched, byte for byte
+- **Forgiving on input**: accept all cards, even the malformed ones
+- **Strict on output**: build cards strictly guided by the standards (escape hatch available)
+- **Small, portable and [fast](#benchmarks)**: `no_std` compatible
+- Optional decoding supported: `quoted-printable`, `base64` and `encoding` (feature gates)
 
 ## Installation
 
@@ -51,33 +32,99 @@ vcard-rs = "0.0.1"
 
 ## Usage
 
-The crate has two layers. The decoded model is always available; the syntax tree is behind the default `parser` feature.
+The snippets below are condensed; full runnable versions live in [./examples](examples), each launchable with `cargo run --example <name>`.
 
-- Decoded model (`vcard`, `version`, `prop`, `param`, `value`): pure data with no dependency on the syntax side, so it can be depended on alone. A `Vcard` is a version plus a list of `VcardProp` (a name, parameters and one value); parameters and values are open payload enums with an `Unknown` arm, so anything outside the model survives.
-- Syntax tree (`tree`): `tree::cst::VcardCst::parse` reads bytes or text (one card, a bare RFC 2425 record with no `BEGIN`/`END`, or every card via `parse_many`); `to_bytes` serialises byte-faithfully (`Display` / `to_string` is a lossy-for-non-UTF-8 convenience); `decode` projects onto the model and `encode` (or `From<Vcard>`) projects back; per-property lenses (`prop`, `prop_mut`) read and edit one line through byte-preserving cursors. The strict-out layer lives in `tree::vcard`: the `VcardPropBuilder` and `Vcard::validate`.
-- Content decoders (behind `quoted-printable`, `base64`, `encoding`): the core surfaces a transfer-encoded or foreign-charset value raw, with its parameters kept, and these opt-in helpers decode it (`VcardValueCursor::quoted_printable` / `charset`, and `VcardBinary::decode_base64`).
+### Parse a card, edit a field, and write it back
+
+Only the field you touch changes; every other byte of the original card, including the line endings and the parameters you did not edit, round-trips exactly.
+
+```rust
+use vcard::tree::cst::VcardCst;
+use vcard::tree::prop::r#fn::FN;
+
+let mut card =
+    VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n").unwrap();
+
+card.prop_mut::<FN>().unwrap().set_text("Jane Doe");
+
+assert_eq!(card.to_string(), "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n");
+```
+
+### Build a card, checked against the standard
+
+Each property is checked as it is built, and the finished card is validated as a whole before it is written out; a card that does not conform gives you the list of problems instead. See [./examples/strict_builder.rs](examples/strict_builder.rs).
+
+```rust
+use std::borrow::Cow;
+
+use vcard::tree::cst::VcardCst;
+use vcard::tree::prop::r#fn::FN;
+use vcard::tree::vcard::builder::VcardPropBuilder;
+use vcard::value::VcardValue;
+use vcard::value::text::VcardText;
+use vcard::vcard::Vcard;
+use vcard::version::VcardVersion;
+
+let version = VcardVersion::V4_0;
+
+let full_name = VcardPropBuilder::<FN>::new(version)
+    .build(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
+    .expect("FN accepts a text value");
+
+let card = Vcard { version, properties: vec![full_name] };
+let valid = card.validate().expect("a conformant 4.0 card");
+
+print!("{}", VcardCst::from(valid));
+```
+
+### Build a card by hand, unchecked
+
+The escape hatch: place whatever properties you like and write them out directly, with no validation. Correctness is your responsibility. See [examples/raw_builder.rs](examples/raw_builder.rs).
+
+```rust
+use std::borrow::Cow;
+
+use vcard::prop::VcardProp;
+use vcard::value::VcardValue;
+use vcard::value::text::VcardText;
+use vcard::vcard::Vcard;
+use vcard::version::VcardVersion;
+
+let card = Vcard {
+    version: VcardVersion::V4_0,
+    properties: vec![VcardProp {
+        name: "FN".into(),
+        params: vec![],
+        value: VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
+    }],
+};
+
+print!("{card}");
+```
+
+Beyond parsing and building, the library projects a card onto a decoded model and back, and, behind opt-in features, decodes encoded text, inline binary data and foreign character sets.
 
 ## Benchmarks
 
-Single-card [criterion](https://crates.io/crates/criterion) medians, run with `cargo bench --bench parse`. The comparison is level-matched: content-line parsers produce a token or line tree like our `VcardCst`, model parsers build a decoded object like our `parse + decode`, so each group compares like with like.
+Single-card [criterion](https://crates.io/crates/criterion) medians, run with `cargo bench --bench parse`. The comparison is level-matched: content-line parsers stop at a line tree like our parse step, model parsers build a decoded object like our parse-and-decode step, so each group compares like with like.
 
 Parsing into content lines (no decoding):
 
-| library | time | vs vcard-rs |
+| library | time | delta |
 | --- | --- | --- |
 | [`vparser`](https://crates.io/crates/vparser) | 0.57 µs | -61% |
-| **vcard-rs** (`VcardCst::parse`) | **1.47 µs** | base |
+| **vcard-rs** (`VcardCst::parse`) | **1.47 µs** | — |
 | [`ical_vcard`](https://crates.io/crates/ical_vcard) | 2.82 µs | +92% |
 
 Parsing into a decoded model:
 
-| library | time | vs vcard-rs |
+| library | time | delta |
 | --- | --- | --- |
 | [`calcard`](https://crates.io/crates/calcard) | 4.40 µs | -1% |
-| **vcard-rs** (`parse + decode`) | **4.46 µs** | base |
+| **vcard-rs** (`parse + decode`) | **4.46 µs** | — |
 | [`vcard_parser`](https://crates.io/crates/vcard_parser) | 87.8 µs | +1869% |
 
-These numbers are a ballpark, not a strict ranking: the libraries produce different representations (borrowed vs owned, shallow vs validating), so they do different amounts of work. `vparser` is a zero-allocation pull tokenizer that builds no leaf or parameter structs, which is why it stays ahead at the content-line level; at the model level we are on par with `calcard`. The [`vcard`](https://crates.io/crates/vcard) crate is builder-only, so it has no parse path to compare.
+These numbers are a ballpark, not a strict ranking: the libraries produce different representations (borrowed vs owned, shallow vs validating), so they do different amounts of work. `vparser` is a zero-allocation pull tokenizer that builds no leaf or parameter structs, which is why it stays ahead at the content-line level; at the model level we are on par with `calcard`.
 
 ## License
 
@@ -122,4 +169,5 @@ If you appreciate the project, feel free to donate using one of the following pr
 [![Ko-fi](https://img.shields.io/badge/-Ko--fi-ff5e5a?logo=Ko-fi&logoColor=ffffff)](https://ko-fi.com/soywod)
 [![Buy Me a Coffee](https://img.shields.io/badge/-Buy%20Me%20a%20Coffee-ffdd00?logo=Buy%20Me%20A%20Coffee&logoColor=000000)](https://www.buymeacoffee.com/soywod)
 [![Liberapay](https://img.shields.io/badge/-Liberapay-f6c915?logo=Liberapay&logoColor=222222)](https://liberapay.com/soywod)
+[![thanks.dev](https://img.shields.io/badge/-thanks.dev-000000?logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQuMDk3IiBoZWlnaHQ9IjE3LjU5NyIgY2xhc3M9InctMzYgbWwtMiBsZzpteC0wIHByaW50Om14LTAgcHJpbnQ6aW52ZXJ0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik05Ljc4MyAxNy41OTdINy4zOThjLTEuMTY4IDAtMi4wOTItLjI5Ny0yLjc3My0uODktLjY4LS41OTMtMS4wMi0xLjQ2Mi0xLjAyLTIuNjA2di0xLjM0NmMwLTEuMDE4LS4yMjctMS43NS0uNjc4LTIuMTk1LS40NTItLjQ0Ni0xLjIzMi0uNjY5LTIuMzQtLjY2OUgwVjcuNzA1aC41ODdjMS4xMDggMCAxLjg4OC0uMjIyIDIuMzQtLjY2OC40NTEtLjQ0Ni42NzctMS4xNzcuNjc3LTIuMTk1VjMuNDk2YzAtMS4xNDQuMzQtMi4wMTMgMS4wMjEtMi42MDZDNS4zMDUuMjk3IDYuMjMgMCA3LjM5OCAwaDIuMzg1djEuOTg3aC0uOTg1Yy0uMzYxIDAtLjY4OC4wMjctLjk4LjA4MmExLjcxOSAxLjcxOSAwIDAgMC0uNzM2LjMwN2MtLjIwNS4xNTYtLjM1OC4zODQtLjQ2LjY4Mi0uMTAzLjI5OC0uMTU0LjY4Mi0uMTU0IDEuMTUxVjUuMjNjMCAuODY3LS4yNDkgMS41ODYtLjc0NSAyLjE1NS0uNDk3LjU2OS0xLjE1OCAxLjAwNC0xLjk4MyAxLjMwNXYuMjE3Yy44MjUuMyAxLjQ4Ni43MzYgMS45ODMgMS4zMDUuNDk2LjU3Ljc0NSAxLjI4Ny43NDUgMi4xNTR2MS4wMjFjMCAuNDcuMDUxLjg1NC4xNTMgMS4xNTIuMTAzLjI5OC4yNTYuNTI1LjQ2MS42ODIuMTkzLjE1Ny40MzcuMjYuNzMyLjMxMi4yOTUuMDUuNjIzLjA3Ni45ODQuMDc2aC45ODVabTE0LjMxNC03LjcwNmgtLjU4OGMtMS4xMDggMC0xLjg4OC4yMjMtMi4zNC42NjktLjQ1LjQ0Ni0uNjc3IDEuMTc3LS42NzcgMi4xOTVWMTQuMWMwIDEuMTQ0LS4zNCAyLjAxMy0xLjAyIDIuNjA2LS42OC41OTMtMS42MDUuODktMi43NzQuODloLTIuMzg0di0xLjk4OGguOTg0Yy4zNjIgMCAuNjg4LS4wMjcuOTgtLjA4LjI5Mi0uMDU1LjUzOC0uMTU3LjczNy0uMzA4LjIwNC0uMTU3LjM1OC0uMzg0LjQ2LS42ODIuMTAzLS4yOTguMTU0LS42ODIuMTU0LTEuMTUydi0xLjAyYzAtLjg2OC4yNDgtMS41ODYuNzQ1LTIuMTU1LjQ5Ny0uNTcgMS4xNTgtMS4wMDQgMS45ODMtMS4zMDV2LS4yMTdjLS44MjUtLjMwMS0xLjQ4Ni0uNzM2LTEuOTgzLTEuMzA1LS40OTctLjU3LS43NDUtMS4yODgtLjc0NS0yLjE1NXYtMS4wMmMwLS40Ny0uMDUxLS44NTQtLjE1NC0xLjE1Mi0uMTAyLS4yOTgtLjI1Ni0uNTI2LS40Ni0uNjgyYTEuNzE5IDEuNzE5IDAgMCAwLS43MzctLjMwNyA1LjM5NSA1LjM5NSAwIDAgMC0uOTgtLjA4MmgtLjk4NFYwaDIuMzg0YzEuMTY5IDAgMi4wOTMuMjk3IDIuNzc0Ljg5LjY4LjU5MyAxLjAyIDEuNDYyIDEuMDIgMi42MDZ2MS4zNDZjMCAxLjAxOC4yMjYgMS43NS42NzggMi4xOTUuNDUxLjQ0NiAxLjIzMS42NjggMi4zNC42NjhoLjU4N3oiIGZpbGw9IiNmZmYiLz48L3N2Zz4=)](https://thanks.dev/soywod)
 [![PayPal](https://img.shields.io/badge/-PayPal-0079c1?logo=PayPal&logoColor=ffffff)](https://www.paypal.com/paypalme/soywod)

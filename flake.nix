@@ -1,5 +1,5 @@
 {
-  description = "vCard Rust library";
+  description = "Rust library for parsing, validating, modifying and building vCards";
 
   inputs = {
     nixpkgs = {
