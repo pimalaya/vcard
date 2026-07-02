@@ -1,6 +1,6 @@
-//! # SORTSTRING lens
+//! # SORT-STRING lens
 //!
-//! The `SORTSTRING` property lens: the string a vCard 3.0 application should
+//! The `SORT-STRING` property lens: the string a vCard 3.0 application should
 //! use when sorting the card, decoded as a single `VcardText`. Replaced by the
 //! `SORT-AS` parameter in 4.0 (RFC 2426 3.3.4).
 
@@ -16,10 +16,11 @@ use crate::{
     version::VcardVersion,
 };
 
-/// The `SORTSTRING` property lens.
-pub struct SORTSTRING;
+/// The `SORT-STRING` property lens.
+#[allow(non_camel_case_types)]
+pub struct SORT_STRING;
 
-impl VcardPropLens for SORTSTRING {
+impl VcardPropLens for SORT_STRING {
     type Target<'v> = VcardText<'v>;
 
     type Cursor<'c, 'a>
@@ -32,7 +33,7 @@ impl VcardPropLens for SORTSTRING {
     }
 }
 
-impl VcardPropSpec for SORTSTRING {
+impl VcardPropSpec for SORT_STRING {
     const KIND: VcardPropKind = VcardPropKind::SortString;
 
     fn allowed_versions() -> &'static [VcardVersion] {

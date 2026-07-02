@@ -406,7 +406,7 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
         email::EMAIL, fburl::FBURL, r#fn::FN, gender::GENDER, geo::GEO, impp::IMPP, key::KEY,
         kind::KIND, label::LABEL, lang::LANG, logo::LOGO, mailer::MAILER, member::MEMBER, n::N,
         name::NAME, nickname::NICKNAME, note::NOTE, org::ORG, photo::PHOTO, prodid::PRODID,
-        profile::PROFILE, related::RELATED, rev::REV, role::ROLE, sort_string::SORTSTRING,
+        profile::PROFILE, related::RELATED, rev::REV, role::ROLE, sort_string::SORT_STRING,
         sound::SOUND, source::SOURCE, tel::TEL, title::TITLE, tz::TZ, uid::UID, url::URL, xml::XML,
     };
 
@@ -499,7 +499,7 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
         RELATED,
         REV,
         ROLE,
-        SORTSTRING,
+        SORT_STRING,
         SOUND,
         SOURCE,
         TEL,
@@ -539,7 +539,7 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
         RELATED,
         REV,
         ROLE,
-        SORTSTRING,
+        SORT_STRING,
         SOUND,
         SOURCE,
         TEL,
@@ -610,7 +610,7 @@ fn exercises_every_parameter_lens() {
     use vcard::tree::param::VcardParamLens;
     use vcard::tree::param::{
         altid::ALTID, calscale::CALSCALE, geo::GEO as GEOP, label::LABEL as LABELP,
-        language::LANGUAGE, mediatype::MEDIATYPE, pid::PID, pref::PREF, sort_as::SORTAS,
+        language::LANGUAGE, mediatype::MEDIATYPE, pid::PID, pref::PREF, sort_as::SORT_AS,
         r#type::TYPE, tz::TZ as TZP, value::VALUE,
     };
     use vcard::tree::prop::tel::TEL;
@@ -633,7 +633,7 @@ fn exercises_every_parameter_lens() {
     let _ = c.param::<MEDIATYPE>();
     let _ = c.param::<PID>();
     let _ = c.param::<PREF>();
-    let _ = c.param::<SORTAS>();
+    let _ = c.param::<SORT_AS>();
     let _ = c.param::<TYPE>();
     let _ = c.param::<TZP>();
     let _ = c.param::<VALUE>();
@@ -649,7 +649,7 @@ fn exercises_every_parameter_lens() {
     let _ = MEDIATYPE::encode(&scalar);
     let _ = PID::encode(&list);
     let _ = PREF::encode(&scalar);
-    let _ = SORTAS::encode(&list);
+    let _ = SORT_AS::encode(&list);
     let _ = TYPE::encode(&list);
     let _ = TZP::encode(&scalar);
     let _ = VALUE::encode(&scalar);

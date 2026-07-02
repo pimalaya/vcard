@@ -132,7 +132,7 @@ pub(crate) fn prop_spec(prop: VcardPropKind) -> VcardPropSpecFns {
         Related => spec_fns::<related::RELATED>(),
         Rev => spec_fns::<rev::REV>(),
         Role => spec_fns::<role::ROLE>(),
-        SortString => spec_fns::<sort_string::SORTSTRING>(),
+        SortString => spec_fns::<sort_string::SORT_STRING>(),
         Sound => spec_fns::<sound::SOUND>(),
         Source => spec_fns::<source::SOURCE>(),
         Tel => spec_fns::<tel::TEL>(),
