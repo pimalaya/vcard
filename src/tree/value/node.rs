@@ -26,7 +26,7 @@ use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::tree::{
     codec::{
-        encode::encode_component,
+        encode::{encode_component, encode_leaf},
         escape::escape_with,
         mode::Escaper,
         unescape::{unescape_bytes, unescape_with},
@@ -208,6 +208,67 @@ impl<'a> VcardValueNode<'a> {
             .collect();
     }
 
+    /// The number of `,`-separated values in the `i`th component (zero when the
+    /// component does not exist).
+    pub fn value_count(&self, i: usize) -> usize {
+        match self.component_at(i) {
+            Some(Component::Raw(bytes)) => {
+                let mut count = 0;
+                split_on(bytes, b',', |_| count += 1);
+                count
+            }
+            Some(Component::Split(leaves)) => leaves.len(),
+            None => 0,
+        }
+    }
+
+    /// Replace the `j`th value of the `i`th component in place, re-escaping only
+    /// that leaf; every sibling value keeps its parsed bytes. Pads with empty
+    /// values when `j` is past the end.
+    pub fn set_value_at<S: AsRef<str>>(&mut self, i: usize, j: usize, value: S) {
+        let escaper = self.escaper;
+        let component = self.component_mut(i);
+
+        while component.len() <= j {
+            component.push(encode_leaf("", escaper));
+        }
+
+        component[j] = encode_leaf(value, escaper);
+    }
+
+    /// Insert a value at position `j` of the `i`th component (clamped to the
+    /// end), escaping only the new leaf and leaving every sibling's bytes
+    /// untouched.
+    pub fn insert_value_at<S: AsRef<str>>(&mut self, i: usize, j: usize, value: S) {
+        let escaper = self.escaper;
+        let component = self.component_mut(i);
+        let at = j.min(component.len());
+
+        component.insert(at, encode_leaf(value, escaper));
+    }
+
+    /// Append a value to the `i`th component, escaping only the new leaf and
+    /// leaving every sibling's bytes untouched.
+    pub fn push_value<S: AsRef<str>>(&mut self, i: usize, value: S) {
+        let escaper = self.escaper;
+        let component = self.component_mut(i);
+
+        component.push(encode_leaf(value, escaper));
+    }
+
+    /// Remove the `j`th value of the `i`th component, splicing it out and
+    /// leaving every sibling's bytes untouched; a no-op when either index is out
+    /// of range.
+    pub fn remove_value_at(&mut self, i: usize, j: usize) {
+        self.materialize();
+
+        if let Some(component) = self.components.get_mut(i)
+            && j < component.len()
+        {
+            component.remove(j);
+        }
+    }
+
     /// Serialize the raw value bytes (name, colon and eol are the line's job)
     /// into `out`, exactly as parsed. An untouched value emits its `raw` slice
     /// with no reassembly.
@@ -278,6 +339,18 @@ impl<'a> VcardValueNode<'a> {
                 .get(i)
                 .map(|leaves| Component::Split(leaves)),
         }
+    }
+
+    /// Borrow the `i`th component's leaves for in-place editing, splitting the
+    /// value first and padding with empty components up to `i`.
+    fn component_mut(&mut self, i: usize) -> &mut Vec<VcardValueLeaf<'a>> {
+        self.materialize();
+
+        while self.components.len() <= i {
+            self.components.push(Vec::new());
+        }
+
+        &mut self.components[i]
     }
 
     /// Split the unsplit `raw` value into owned components so it can be edited

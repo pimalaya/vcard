@@ -1,35 +1,52 @@
-//! # Property builder
+//! # Builders
 //!
-//! Strict, version-aware construction of a single property.
+//! Strict, version-aware construction of a whole card and of a single property.
 //!
-//! [`VcardPropBuilder`] is the write-side counterpart of the lenses: keyed by
-//! the same zero-sized markers, it carries the card version and accumulates
-//! parameters, then emits an open [`VcardProp`]. Construction is the strict
-//! half of "liberal in, strict out": the name is pinned by the marker's
-//! [`VcardPropSpec`], and [`build`](VcardPropBuilder::build) runs the shared
-//! per-property check ([`validate_prop`](crate::tree::vcard::validate)) so the
-//! value kind and every known parameter must be allowed for the version
-//! (unknown, extension parameters pass). To emit something the spec forbids,
-//! construct the open [`VcardProp`] by hand. The version is a value the
-//! builder carries, never a type parameter.
+//! [`VcardBuilder`] assembles a card in one fluent chain: `new(version)` fixes
+//! the version once, then `prop::<L>()` opens a property segment keyed by a lens
+//! marker, `param` decorates it, and `value` closes it and returns to the card
+//! level. Because `value` yields the card builder and `prop` consumes it, the
+//! phases are enforced by the type system: a `param` before any `prop`, or a
+//! `build` with a property left half-open, does not compile.
+//! [`build`](VcardBuilder::build) runs the same whole-card
+//! [`Vcard::validate`](crate::vcard::Vcard::validate) as any other decoded card
+//! and hands back the [`Valid`] proof;
+//! [`build_unchecked`](VcardBuilder::build_unchecked) is the escape hatch that
+//! skips the check.
+//!
+//! [`VcardPropBuilder`] is the single-property piece underneath, and the
+//! write-side counterpart of the lenses: keyed by the same zero-sized markers,
+//! it carries the card version and accumulates parameters, then emits an open
+//! [`VcardProp`]. Construction is the strict half of "liberal in, strict out":
+//! the name is pinned by the marker's [`VcardPropSpec`], and
+//! [`build`](VcardPropBuilder::build) runs the shared per-property check
+//! ([`validate_prop`](crate::tree::vcard::validate)) so the value kind and every
+//! known parameter must be allowed for the version (unknown, extension
+//! parameters pass). To emit something the spec forbids, construct the open
+//! [`VcardProp`] by hand. The version is a value the builders carry, never a
+//! type parameter.
 //!
 //! # Example
 //!
 //! ```rust
-//! use vcard::tree::vcard::builder::VcardPropBuilder;
-//! use vcard::tree::prop::r#fn::FN;
+//! use vcard::tree::vcard::builder::VcardBuilder;
+//! use vcard::tree::prop::{r#fn::FN, note::NOTE};
 //! use vcard::param::VcardParam;
 //! use vcard::value::VcardValue;
 //! use vcard::value::text::VcardText;
 //! use vcard::version::VcardVersion;
 //! use std::borrow::Cow;
 //!
-//! let prop = VcardPropBuilder::<FN>::new(VcardVersion::V4_0)
+//! let valid = VcardBuilder::new(VcardVersion::V4_0)
+//!     .prop::<FN>()
 //!     .param(VcardParam::Pref(Cow::Borrowed("1")))
-//!     .build(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
-//!     .expect("FN accepts text with a PREF parameter");
+//!     .value(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
+//!     .prop::<NOTE>()
+//!     .value(VcardValue::Text(VcardText(Cow::Borrowed("a note"))))
+//!     .build()
+//!     .expect("a conformant 4.0 card");
 //!
-//! assert_eq!(&*prop.name, "FN");
+//! assert_eq!(valid.properties.len(), 2);
 //! ```
 
 use core::marker::PhantomData;
@@ -41,11 +58,91 @@ use crate::{
     prop::{VcardProp, VcardPropName},
     tree::{
         prop::VcardPropSpec,
-        vcard::validate::{VcardValidateError, validate_prop},
+        vcard::validate::{Valid, VcardValidateError, validate_prop},
     },
     value::VcardValue,
+    vcard::Vcard,
     version::VcardVersion,
 };
+
+/// A version-aware builder for a whole card, chaining property segments.
+///
+/// Start with [`new`](Self::new), open each property with
+/// [`prop`](Self::prop), and finish with [`build`](Self::build). The public
+/// fields let you also assemble one by hand, or inspect what is accumulated so
+/// far.
+pub struct VcardBuilder<'a> {
+    /// The card version every property is built for.
+    pub version: VcardVersion,
+    /// The properties accumulated so far, in order.
+    pub properties: Vec<VcardProp<'a>>,
+}
+
+impl<'a> VcardBuilder<'a> {
+    /// Start an empty card builder for the given version.
+    pub fn new(version: VcardVersion) -> Self {
+        Self {
+            version,
+            properties: Vec::new(),
+        }
+    }
+
+    /// Open a property segment keyed by its lens marker; its name is pinned by
+    /// the marker's spec. Chain [`param`](VcardPropInProgress::param) then
+    /// [`value`](VcardPropInProgress::value) to close it and return here.
+    pub fn prop<L: VcardPropSpec>(self) -> VcardPropInProgress<'a, L> {
+        let inner = VcardPropBuilder::new(self.version);
+        VcardPropInProgress { card: self, inner }
+    }
+
+    /// Finish, checking the assembled card with the same
+    /// [`Vcard::validate`](crate::vcard::Vcard::validate) as any decoded card
+    /// and yielding the [`Valid`] proof (or every violation).
+    pub fn build(self) -> Result<Valid<Vcard<'a>>, Vec<VcardValidateError>> {
+        self.build_unchecked().validate()
+    }
+
+    /// Finish without validating, returning the open card (the escape hatch,
+    /// mirroring building a [`VcardProp`] by hand).
+    pub fn build_unchecked(self) -> Vcard<'a> {
+        Vcard {
+            version: self.version,
+            properties: self.properties,
+        }
+    }
+}
+
+/// A property segment being built inside a [`VcardBuilder`] chain, keyed by its
+/// lens marker.
+///
+/// [`value`](Self::value) closes the segment and returns the card builder, so
+/// the marker is discharged at that point and the chain stays flat.
+pub struct VcardPropInProgress<'a, L: VcardPropSpec> {
+    card: VcardBuilder<'a>,
+    inner: VcardPropBuilder<'a, L>,
+}
+
+impl<'a, L: VcardPropSpec> VcardPropInProgress<'a, L> {
+    /// Add a parameter to the open property (checked by the final
+    /// [`build`](VcardBuilder::build)).
+    pub fn param(mut self, param: VcardParam<'a>) -> Self {
+        self.inner = self.inner.param(param);
+        self
+    }
+
+    /// Close the property with a value and return to the card builder. Its name
+    /// is taken from the marker; the value and parameters are checked once, by
+    /// the final [`build`](VcardBuilder::build).
+    pub fn value(mut self, value: VcardValue<'a>) -> VcardBuilder<'a> {
+        self.card.properties.push(VcardProp {
+            name: VcardPropName::Kind(L::KIND),
+            params: self.inner.params,
+            value,
+        });
+
+        self.card
+    }
+}
 
 /// A version-aware builder for one property, keyed by its lens marker.
 pub struct VcardPropBuilder<'a, L: VcardPropSpec> {
@@ -138,6 +235,39 @@ mod tests {
         let built = VcardPropBuilder::<FN>::new(VcardVersion::V4_0)
             .param(VcardParam::MediaType(Cow::Borrowed("text/plain")))
             .build(VcardValue::Text(VcardText(Cow::Borrowed("John"))));
+
+        assert!(built.is_err());
+    }
+
+    #[test]
+    fn card_builder_chains_props_and_validates() {
+        use crate::tree::{prop::note::NOTE, vcard::builder::VcardBuilder};
+
+        let valid = VcardBuilder::new(VcardVersion::V4_0)
+            .prop::<FN>()
+            .param(VcardParam::Pref(Cow::Borrowed("1")))
+            .value(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
+            .prop::<NOTE>()
+            .value(VcardValue::Text(VcardText(Cow::Borrowed("a note"))))
+            .build()
+            .expect("a conformant 4.0 card");
+
+        assert_eq!(valid.properties.len(), 2);
+        assert_eq!(&*valid.properties[0].name, "FN");
+        assert_eq!(&*valid.properties[1].name, "NOTE");
+    }
+
+    #[test]
+    fn card_builder_defers_a_violation_to_build() {
+        use crate::tree::vcard::builder::VcardBuilder;
+
+        // NOTE: FN does not allow MEDIATYPE; value() stays infallible, so the
+        // error only surfaces from the final build().
+        let built = VcardBuilder::new(VcardVersion::V4_0)
+            .prop::<FN>()
+            .param(VcardParam::MediaType(Cow::Borrowed("text/plain")))
+            .value(VcardValue::Text(VcardText(Cow::Borrowed("John"))))
+            .build();
 
         assert!(built.is_err());
     }

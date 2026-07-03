@@ -116,10 +116,14 @@ pub(crate) fn encode_component<S: AsRef<str>>(
     values: &[S],
     escaper: Escaper,
 ) -> Vec<VcardValueLeaf<'static>> {
-    values
-        .iter()
-        .map(|v| VcardValueLeaf::from(escape_with(v.as_ref().as_bytes(), escaper).into_owned()))
-        .collect()
+    values.iter().map(|v| encode_leaf(v, escaper)).collect()
+}
+
+/// Escape one value into an owned leaf, by escaping mode. Backs the per-item
+/// value edits, which splice a single leaf and leave its siblings' bytes as
+/// they were parsed.
+pub(crate) fn encode_leaf<S: AsRef<str>>(value: S, escaper: Escaper) -> VcardValueLeaf<'static> {
+    VcardValueLeaf::from(escape_with(value.as_ref().as_bytes(), escaper).into_owned())
 }
 
 /// A parameter node from a single value (parameter values are not escaped: the

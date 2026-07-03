@@ -21,7 +21,7 @@
 
 use alloc::{borrow::Cow, vec::Vec};
 
-use crate::tree::{line::VcardLine, param::VcardParamLens};
+use crate::tree::{line::VcardLine, param::VcardParamLens, value::VcardValueNode};
 
 /// A typed cursor over a content line's value, editing in place and byte
 /// preserving for the components it does not touch.
@@ -30,7 +30,7 @@ pub struct VcardValueCursor<'c, 'a> {
     pub line: &'c mut VcardLine<'a>,
 }
 
-impl VcardValueCursor<'_, '_> {
+impl<'a> VcardValueCursor<'_, 'a> {
     /// The whole value as a single decoded text (component 0, value 0).
     pub fn text(&self) -> Cow<'_, str> {
         self.line.value.decode_scalar_at(0)
@@ -118,9 +118,78 @@ impl VcardValueCursor<'_, '_> {
         self.line.value.set_at(i, values);
     }
 
+    /// Walk into the `i`th component to edit its `,`-separated values one at a
+    /// time, splicing a single leaf per edit and leaving the siblings' bytes
+    /// exactly as parsed.
+    pub fn list_at(&mut self, i: usize) -> VcardListCursor<'_, 'a> {
+        VcardListCursor {
+            node: &mut self.line.value,
+            component: i,
+        }
+    }
+
+    /// Walk into the first component's list (the flat `,`-list shape), the
+    /// common case of [`list_at`](Self::list_at).
+    pub fn list_mut(&mut self) -> VcardListCursor<'_, 'a> {
+        self.list_at(0)
+    }
+
     /// The first parameter of type `P` on this line, decoded.
     pub fn param<P: VcardParamLens>(&self) -> Option<P::Target<'_>> {
         self.line.param::<P>()
+    }
+}
+
+/// A cursor over one component's `,`-separated values, editing them per item.
+///
+/// Every mutation touches a single leaf (or splices one in or out) and
+/// re-emits only the structural separators, so an untouched value keeps the
+/// exact bytes it was parsed with, escaping and all. Obtained from
+/// [`VcardValueCursor::list_at`] / [`list_mut`](VcardValueCursor::list_mut).
+pub struct VcardListCursor<'c, 'a> {
+    node: &'c mut VcardValueNode<'a>,
+    component: usize,
+}
+
+impl VcardListCursor<'_, '_> {
+    /// The number of values in the walked component.
+    pub fn len(&self) -> usize {
+        self.node.value_count(self.component)
+    }
+
+    /// Whether the walked component has no values.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The `j`th value, decoded, or `None` when the index is out of range.
+    pub fn get(&self, j: usize) -> Option<Cow<'_, str>> {
+        self.node.decode_at(self.component).into_iter().nth(j)
+    }
+
+    /// Replace the `j`th value in place, re-escaping only that leaf.
+    pub fn set<S: AsRef<str>>(&mut self, j: usize, value: S) -> &mut Self {
+        self.node.set_value_at(self.component, j, value);
+        self
+    }
+
+    /// Insert a value at position `j` (clamped to the end), escaping only the
+    /// new leaf.
+    pub fn insert<S: AsRef<str>>(&mut self, j: usize, value: S) -> &mut Self {
+        self.node.insert_value_at(self.component, j, value);
+        self
+    }
+
+    /// Append a value, escaping only the new leaf.
+    pub fn push<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
+        self.node.push_value(self.component, value);
+        self
+    }
+
+    /// Remove the `j`th value, splicing it out; a no-op when out of range.
+    pub fn remove(&mut self, j: usize) -> &mut Self {
+        self.node.remove_value_at(self.component, j);
+        self
     }
 }
 
@@ -220,6 +289,49 @@ mod tests {
                 .unwrap();
         card.prop_mut::<ADR>().unwrap().set_street(&["New St"]);
         assert!(card.to_string().contains("ADR:;;New St;;;;\r\n"));
+    }
+
+    #[test]
+    fn walks_a_list_editing_items_without_reformatting_siblings() {
+        use crate::tree::prop::nickname::NICKNAME;
+
+        // NOTE: `a\:b` is a redundant (non-canonical) escape: `:` need not be
+        // escaped. A whole-list rewrite would decode and normalise it to `a:b`;
+        // a per-item edit of a *different* value must leave it byte for byte.
+        let mut card = VcardCst::parse(concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:4.0\r\n",
+            "NICKNAME:a\\:b,middle,z\r\n",
+            "END:VCARD\r\n",
+        ))
+        .unwrap();
+
+        card.prop_mut::<NICKNAME>().unwrap().list_mut().remove(1);
+
+        // The surviving `a\:b` keeps its bytes; only `middle` and its comma go.
+        let out = card.to_string();
+        assert!(out.contains("NICKNAME:a\\:b,z\r\n"), "got: {out}");
+    }
+
+    #[test]
+    fn walks_a_list_setting_inserting_and_pushing() {
+        use crate::tree::prop::nickname::NICKNAME;
+
+        let mut card =
+            VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNICKNAME:a,b,c\r\nEND:VCARD\r\n")
+                .unwrap();
+
+        {
+            let mut cursor = card.prop_mut::<NICKNAME>().unwrap();
+            let mut list = cursor.list_mut();
+            assert_eq!(list.len(), 3);
+            assert_eq!(list.get(1).as_deref(), Some("b"));
+
+            list.set(1, "B").insert(0, "first").push("last");
+        }
+
+        let out = card.to_string();
+        assert!(out.contains("NICKNAME:first,a,B,c,last\r\n"), "got: {out}");
     }
 
     #[test]
