@@ -31,15 +31,15 @@ quoted-printable = ["dep:quoted_printable"]
 base64 = ["dep:base64"]
 encoding = ["dep:encoding_rs"]
 
+[dev-dependencies]
+calcard = "0.3"
+criterion = "0.8"
+ical_vcard = "0.4"
+vcard_parser = "0.2"
+vparser = "1"
+
 [dependencies]
 memchr = { version = "2", default-features = false, optional = true }
 quoted_printable = { version = "0.5", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 encoding_rs = { version = "0.8", optional = true }
-
-[dev-dependencies]
-calcard = "0.3"
-criterion = "0.5"
-ical_vcard = "0.4"
-vcard_parser = "0.2"
-vparser = "1"
