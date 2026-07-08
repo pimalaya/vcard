@@ -16,6 +16,14 @@ repository = "https://github.com/pimalaya/vcard-rs"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lib]
+name = "vcard"
+path = "src/lib.rs"
+
+[[bench]]
+name = "parse"
+harness = false
+
 [features]
 default = ["parser", "quoted-printable", "base64", "encoding"]
 parser = ["dep:memchr"]
@@ -30,20 +38,8 @@ base64 = { version = "0.22", default-features = false, features = ["alloc"], opt
 encoding_rs = { version = "0.8", optional = true }
 
 [dev-dependencies]
-criterion = "0.5"
-# Peer parsers, for the comparative parse benchmark. calcard and vcard_parser
-# build a decoded model (compared against our parse + decode); ical_vcard is a
-# content-line parser (compared against our CST). The `vcard` crate is
-# builder-only, so it has no parse path to compare.
 calcard = "0.3"
-vcard_parser = "0.2"
+criterion = "0.5"
 ical_vcard = "0.4"
+vcard_parser = "0.2"
 vparser = "1"
-
-[lib]
-name = "vcard"
-path = "src/lib.rs"
-
-[[bench]]
-name = "parse"
-harness = false

@@ -70,7 +70,10 @@
 //! projects the model back to a canonical CST. Per-property lens markers
 //! ([`VcardPropLens`](tree::prop::VcardPropLens)) read or edit a single line
 //! through the byte-preserving [`cursor`](tree::value::VcardValueCursor)s, so
-//! editing one property leaves every other byte intact.
+//! editing one property leaves every other byte intact. The three-way
+//! [`merge`](tree::merge::merge) builds on those same edits to reconcile two
+//! divergent copies of a card against their common base, reporting each side's
+//! changes and their conflicts.
 //!
 //! A property *value* is held as raw bytes, so a value in a foreign charset (a
 //! vCard 2.1 `CHARSET`) survives byte for byte; a name or parameter must be
