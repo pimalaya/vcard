@@ -27,6 +27,7 @@ harness = false
 [features]
 default = ["parser", "quoted-printable", "base64", "encoding"]
 parser = ["dep:memchr"]
+jcard = ["parser", "dep:serde_json"]
 quoted-printable = ["dep:quoted_printable"]
 base64 = ["dep:base64"]
 encoding = ["dep:encoding_rs"]
@@ -40,6 +41,7 @@ vparser = "1"
 
 [dependencies]
 memchr = { version = "2", default-features = false, optional = true }
+serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }
 quoted_printable = { version = "0.5", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 encoding_rs = { version = "0.8", optional = true }

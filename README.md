@@ -22,6 +22,7 @@ Rust library for parsing, validating, modifying and building [vCards](https://ww
 - **Strict on output**: build cards strictly guided by the standards (escape hatch available)
 - **Small, portable and [fast](#benchmarks)**: `no_std` compatible
 - Optional decoding supported: `quoted-printable`, `base64` and `encoding` (feature gates)
+- Optional **jCard** <sup>[rfc7095](https://www.rfc-editor.org/rfc/rfc7095)</sup> support: read and write the decoded model as JSON (`jcard` feature gate)
 
 ## Installation
 

@@ -114,6 +114,10 @@
 //!
 //! - `parser` (default): the byte-faithful [`tree`] and its codec. Everything
 //!   under [`tree`] is gated on it; the decoded model is always available.
+//! - `jcard` (opt-in): the RFC 7095 jCard codec on the decoded model
+//!   ([`to_jcard`](vcard::Vcard::to_jcard) /
+//!   [`from_jcard`](vcard::Vcard::from_jcard)), via the `serde_json` crate
+//!   (`no_std`, alloc-only). Requires `parser` for the property specs.
 //! - `quoted-printable` (default): decode `QUOTED-PRINTABLE` value octets, via
 //!   the `quoted_printable` crate.
 //! - `base64` (default): decode inline `BASE64` binary values, via the `base64`
@@ -123,6 +127,8 @@
 
 extern crate alloc;
 
+#[cfg(feature = "jcard")]
+pub mod jcard;
 pub mod param;
 pub mod prop;
 pub mod value;

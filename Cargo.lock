@@ -1011,6 +1011,7 @@ dependencies = [
  "ical_vcard",
  "memchr",
  "quoted_printable",
+ "serde_json",
  "vcard_parser",
  "vparser",
 ]
