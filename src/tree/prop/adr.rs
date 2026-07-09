@@ -1,11 +1,12 @@
 //! # ADR lens
 //!
-//! The `ADR` (structured address) property lens, with a cursor naming its seven
-//! components. Like [`VcardNCursor`](crate::tree::prop::n::VcardNCursor),
-//! getters decode and setters encode in place, leaving the other components
-//! (and every parameter) byte for byte intact.
+//! The `ADR` (structured address) property lens, with a cursor naming its
+//! components: the seven RFC 6350 ones and the eleven RFC 9554 extensions.
+//! Like [`VcardNCursor`](crate::tree::prop::n::VcardNCursor), getters decode
+//! and setters encode in place, leaving the other components (and every
+//! parameter) byte for byte intact.
 //!
-//! See RFC 6350 6.3.1.
+//! See RFC 6350 6.3.1 and RFC 9554.
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -49,6 +50,8 @@ impl VcardPropSpec for ADR {
         &[
             VcardParamKind::Label,
             VcardParamKind::Language,
+            VcardParamKind::Phonetic,
+            VcardParamKind::Script,
             VcardParamKind::Geo,
             VcardParamKind::Tz,
             VcardParamKind::AltId,
@@ -140,6 +143,116 @@ impl VcardAdrCursor<'_, '_> {
     /// Set the country name.
     pub fn set_country<S: AsRef<str>>(&mut self, values: &[S]) {
         self.line.value.set_at(6, values);
+    }
+
+    /// The room (RFC 9554), decoded.
+    pub fn room(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(7)
+    }
+
+    /// Set the room.
+    pub fn set_room<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(7, values);
+    }
+
+    /// The apartment (RFC 9554), decoded.
+    pub fn apartment(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(8)
+    }
+
+    /// Set the apartment.
+    pub fn set_apartment<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(8, values);
+    }
+
+    /// The floor (RFC 9554), decoded.
+    pub fn floor(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(9)
+    }
+
+    /// Set the floor.
+    pub fn set_floor<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(9, values);
+    }
+
+    /// The street number (RFC 9554), decoded.
+    pub fn street_number(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(10)
+    }
+
+    /// Set the street number.
+    pub fn set_street_number<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(10, values);
+    }
+
+    /// The street name (RFC 9554), decoded.
+    pub fn street_name(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(11)
+    }
+
+    /// Set the street name.
+    pub fn set_street_name<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(11, values);
+    }
+
+    /// The building (RFC 9554), decoded.
+    pub fn building(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(12)
+    }
+
+    /// Set the building.
+    pub fn set_building<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(12, values);
+    }
+
+    /// The block (RFC 9554), decoded.
+    pub fn block(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(13)
+    }
+
+    /// Set the block.
+    pub fn set_block<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(13, values);
+    }
+
+    /// The subdistrict (RFC 9554), decoded.
+    pub fn subdistrict(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(14)
+    }
+
+    /// Set the subdistrict.
+    pub fn set_subdistrict<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(14, values);
+    }
+
+    /// The district (RFC 9554), decoded.
+    pub fn district(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(15)
+    }
+
+    /// Set the district.
+    pub fn set_district<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(15, values);
+    }
+
+    /// The landmark (RFC 9554), decoded.
+    pub fn landmark(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(16)
+    }
+
+    /// Set the landmark.
+    pub fn set_landmark<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(16, values);
+    }
+
+    /// The cardinal direction (RFC 9554), decoded.
+    pub fn direction(&self) -> Vec<Cow<'_, str>> {
+        self.line.value.decode_at(17)
+    }
+
+    /// Set the cardinal direction.
+    pub fn set_direction<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.line.value.set_at(17, values);
     }
 
     /// The first parameter of type `P` on this line, decoded.

@@ -86,6 +86,16 @@ impl VcardParam<'_> {
             VcardParam::Geo(v) => param_scalar(&Geo, v),
             VcardParam::Tz(v) => param_scalar(&Tz, v),
             VcardParam::Label(v) => param_scalar(&Label, v),
+            VcardParam::Author(v) => param_scalar(&Author, v),
+            VcardParam::AuthorName(v) => param_scalar(&AuthorName, v),
+            VcardParam::Created(v) => param_scalar(&Created, v),
+            VcardParam::Derived(v) => param_scalar(&Derived, v),
+            VcardParam::Jsptr(v) => param_scalar(&Jsptr, v),
+            VcardParam::Phonetic(v) => param_scalar(&Phonetic, v),
+            VcardParam::PropId(v) => param_scalar(&PropId, v),
+            VcardParam::Script(v) => param_scalar(&Script, v),
+            VcardParam::ServiceType(v) => param_scalar(&ServiceType, v),
+            VcardParam::Username(v) => param_scalar(&Username, v),
 
             VcardParam::Unknown { name, values } => VcardParamNode {
                 name: VcardLeaf::from(name.to_string()),

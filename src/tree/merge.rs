@@ -140,6 +140,9 @@ pub struct VcardPropPath<'a> {
 
 /// One observed change of a card relative to the base, at the finest
 /// granularity the changed field allows.
+// NOTE: inherits VcardValue's ADR-dominated size; actions are a transient
+// diff report, so plain variants beat boxing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VcardMergeAction<'a> {
     /// A property the card added (absent from the base).

@@ -130,6 +130,8 @@ pub enum VcardPropKind {
     Class,
     /// `CLIENTPIDMAP`: maps PID source ids to client URIs (RFC 6350 6.7.7).
     ClientPidMap,
+    /// `CREATED`: timestamp of the card's creation (RFC 9554).
+    Created,
     /// `EMAIL`: email address (RFC 6350 6.4.2).
     Email,
     /// `FBURL`: free/busy URL (RFC 6350 6.9.1).
@@ -140,8 +142,13 @@ pub enum VcardPropKind {
     Gender,
     /// `GEO`: geographic position (RFC 6350 6.5.2).
     Geo,
+    /// `GRAMGENDER`: grammatical gender to address the contact by (RFC 9554).
+    GramGender,
     /// `IMPP`: instant-messaging and presence URI (RFC 6350 6.4.3).
     Impp,
+    /// `JSPROP`: a JSContact property with no vCard counterpart, preserved as
+    /// JSON during conversion (RFC 9555).
+    JsProp,
     /// `KEY`: public key or certificate (RFC 6350 6.8.1).
     Key,
     /// `KIND`: kind of object the card describes (RFC 6350 6.1.4).
@@ -151,6 +158,9 @@ pub enum VcardPropKind {
     Label,
     /// `LANG`: language the contact may be addressed in (RFC 6350 6.4.4).
     Lang,
+    /// `LANGUAGE`: default language of the card's free-text values (RFC
+    /// 9554).
+    Language,
     /// `LOGO`: graphic logo of the organization (RFC 6350 6.6.3).
     Logo,
     /// `MAILER`: email program used (RFC 2426 3.3.2).
@@ -173,12 +183,16 @@ pub enum VcardPropKind {
     ProdId,
     /// `PROFILE`: declares the object a vCard profile (RFC 2426 3.1.4).
     Profile,
+    /// `PRONOUNS`: pronouns to refer to the contact by (RFC 9554).
+    Pronouns,
     /// `RELATED`: relationship to another entity (RFC 6350 6.6.6).
     Related,
     /// `REV`: revision timestamp (RFC 6350 6.7.4).
     Rev,
     /// `ROLE`: role or occupation (RFC 6350 6.6.2).
     Role,
+    /// `SOCIALPROFILE`: social-media profile, a URI or a username (RFC 9554).
+    SocialProfile,
     /// `SORT-STRING`: string to sort the card by (RFC 2426 3.3.4; the SORT-AS
     /// parameter in 4.0).
     SortString,
@@ -203,7 +217,7 @@ pub enum VcardPropKind {
 impl VcardPropKind {
     /// Every known property kind, for iterating the closed vocabulary (e.g. a
     /// validator checking which required properties are absent).
-    pub const ALL: [Self; 42] = [
+    pub const ALL: [Self; 48] = [
         Self::Adr,
         Self::Agent,
         Self::Anniversary,
@@ -213,16 +227,20 @@ impl VcardPropKind {
         Self::Categories,
         Self::Class,
         Self::ClientPidMap,
+        Self::Created,
         Self::Email,
         Self::FbUrl,
         Self::Fn,
         Self::Gender,
         Self::Geo,
+        Self::GramGender,
         Self::Impp,
+        Self::JsProp,
         Self::Key,
         Self::Kind,
         Self::Label,
         Self::Lang,
+        Self::Language,
         Self::Logo,
         Self::Mailer,
         Self::Member,
@@ -234,9 +252,11 @@ impl VcardPropKind {
         Self::Photo,
         Self::ProdId,
         Self::Profile,
+        Self::Pronouns,
         Self::Related,
         Self::Rev,
         Self::Role,
+        Self::SocialProfile,
         Self::SortString,
         Self::Sound,
         Self::Source,
@@ -264,16 +284,20 @@ impl str::FromStr for VcardPropKind {
             kind if kind.eq_ignore_ascii_case("CATEGORIES") => Ok(Self::Categories),
             kind if kind.eq_ignore_ascii_case("CLASS") => Ok(Self::Class),
             kind if kind.eq_ignore_ascii_case("CLIENTPIDMAP") => Ok(Self::ClientPidMap),
+            kind if kind.eq_ignore_ascii_case("CREATED") => Ok(Self::Created),
             kind if kind.eq_ignore_ascii_case("EMAIL") => Ok(Self::Email),
             kind if kind.eq_ignore_ascii_case("FBURL") => Ok(Self::FbUrl),
             kind if kind.eq_ignore_ascii_case("FN") => Ok(Self::Fn),
             kind if kind.eq_ignore_ascii_case("GENDER") => Ok(Self::Gender),
             kind if kind.eq_ignore_ascii_case("GEO") => Ok(Self::Geo),
+            kind if kind.eq_ignore_ascii_case("GRAMGENDER") => Ok(Self::GramGender),
             kind if kind.eq_ignore_ascii_case("IMPP") => Ok(Self::Impp),
+            kind if kind.eq_ignore_ascii_case("JSPROP") => Ok(Self::JsProp),
             kind if kind.eq_ignore_ascii_case("KEY") => Ok(Self::Key),
             kind if kind.eq_ignore_ascii_case("KIND") => Ok(Self::Kind),
             kind if kind.eq_ignore_ascii_case("LABEL") => Ok(Self::Label),
             kind if kind.eq_ignore_ascii_case("LANG") => Ok(Self::Lang),
+            kind if kind.eq_ignore_ascii_case("LANGUAGE") => Ok(Self::Language),
             kind if kind.eq_ignore_ascii_case("LOGO") => Ok(Self::Logo),
             kind if kind.eq_ignore_ascii_case("MAILER") => Ok(Self::Mailer),
             kind if kind.eq_ignore_ascii_case("MEMBER") => Ok(Self::Member),
@@ -285,9 +309,11 @@ impl str::FromStr for VcardPropKind {
             kind if kind.eq_ignore_ascii_case("PHOTO") => Ok(Self::Photo),
             kind if kind.eq_ignore_ascii_case("PRODID") => Ok(Self::ProdId),
             kind if kind.eq_ignore_ascii_case("PROFILE") => Ok(Self::Profile),
+            kind if kind.eq_ignore_ascii_case("PRONOUNS") => Ok(Self::Pronouns),
             kind if kind.eq_ignore_ascii_case("RELATED") => Ok(Self::Related),
             kind if kind.eq_ignore_ascii_case("REV") => Ok(Self::Rev),
             kind if kind.eq_ignore_ascii_case("ROLE") => Ok(Self::Role),
+            kind if kind.eq_ignore_ascii_case("SOCIALPROFILE") => Ok(Self::SocialProfile),
             kind if kind.eq_ignore_ascii_case("SORT-STRING") => Ok(Self::SortString),
             kind if kind.eq_ignore_ascii_case("SOUND") => Ok(Self::Sound),
             kind if kind.eq_ignore_ascii_case("SOURCE") => Ok(Self::Source),
@@ -316,16 +342,20 @@ impl ops::Deref for VcardPropKind {
             Self::Categories => "CATEGORIES",
             Self::Class => "CLASS",
             Self::ClientPidMap => "CLIENTPIDMAP",
+            Self::Created => "CREATED",
             Self::Email => "EMAIL",
             Self::FbUrl => "FBURL",
             Self::Fn => "FN",
             Self::Gender => "GENDER",
             Self::Geo => "GEO",
+            Self::GramGender => "GRAMGENDER",
             Self::Impp => "IMPP",
+            Self::JsProp => "JSPROP",
             Self::Key => "KEY",
             Self::Kind => "KIND",
             Self::Label => "LABEL",
             Self::Lang => "LANG",
+            Self::Language => "LANGUAGE",
             Self::Logo => "LOGO",
             Self::Mailer => "MAILER",
             Self::Member => "MEMBER",
@@ -337,9 +367,11 @@ impl ops::Deref for VcardPropKind {
             Self::Photo => "PHOTO",
             Self::ProdId => "PRODID",
             Self::Profile => "PROFILE",
+            Self::Pronouns => "PRONOUNS",
             Self::Related => "RELATED",
             Self::Rev => "REV",
             Self::Role => "ROLE",
+            Self::SocialProfile => "SOCIALPROFILE",
             Self::SortString => "SORT-STRING",
             Self::Sound => "SOUND",
             Self::Source => "SOURCE",

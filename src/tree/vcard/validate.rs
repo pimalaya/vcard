@@ -223,7 +223,7 @@ pub(crate) fn validate_prop(
 fn param_allowed(spec: &VcardPropSpecFns, version: VcardVersion, kind: VcardParamKind) -> bool {
     let allowed = (spec.allowed_params)(version);
     match version {
-        VcardVersion::V4_0 => allowed.contains(&kind),
+        VcardVersion::V4_0 => allowed.contains(&kind) || is_universal(kind),
         _ => {
             matches!(kind, VcardParamKind::Charset | VcardParamKind::Encoding)
                 || (allowed.contains(&kind) && !is_v4_only(kind))
@@ -231,13 +231,39 @@ fn param_allowed(spec: &VcardPropSpecFns, version: VcardVersion, kind: VcardPara
     }
 }
 
-/// Whether a parameter was introduced in vCard 4.0 (so 2.1 / 3.0 disallow it).
+/// Whether an RFC 9554 parameter is defined for any property, so 4.0 allows
+/// it without each spec listing it.
+fn is_universal(kind: VcardParamKind) -> bool {
+    use VcardParamKind::*;
+
+    matches!(kind, Author | AuthorName | Created | Derived | PropId)
+}
+
+/// Whether a parameter was introduced in vCard 4.0 or later (so 2.1 / 3.0
+/// disallow it).
 fn is_v4_only(kind: VcardParamKind) -> bool {
     use VcardParamKind::*;
 
     matches!(
         kind,
-        Pid | Pref | AltId | MediaType | CalScale | SortAs | Geo | Tz | Label
+        Pid | Pref
+            | AltId
+            | MediaType
+            | CalScale
+            | SortAs
+            | Geo
+            | Tz
+            | Label
+            | Author
+            | AuthorName
+            | Created
+            | Derived
+            | Jsptr
+            | Phonetic
+            | PropId
+            | Script
+            | ServiceType
+            | Username
     )
 }
 

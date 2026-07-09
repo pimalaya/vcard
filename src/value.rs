@@ -162,6 +162,9 @@ impl ops::Deref for VcardValueKind {
 
 /// A decoded property value: one known kind, or `Unknown` (raw) for anything
 /// the model does not decode.
+// NOTE: the 18-component VcardAdr dominates the enum size; values are
+// decoded on demand, not stored in bulk, so plain variants beat boxing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VcardValue<'a> {
     /// The structured `ADR` value.

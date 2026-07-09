@@ -61,6 +61,8 @@ impl VcardPropSpec for N {
         &[
             VcardParamKind::SortAs,
             VcardParamKind::Language,
+            VcardParamKind::Phonetic,
+            VcardParamKind::Script,
             VcardParamKind::AltId,
             VcardParamKind::Value,
         ]

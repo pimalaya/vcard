@@ -152,8 +152,9 @@ impl Vcard<'_> {
 }
 
 /// Write one decoded property as a jCard `[name, {params}, type, value...]`
-/// entry.
-fn prop_to_jcard(prop: &VcardProp<'_>) -> Value {
+/// entry. Also the encoder behind the RFC 9555 vCardProps escape hatch, which
+/// preserves whole properties in jCard syntax.
+pub(crate) fn prop_to_jcard(prop: &VcardProp<'_>) -> Value {
     let full = &*prop.name;
     let (group, name) = match full.split_once('.') {
         Some((group, name)) => (Some(group), name),
@@ -167,28 +168,11 @@ fn prop_to_jcard(prop: &VcardProp<'_>) -> Value {
 
     let mut declared = None;
     for param in &prop.params {
-        let (key, value) = match param {
-            VcardParam::Value(kind) => {
-                declared = Some(kind.to_ascii_lowercase());
-                continue;
-            }
-            VcardParam::Unknown { name, values } => {
-                (name.to_ascii_lowercase(), text_or_list(values))
-            }
-            VcardParam::Pid(values) | VcardParam::SortAs(values) | VcardParam::Type(values) => {
-                (known_param_key(param), text_or_list(values))
-            }
-            VcardParam::AltId(value)
-            | VcardParam::CalScale(value)
-            | VcardParam::Charset(value)
-            | VcardParam::Encoding(value)
-            | VcardParam::Geo(value)
-            | VcardParam::Label(value)
-            | VcardParam::Language(value)
-            | VcardParam::MediaType(value)
-            | VcardParam::Pref(value)
-            | VcardParam::Tz(value) => (known_param_key(param), Value::String(value.to_string())),
-        };
+        if let VcardParam::Value(kind) = param {
+            declared = Some(kind.to_ascii_lowercase());
+            continue;
+        }
+        let (key, value) = param_to_jcard(param);
         merge_param(&mut params, key, value);
     }
 
@@ -204,6 +188,39 @@ fn prop_to_jcard(prop: &VcardProp<'_>) -> Value {
     Value::Array(entry)
 }
 
+/// The jCard spelling of one parameter: its lowercased wire name and its
+/// value (a string, or an array for a multi-valued parameter). Also the
+/// encoder behind the RFC 9555 vCardParams escape hatch.
+pub(crate) fn param_to_jcard(param: &VcardParam<'_>) -> (String, Value) {
+    match param {
+        VcardParam::Unknown { name, values } => (name.to_ascii_lowercase(), text_or_list(values)),
+        VcardParam::Pid(values) | VcardParam::SortAs(values) | VcardParam::Type(values) => {
+            (known_param_key(param), text_or_list(values))
+        }
+        VcardParam::AltId(value)
+        | VcardParam::Author(value)
+        | VcardParam::AuthorName(value)
+        | VcardParam::CalScale(value)
+        | VcardParam::Charset(value)
+        | VcardParam::Created(value)
+        | VcardParam::Derived(value)
+        | VcardParam::Encoding(value)
+        | VcardParam::Geo(value)
+        | VcardParam::Jsptr(value)
+        | VcardParam::Label(value)
+        | VcardParam::Language(value)
+        | VcardParam::MediaType(value)
+        | VcardParam::Phonetic(value)
+        | VcardParam::Pref(value)
+        | VcardParam::PropId(value)
+        | VcardParam::Script(value)
+        | VcardParam::ServiceType(value)
+        | VcardParam::Tz(value)
+        | VcardParam::Username(value)
+        | VcardParam::Value(value) => (known_param_key(param), Value::String(value.to_string())),
+    }
+}
+
 /// The jCard object key of a known parameter: its lowercased wire name.
 fn known_param_key(param: &VcardParam<'_>) -> String {
     param
@@ -214,7 +231,7 @@ fn known_param_key(param: &VcardParam<'_>) -> String {
 
 /// Insert a parameter into the jCard params object, merging a repeated name
 /// into one array value.
-fn merge_param(params: &mut Map<String, Value>, key: String, value: Value) {
+pub(crate) fn merge_param(params: &mut Map<String, Value>, key: String, value: Value) {
     match params.get_mut(&key) {
         None => {
             params.insert(key, value);
@@ -266,9 +283,8 @@ fn value_to_jcard(value: &VcardValue<'_>) -> (&'static str, Vec<Value>) {
                 text_or_list(&n.suffixes),
             ])],
         ),
-        VcardValue::Adr(adr) => (
-            "text",
-            vec![Value::Array(vec![
+        VcardValue::Adr(adr) => {
+            let mut components = vec![
                 text_or_list(&adr.po_box),
                 text_or_list(&adr.extended),
                 text_or_list(&adr.street),
@@ -276,8 +292,24 @@ fn value_to_jcard(value: &VcardValue<'_>) -> (&'static str, Vec<Value>) {
                 text_or_list(&adr.region),
                 text_or_list(&adr.postal_code),
                 text_or_list(&adr.country),
-            ])],
-        ),
+            ];
+            if adr.has_extended_components() {
+                components.extend([
+                    text_or_list(&adr.room),
+                    text_or_list(&adr.apartment),
+                    text_or_list(&adr.floor),
+                    text_or_list(&adr.street_number),
+                    text_or_list(&adr.street_name),
+                    text_or_list(&adr.building),
+                    text_or_list(&adr.block),
+                    text_or_list(&adr.subdistrict),
+                    text_or_list(&adr.district),
+                    text_or_list(&adr.landmark),
+                    text_or_list(&adr.direction),
+                ]);
+            }
+            ("text", vec![Value::Array(components)])
+        }
         VcardValue::Gender(gender) if gender.identity.is_empty() => {
             ("text", vec![Value::String(gender.sex.to_string())])
         }
@@ -358,8 +390,9 @@ fn entry_is_version(entry: &[Value]) -> bool {
 }
 
 /// Read one jCard entry into a decoded property, resolving its value kind
-/// through the property spec like the wire decoder does.
-fn prop_from_jcard<'a>(
+/// through the property spec like the wire decoder does. Also the decoder
+/// behind the RFC 9555 vCardProps escape hatch.
+pub(crate) fn prop_from_jcard<'a>(
     name: &'a str,
     params: &'a Map<String, Value>,
     slot: &'a str,
@@ -423,8 +456,9 @@ fn prop_from_jcard<'a>(
     }
 }
 
-/// Read one jCard params-object member into a decoded parameter.
-fn param_from_jcard<'a>(key: &'a str, value: &'a Value) -> VcardParam<'a> {
+/// Read one jCard params-object member into a decoded parameter. Also the
+/// decoder behind the RFC 9555 vCardParams escape hatch.
+pub(crate) fn param_from_jcard<'a>(key: &'a str, value: &'a Value) -> VcardParam<'a> {
     let Ok(kind) = key.parse::<VcardParamKind>() else {
         return VcardParam::Unknown {
             name: Cow::Owned(key.to_ascii_uppercase()),
@@ -447,6 +481,16 @@ fn param_from_jcard<'a>(key: &'a str, value: &'a Value) -> VcardParam<'a> {
         VcardParamKind::Type => VcardParam::Type(scalars(value)),
         VcardParamKind::Tz => VcardParam::Tz(scalar(value)),
         VcardParamKind::Value => VcardParam::Value(scalar(value)),
+        VcardParamKind::Author => VcardParam::Author(scalar(value)),
+        VcardParamKind::AuthorName => VcardParam::AuthorName(scalar(value)),
+        VcardParamKind::Created => VcardParam::Created(scalar(value)),
+        VcardParamKind::Derived => VcardParam::Derived(scalar(value)),
+        VcardParamKind::Jsptr => VcardParam::Jsptr(scalar(value)),
+        VcardParamKind::Phonetic => VcardParam::Phonetic(scalar(value)),
+        VcardParamKind::PropId => VcardParam::PropId(scalar(value)),
+        VcardParamKind::Script => VcardParam::Script(scalar(value)),
+        VcardParamKind::ServiceType => VcardParam::ServiceType(scalar(value)),
+        VcardParamKind::Username => VcardParam::Username(scalar(value)),
     }
 }
 
@@ -482,14 +526,26 @@ fn value_from_jcard<'a>(kind: VcardValueKind, values: &'a [Value]) -> VcardValue
         }
         VcardValueKind::Adr => {
             let mut components = structured(values.first()).into_iter();
+            let mut next = || components.next().unwrap_or_default();
             VcardValue::Adr(VcardAdr {
-                po_box: components.next().unwrap_or_default(),
-                extended: components.next().unwrap_or_default(),
-                street: components.next().unwrap_or_default(),
-                locality: components.next().unwrap_or_default(),
-                region: components.next().unwrap_or_default(),
-                postal_code: components.next().unwrap_or_default(),
-                country: components.next().unwrap_or_default(),
+                po_box: next(),
+                extended: next(),
+                street: next(),
+                locality: next(),
+                region: next(),
+                postal_code: next(),
+                country: next(),
+                room: next(),
+                apartment: next(),
+                floor: next(),
+                street_number: next(),
+                street_name: next(),
+                building: next(),
+                block: next(),
+                subdistrict: next(),
+                district: next(),
+                landmark: next(),
+                direction: next(),
             })
         }
         VcardValueKind::Gender => {
@@ -602,7 +658,7 @@ fn scalars(value: &Value) -> Vec<Cow<'_, str>> {
 
 /// Re-spell an RFC 6350 basic date-and-or-time or timestamp in the RFC 7095
 /// 3.5 extended format, passing anything unrecognized through verbatim.
-fn basic_to_extended(raw: &str) -> String {
+pub(crate) fn basic_to_extended(raw: &str) -> String {
     let (date, time) = match raw.split_once('T') {
         Some((date, time)) => (date, Some(time)),
         None => (raw, None),
@@ -672,7 +728,7 @@ fn offset_to_extended(offset: &str) -> String {
 
 /// Re-spell an extended date-and-or-time or timestamp in the RFC 6350 basic
 /// format, passing an already-basic value through untouched.
-fn extended_to_basic(raw: Cow<'_, str>) -> Cow<'_, str> {
+pub(crate) fn extended_to_basic(raw: Cow<'_, str>) -> Cow<'_, str> {
     match extended_str_to_basic(&raw) {
         Some(basic) => Cow::Owned(basic),
         None => raw,

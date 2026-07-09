@@ -23,6 +23,7 @@ Rust library for parsing, validating, modifying and building [vCards](https://ww
 - **Small, portable and [fast](#benchmarks)**: `no_std` compatible
 - Optional decoding supported: `quoted-printable`, `base64` and `encoding` (feature gates)
 - Optional **jCard** <sup>[rfc7095](https://www.rfc-editor.org/rfc/rfc7095)</sup> support: read and write the decoded model as JSON (`jcard` feature gate)
+- Optional **JSContact** <sup>[rfc9553](https://www.rfc-editor.org/rfc/rfc9553)</sup> support: convert the decoded model from and into the Card object JMAP exchanges, following [rfc9555](https://www.rfc-editor.org/rfc/rfc9555) (`jscontact` feature gate), with the [rfc9554](https://www.rfc-editor.org/rfc/rfc9554) properties and parameters modeled first-class
 
 ## Installation
 

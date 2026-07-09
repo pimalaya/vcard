@@ -179,6 +179,16 @@ impl VcardParamNode<'_> {
             VcardParamKind::Geo => VcardParam::Geo(self.scalar()),
             VcardParamKind::Tz => VcardParam::Tz(self.scalar()),
             VcardParamKind::Label => VcardParam::Label(self.scalar()),
+            VcardParamKind::Author => VcardParam::Author(self.scalar()),
+            VcardParamKind::AuthorName => VcardParam::AuthorName(self.scalar()),
+            VcardParamKind::Created => VcardParam::Created(self.scalar()),
+            VcardParamKind::Derived => VcardParam::Derived(self.scalar()),
+            VcardParamKind::Jsptr => VcardParam::Jsptr(self.scalar()),
+            VcardParamKind::Phonetic => VcardParam::Phonetic(self.scalar()),
+            VcardParamKind::PropId => VcardParam::PropId(self.scalar()),
+            VcardParamKind::Script => VcardParam::Script(self.scalar()),
+            VcardParamKind::ServiceType => VcardParam::ServiceType(self.scalar()),
+            VcardParamKind::Username => VcardParam::Username(self.scalar()),
         }
     }
 
