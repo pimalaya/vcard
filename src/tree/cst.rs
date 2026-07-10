@@ -86,8 +86,14 @@ use alloc::{
 };
 
 use crate::{
-    prop::VcardProp,
-    tree::{codec::mode::Escaper, error::VcardParseError, line::VcardLine, prop::VcardPropLens},
+    prop::{VcardProp, VcardPropKind},
+    tree::{
+        codec::mode::Escaper,
+        error::VcardParseError,
+        line::VcardLine,
+        prop::{VcardPropCardinality, VcardPropLens, prop_spec},
+    },
+    value::VcardValue,
     version::VcardVersion,
 };
 
@@ -315,6 +321,51 @@ impl<'a> VcardCst<'a> {
     pub fn remove<L: VcardPropLens>(&mut self) -> &mut Self {
         self.props
             .retain(|line| !line.name.get().eq_ignore_ascii_case(&L::KIND));
+        self
+    }
+
+    /// Append an empty instance of every required property absent from the
+    /// card, so it meets the minimum multiplicity RFC 6350 section 6 sets for
+    /// its version. "Required" is a
+    /// [`cardinality`](crate::tree::prop::VcardPropSpec::cardinality) of one or
+    /// more (`ExactlyOne`, `OneOrMore`): in practice `N` in 2.1 / 3.0 and `FN`
+    /// from 3.0 on. The display value lives elsewhere in the card (`FN`), so
+    /// the placeholder is blank; strict servers (iCloud, Fastmail) reject a
+    /// vCard 3.0 that omits `N` with a parse error, and this supplies the
+    /// mandatory but empty `N:;;;;`.
+    ///
+    /// The mirror of the cardinality half of
+    /// [`Vcard::validate`](crate::vcard::Vcard::validate), a repair rather than
+    /// a check. It only adds what is missing: an already valid card, or a
+    /// property already present, is left untouched, so it is idempotent.
+    /// Existing lines stay byte for byte intact (see [`push`](Self::push));
+    /// only the appended placeholders are canonical.
+    pub fn fill_required(&mut self) -> &mut Self {
+        let version = self.version();
+        for kind in VcardPropKind::ALL {
+            let spec = prop_spec(kind);
+            if !(spec.allowed_versions)().contains(&version) {
+                continue;
+            }
+            let required = matches!(
+                (spec.cardinality)(version),
+                VcardPropCardinality::ExactlyOne | VcardPropCardinality::OneOrMore,
+            );
+            let present = self
+                .props
+                .iter()
+                .any(|line| line.name.get().eq_ignore_ascii_case(&kind));
+            if !required || present {
+                continue;
+            }
+            if let Some(value_kind) = (spec.allowed_values)(version).first() {
+                self.push(VcardProp {
+                    name: kind.into(),
+                    params: Vec::new(),
+                    value: VcardValue::empty(*value_kind),
+                });
+            }
+        }
         self
     }
 
@@ -605,6 +656,46 @@ mod tests {
             card.to_string(),
             "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n",
         );
+    }
+
+    #[test]
+    fn fill_required_injects_the_mandatory_empty_n_into_a_3_0_card() {
+        // A 3.0 card with only a display name: FN but no N (mandatory).
+        let mut card =
+            VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:x\r\nFN:Only\r\nEND:VCARD\r\n")
+                .unwrap();
+        card.fill_required();
+
+        let out = card.to_string();
+        assert!(out.contains("N:;;;;\r\n"), "{out}");
+        // Existing lines stay verbatim.
+        assert!(out.contains("UID:x\r\n"), "{out}");
+        assert!(out.contains("FN:Only\r\n"), "{out}");
+        // The repair makes the card conformant.
+        assert!(card.decode().validate().is_ok());
+    }
+
+    #[test]
+    fn fill_required_is_idempotent_and_leaves_valid_cards_untouched() {
+        // Running twice adds only the one missing N.
+        let mut once =
+            VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Only\r\nEND:VCARD\r\n").unwrap();
+        once.fill_required().fill_required();
+        assert_eq!(once.to_string().matches("N:;;;;").count(), 1);
+
+        // 4.0 makes N optional, so a card with FN is left exactly as it was.
+        let mut v4 =
+            VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Only\r\nEND:VCARD\r\n").unwrap();
+        let before = v4.to_string();
+        assert_eq!(v4.fill_required().to_string(), before);
+
+        // A 3.0 card that already has N (and FN) is untouched too.
+        let mut has = VcardCst::parse(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nN:Doe;Jane;;;\r\nFN:Jane\r\nEND:VCARD\r\n",
+        )
+        .unwrap();
+        let before = has.to_string();
+        assert_eq!(has.fill_required().to_string(), before);
     }
 
     #[test]

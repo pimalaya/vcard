@@ -224,6 +224,34 @@ impl VcardValue<'_> {
             Self::Unknown(_) => None,
         }
     }
+
+    /// An empty value of the given kind: the inverse of [`kind`](Self::kind),
+    /// so `empty(k).kind() == Some(k)`. Every component is blank (an empty
+    /// string, list, or structured value); a binary is an empty URI
+    /// reference. Used to mint a placeholder for a required property that is
+    /// otherwise absent (see [`VcardCst::fill_required`]).
+    ///
+    /// [`VcardCst::fill_required`]: crate::tree::cst::VcardCst::fill_required
+    pub fn empty(kind: VcardValueKind) -> VcardValue<'static> {
+        match kind {
+            VcardValueKind::Adr => VcardValue::Adr(VcardAdr::default()),
+            VcardValueKind::Binary => VcardValue::Binary(VcardBinary::Uri(Cow::Borrowed(""))),
+            VcardValueKind::ClientPidMap => VcardValue::ClientPidMap(VcardClientPidMap::default()),
+            VcardValueKind::DateAndOrTime => {
+                VcardValue::DateAndOrTime(VcardDateAndOrTime::default())
+            }
+            VcardValueKind::Gender => VcardValue::Gender(VcardGender::default()),
+            VcardValueKind::Geo => VcardValue::Geo(VcardGeo::default()),
+            VcardValueKind::LanguageTag => VcardValue::LanguageTag(VcardLanguageTag::default()),
+            VcardValueKind::N => VcardValue::N(VcardN::default()),
+            VcardValueKind::Org => VcardValue::Org(VcardOrg::default()),
+            VcardValueKind::Text => VcardValue::Text(VcardText::default()),
+            VcardValueKind::TextList => VcardValue::TextList(VcardTextList::default()),
+            VcardValueKind::Timestamp => VcardValue::Timestamp(VcardTimestamp::default()),
+            VcardValueKind::Uri => VcardValue::Uri(VcardUri::default()),
+            VcardValueKind::UtcOffset => VcardValue::UtcOffset(VcardUtcOffset::default()),
+        }
+    }
 }
 
 /// An undecoded property value: its unescaped components, in source order. The
@@ -239,6 +267,30 @@ mod tests {
     use core::str::FromStr;
 
     use crate::value::{VcardUnknownValue, VcardValue, VcardValueKind, text::VcardText};
+
+    #[test]
+    fn empty_is_the_inverse_of_kind() {
+        use crate::value::VcardValueKind::*;
+
+        for kind in [
+            Adr,
+            Binary,
+            ClientPidMap,
+            DateAndOrTime,
+            Gender,
+            Geo,
+            LanguageTag,
+            N,
+            Org,
+            Text,
+            TextList,
+            Timestamp,
+            Uri,
+            UtcOffset,
+        ] {
+            assert_eq!(VcardValue::empty(kind).kind(), Some(kind));
+        }
+    }
 
     #[test]
     fn reports_the_kind_of_a_value_and_none_for_unknown() {
