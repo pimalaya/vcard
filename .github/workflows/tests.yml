@@ -1,0 +1,56 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: fmt + clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --all-features
+
+  coverage:
+    name: coverage -> codecov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-tarpaulin
+      - name: Measure coverage (cobertura.xml)
+        run: cargo tarpaulin --all-features --engine llvm --out Xml
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: cobertura.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  fuzz-regression:
+    name: fuzz corpus replay
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: taiki-e/install-action@cargo-fuzz
+      - name: Replay the committed corpus through the fuzz target
+        # The fuzz corpus is gitignored, so seed it from the committed fixtures;
+        # `-runs=0` replays each input once (parse + serialize-fixpoint oracle)
+        # without fuzzing, so a regression on a previously-handled card fails CI.
+        run: |
+          mkdir -p fuzz/corpus/parse
+          # Flatten to unique names (some fixtures share a basename across
+          # project dirs, e.g. google_3.0.vcf).
+          find tests/corpus -name '*.vcf' | while read -r f; do
+            cp "$f" "fuzz/corpus/parse/${f//\//_}"
+          done
+          cargo fuzz run parse fuzz/corpus/parse -- -runs=0

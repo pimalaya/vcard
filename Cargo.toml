@@ -1,15 +1,15 @@
 [package]
 name = "vcard-rs"
-description = "Library for parsing, validating, modifying and building vCards"
+description = "vCard parser, validator, editor and builder library for Rust"
 version = "0.0.1"
-authors = ["soywod <clement.douin@posteo.net>"]
-edition = "2024"
+authors = ["soywod <pimalaya.org@posteo.net>"]
 rust-version = "1.88"
+edition = "2024"
 license = "MIT OR Apache-2.0"
-categories = ["data-structures", "parser-implementations", "encoding"]
+categories = ["data-structures", "parser-implementations", "encoding", "no-std"]
 keywords = ["vcard", "contact", "carddav", "rfc6350", "codec"]
 homepage = "https://pimalaya.org"
-documentation = "https://docs.rs/vcard-rs/latest/vcard-rs"
+documentation = "https://docs.rs/vcard-rs/latest/vcard"
 repository = "https://github.com/pimalaya/vcard-rs"
 
 [package.metadata.docs.rs]
@@ -18,11 +18,26 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [lib]
 name = "vcard"
-path = "src/lib.rs"
 
 [[bench]]
 name = "parse"
 harness = false
+required-features = ["parser"]
+
+[[example]]
+name = "parse_edit_export"
+path = "examples/parse_edit_export.rs"
+required-features = ["parser"]
+
+[[example]]
+name = "strict_builder"
+path = "examples/strict_builder.rs"
+required-features = ["parser"]
+
+[[example]]
+name = "raw_builder"
+path = "examples/raw_builder.rs"
+required-features = ["parser"]
 
 [features]
 default = ["parser", "quoted-printable", "base64", "encoding"]
@@ -41,8 +56,8 @@ vcard_parser = "0.2"
 vparser = "1"
 
 [dependencies]
-memchr = { version = "2", default-features = false, optional = true }
-serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }
-quoted_printable = { version = "0.5", default-features = false, optional = true }
 base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 encoding_rs = { version = "0.8", optional = true }
+memchr = { version = "2", default-features = false, optional = true }
+quoted_printable = { version = "0.5", default-features = false, optional = true }
+serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }

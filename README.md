@@ -1,132 +1,73 @@
 # 📇 vcard-rs [![Documentation](https://img.shields.io/docsrs/vcard-rs?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-rs/latest/vcard) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
-Rust library for parsing, validating, modifying and building [vCards](https://www.rfc-editor.org/rfc/rfc6350)
+vCard parser, validator, editor and builder library for Rust
 
 ## Table of contents
 
 - [Features](#features)
-- [Installation](#installation)
+- [RFC coverage](#rfc-coverage)
 - [Usage](#usage)
-- [Benchmarks](#benchmarks)
-- [License](#license)
+- [Examples](#examples)
 - [AI disclosure](#ai-disclosure)
-- [Contributing](CONTRIBUTING.md)
+- [License](#license)
 - [Social](#social)
+- [Contributing](#contributing)
 - [Sponsoring](#sponsoring)
 
 ## Features
 
-- All versions supported: **2.1**, **3.0** <sup>[rfc2426](https://www.rfc-editor.org/rfc/rfc2426)</sup> and **4.0** <sup>[rfc6350](https://www.rfc-editor.org/rfc/rfc6350)</sup>
-- **Faithful edition**: change a parameter or a value while leaving the rest untouched, byte for byte
-- **Forgiving on input**: accept all cards, even the malformed ones
-- **Strict on output**: build cards strictly guided by the standards (escape hatch available)
-- **Small, portable and [fast](#benchmarks)**: `no_std` compatible
-- Optional decoding supported: `quoted-printable`, `base64` and `encoding` (feature gates)
-- Optional **jCard** <sup>[rfc7095](https://www.rfc-editor.org/rfc/rfc7095)</sup> support: read and write the decoded model as JSON (`jcard` feature gate)
-- Optional **JSContact** <sup>[rfc9553](https://www.rfc-editor.org/rfc/rfc9553)</sup> support: convert the decoded model from and into the Card object JMAP exchanges, following [rfc9555](https://www.rfc-editor.org/rfc/rfc9555) (`jscontact` feature gate), with the [rfc9554](https://www.rfc-editor.org/rfc/rfc9554) properties and parameters modeled first-class
+- **All vCard versions**: parse and write 2.1, 3.0 and 4.0 through a single, version-agnostic model.
+- **Byte-faithful editing**: change one parameter or value and every other byte of the card, line endings included, is preserved exactly.
+- **Forgiving parser**: accept any real card, even a malformed one, and round-trip it unchanged.
+- **Strict building and validation**: construct cards checked against the standard, with an escape hatch when you need to step outside it.
+- **Small and portable**: no_std compatible, with an allocation-only core that pulls in no dependencies.
+- **Optional content decoding**: quoted-printable text, inline base64 binary and foreign character sets, each behind its own feature.
+- **Optional jCard**: read and write a card as JSON.
+- **Optional JSContact**: convert a card to and from the Card object exchanged over JMAP.
 
-## Installation
+> [!TIP]
+> vcard-rs uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional support. The default feature set is declared in [Cargo.toml](./Cargo.toml) or on [docs.rs](https://docs.rs/crate/vcard-rs/latest/features).
 
-```toml
-[dependencies]
-vcard-rs = "0.0.1"
-```
+## RFC coverage
+
+| RFC    | What is covered                                                                                          |
+|--------|----------------------------------------------------------------------------------------------------------|
+| [2.1]  | vCard 2.1: the original versit format, including its quoted-printable and charset conventions              |
+| [2425] | text/directory: bare directory records carrying no BEGIN and END envelope                                 |
+| [2426] | vCard 3.0                                                                                                  |
+| [6350] | vCard 4.0: the current standard, with its full property set, value types and parameters                   |
+| [7095] | jCard: the JSON representation of a card                                                                   |
+| [9553] | JSContact: the Card object model exchanged over JMAP                                                       |
+| [9554] | vCard format extensions: the newer properties and the extended address components, modeled first-class    |
+| [9555] | JSContact vCard mapping: the lossless conversion between a card and a JSContact Card                       |
+
+[2.1]: https://www.imc.org/pdi/vcard-21.txt
+[2425]: https://www.rfc-editor.org/rfc/rfc2425
+[2426]: https://www.rfc-editor.org/rfc/rfc2426
+[6350]: https://www.rfc-editor.org/rfc/rfc6350
+[7095]: https://www.rfc-editor.org/rfc/rfc7095
+[9553]: https://www.rfc-editor.org/rfc/rfc9553
+[9554]: https://www.rfc-editor.org/rfc/rfc9554
+[9555]: https://www.rfc-editor.org/rfc/rfc9555
 
 ## Usage
 
-The snippets below are condensed; full runnable versions live in [./examples](examples), each launchable with `cargo run --example <name>`.
+The whole API is documented on [docs.rs](https://docs.rs/vcard-rs/latest/vcard), from parsing and byte-faithful editing to the strict builder, validation and the optional jCard and JSContact codecs.
 
-### Parse a card, edit a field, and write it back
+## Examples
 
-Only the field you touch changes; every other byte of the original card, including the line endings and the parameters you did not edit, round-trips exactly.
+Complete runnable programs live in [./examples](./examples); the tests also demonstrate real usage.
 
-```rust
-use vcard::tree::cst::VcardCst;
-use vcard::tree::prop::r#fn::FN;
+## AI disclosure
 
-let mut card =
-    VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n").unwrap();
+This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
 
-card.prop_mut::<FN>().unwrap().set_text("Jane Doe");
-
-assert_eq!(card.to_string(), "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n");
-```
-
-### Build a card, checked against the standard
-
-Each property is checked as it is built, and the finished card is validated as a whole before it is written out; a card that does not conform gives you the list of problems instead. See [./examples/strict_builder.rs](examples/strict_builder.rs).
-
-```rust
-use std::borrow::Cow;
-
-use vcard::tree::cst::VcardCst;
-use vcard::tree::prop::r#fn::FN;
-use vcard::tree::vcard::builder::VcardPropBuilder;
-use vcard::value::VcardValue;
-use vcard::value::text::VcardText;
-use vcard::vcard::Vcard;
-use vcard::version::VcardVersion;
-
-let version = VcardVersion::V4_0;
-
-let full_name = VcardPropBuilder::<FN>::new(version)
-    .build(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
-    .expect("FN accepts a text value");
-
-let card = Vcard { version, properties: vec![full_name] };
-let valid = card.validate().expect("a conformant 4.0 card");
-
-print!("{}", VcardCst::from(valid));
-```
-
-### Build a card by hand, unchecked
-
-The escape hatch: place whatever properties you like and write them out directly, with no validation. Correctness is your responsibility. See [examples/raw_builder.rs](examples/raw_builder.rs).
-
-```rust
-use std::borrow::Cow;
-
-use vcard::prop::VcardProp;
-use vcard::value::VcardValue;
-use vcard::value::text::VcardText;
-use vcard::vcard::Vcard;
-use vcard::version::VcardVersion;
-
-let card = Vcard {
-    version: VcardVersion::V4_0,
-    properties: vec![VcardProp {
-        name: "FN".into(),
-        params: vec![],
-        value: VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
-    }],
-};
-
-print!("{card}");
-```
-
-Beyond parsing and building, the library projects a card onto a decoded model and back, and, behind opt-in features, decodes encoded text, inline binary data and foreign character sets.
-
-## Benchmarks
-
-Single-card [criterion](https://crates.io/crates/criterion) medians, run with `cargo bench --bench parse`. The comparison is level-matched: content-line parsers stop at a line tree like our parse step, model parsers build a decoded object like our parse-and-decode step, so each group compares like with like.
-
-Parsing into content lines (no decoding):
-
-| library | time | delta |
-| --- | --- | --- |
-| [`vparser`](https://crates.io/crates/vparser) | 0.57 µs | -61% |
-| **vcard-rs** (`VcardCst::parse`) | **1.47 µs** | — |
-| [`ical_vcard`](https://crates.io/crates/ical_vcard) | 2.82 µs | +92% |
-
-Parsing into a decoded model:
-
-| library | time | delta |
-| --- | --- | --- |
-| [`calcard`](https://crates.io/crates/calcard) | 4.40 µs | -1% |
-| **vcard-rs** (`parse + decode`) | **4.46 µs** | — |
-| [`vcard_parser`](https://crates.io/crates/vcard_parser) | 87.8 µs | +1869% |
-
-These numbers are a ballpark, not a strict ranking: the libraries produce different representations (borrowed vs owned, shallow vs validating), so they do different amounts of work. `vparser` is a zero-allocation pull tokenizer that builds no leaf or parameter structs, which is why it stays ahead at the content-line level; at the model level we are on par with `calcard`.
+- **Tools**: Claude Code (Anthropic), invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
+- **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
+- **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
+- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit. Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
+- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
+- **Last reviewed**: 16/07/2026
 
 ## License
 
@@ -137,22 +78,15 @@ This project is licensed under either of:
 
 at your option.
 
-## AI disclosure
-
-This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
-
-- **Tools**: Claude Code (Anthropic), Opus 4.8, invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
-- **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
-- **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
-- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
-- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 01/07/2026
-
 ## Social
 
 - Chat on [Matrix](https://matrix.to/#/#pimalaya:matrix.org)
 - News on [Mastodon](https://fosstodon.org/@pimalaya) or [RSS](https://fosstodon.org/@pimalaya.rss)
 - Mail at [pimalaya.org@posteo.net](mailto:pimalaya.org@posteo.net)
+
+## Contributing
+
+Contributions are welcome: start with [CONTRIBUTING.md](./CONTRIBUTING.md), which opens with the Pimalaya-wide guides to read first.
 
 ## Sponsoring
 
