@@ -42,6 +42,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - uses: taiki-e/install-action@cargo-fuzz
+      - name: Loosen ASan shadow-memory ASLR for the libFuzzer runner
+        # ubuntu-latest (24.04) sets vm.mmap_rnd_bits=32, which LLVM's
+        # AddressSanitizer cannot map its shadow memory under; it aborts on
+        # startup before any input runs. Lower it to the value ASan supports.
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
       - name: Replay the committed corpus through the fuzz target
         # The fuzz corpus is gitignored, so seed it from the committed fixtures;
         # `-runs=0` replays each input once (parse + serialize-fixpoint oracle)

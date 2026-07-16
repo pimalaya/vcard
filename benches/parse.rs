@@ -9,7 +9,9 @@
 //! Representations still differ in laziness, ownership and decoding depth, so
 //! read these as ballpark rather than a strict ranking.
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use criterion::{Criterion, criterion_group, criterion_main};
 
 use vcard::tree::cst::VcardCst;
 
