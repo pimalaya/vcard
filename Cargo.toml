@@ -1,7 +1,7 @@
 [package]
 name = "vcard-rs"
 description = "vCard parser, validator, editor and builder library for Rust"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["soywod <pimalaya.org@posteo.net>"]
 rust-version = "1.88"
 edition = "2024"
@@ -10,7 +10,7 @@ categories = ["data-structures", "parser-implementations", "encoding", "no-std"]
 keywords = ["vcard", "contact", "carddav", "rfc6350", "codec"]
 homepage = "https://pimalaya.org"
 documentation = "https://docs.rs/vcard-rs/latest/vcard"
-repository = "https://github.com/pimalaya/vcard-rs"
+repository = "https://github.com/pimalaya/vcard"
 
 [package.metadata.docs.rs]
 all-features = true

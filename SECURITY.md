@@ -4,8 +4,8 @@
 
 | Version | Supported      |
 | ------- | -------------- |
-| 0.0.x   | :green_circle: |
+| 0.1.x   | :green_circle: |
 
 ## Reporting a Vulnerability
 
-https://github.com/pimalaya/vcard-rs/issues
+https://github.com/pimalaya/vcard/issues
