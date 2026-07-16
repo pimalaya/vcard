@@ -41,7 +41,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
-      - uses: taiki-e/install-action@cargo-fuzz
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
       - name: Loosen ASan shadow-memory ASLR for the libFuzzer runner
         # ubuntu-latest (24.04) sets vm.mmap_rnd_bits=32, which LLVM's
         # AddressSanitizer cannot map its shadow memory under; it aborts on
