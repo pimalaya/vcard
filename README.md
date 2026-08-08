@@ -1,4 +1,4 @@
-# 📇 vcard-rs [![Documentation](https://img.shields.io/docsrs/vcard-rs?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-rs/latest/vcard) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
+# 📇 vcard-rs [![Documentation](https://img.shields.io/docsrs/vcard-rs?style=flat&logo=docs.rs&logoColor=white)](https://docs.rs/vcard-rs/latest/vcard) [![Coverage](https://img.shields.io/codecov/c/github/pimalaya/vcard/master?style=flat&logo=codecov&logoColor=white)](https://codecov.io/gh/pimalaya/vcard) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
 vCard parser, validator, editor and builder library for Rust
 
