@@ -18,7 +18,7 @@ The property and parameter lens markers keep their wire spelling (`FN`, `ADR`, `
 
 **crate-004** (imports from the same crate are merged into a single `use`). The twelve parameter lens modules each carried two `use crate::` declarations; they are one now.
 
-**crate-003** (a cargo feature is justified only when it pulls additional crates into the build). The `jscontact` feature was `["jcard"]` and pulled nothing of its own, so enabling it changed only which of our own code compiled. It is removed, and the JSContact conversion now ships under `jcard`, whose `serde_json` it already needed. That is the one change here that drops a published capability toggle.
+**crate-003** (a cargo feature is justified only when it pulls additional crates into the build) is knowingly not followed. The `jscontact` feature is `["jcard"]` and pulls nothing of its own, so enabling it changes only which of our own code compiles, 2480 lines of it. Removing it was tried and reverted: a feature is also a discovery surface, and `jscontact` is the name a reader scans the manifest for. Keeping it also states the real dependency on `jcard` up front instead of through a compile error. The deviation is recorded in CONTRIBUTING.md.
 
 **cargo-008** (every dependency pins `default-features = false` and enables only what it needs). `encoding_rs` now takes `alloc` explicitly, and the five dev-dependencies are pinned the same way, with `criterion` keeping only `cargo_bench_support`. **cargo-001** put the manifest blocks back in template order, and **cargo-007** gave the bench target an explicit `path`.
 

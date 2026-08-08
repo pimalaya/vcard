@@ -22,12 +22,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Replaced the docs/ folder with a cairn/ folder holding the living spec, the in-flight proposals and the dated history, activated by [AGENTS.md](./AGENTS.md). The benchmark methodology and numbers moved to [benches/README.md](./benches/README.md).
 
-### Removed
-
-- Removed the `jscontact` cargo feature; the JSContact conversion now ships under `jcard`.
-
-  The feature pulled no crate of its own, so it gated only which of this crate's own code compiled. Replace `features = ["jscontact"]` with `features = ["jcard"]`.
-
 ## [0.1.0] - 2026-07-16
 
 ### Added

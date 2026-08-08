@@ -19,11 +19,15 @@ They are type-level keys naming a spec token, written only inside a turbofish (`
 
 The discrepancy is flagged upstream, so the guideline can grow a third exception for spec-token type-level keys.
 
+## Deviation: the jscontact feature
+
+The `jscontact` feature is `["jcard"]` and pulls no crate of its own, against crate-003, which asks that a feature exist only where it changes the crate set. Every other feature here does pull a crate: `parser` takes `memchr`, `jcard` takes `serde_json`, and the three content decoders take one small crate each.
+
+It is kept because a cargo feature is also a discovery surface, not only a build switch. A reader looking for JSContact support reads the feature list, and `jscontact` is where they look; folding it into `jcard` would tell them the crate does jCard and leave the RFC 9555 conversion undiscoverable from the manifest. The alias also states the real dependency (`jscontact` implies `jcard`, since the conversion reuses jCard syntax for its vCardProps and vCardParams escape hatches) rather than leaving a consumer to find that out from a compile error. It costs a name and no build weight.
+
 ## Build
 
-vcard-rs is not an I/O library, so it has no coroutine, client or TLS layers. It is a no_std library (with alloc) whose core is dependency-free; every dependency sits behind an opt-in feature: parser (the byte-faithful content-line tree), quoted-printable, base64 and encoding (content decoders for encoded text, inline binary and foreign character sets), and jcard (both JSON codecs, jCard and JSContact). Everything under the tree module is gated on parser, while the decoded model is always available.
-
-A feature exists only where it pulls a crate into the build, per the guidelines' crate-003. That is why JSContact has no feature of its own: it needs nothing beyond what jcard already pulls.
+vcard-rs is not an I/O library, so it has no coroutine, client or TLS layers. It is a no_std library (with alloc) whose core is dependency-free; every dependency sits behind an opt-in feature: parser (the byte-faithful content-line tree), quoted-printable, base64 and encoding (content decoders for encoded text, inline binary and foreign character sets), and jcard and jscontact (the JSON codecs). Everything under the tree module is gated on parser, while the decoded model is always available.
 
 Check both the full build and the bare core, so gated code never leaks into the always-on core:
 

@@ -22,7 +22,8 @@ vCard parser, validator, editor and builder library for Rust
 - **Strict building and validation**: construct cards checked against the standard, with an escape hatch when you need to step outside it.
 - **Small and portable**: no_std compatible, with an allocation-only core that pulls in no dependencies.
 - **Optional content decoding**: quoted-printable text, inline base64 binary and foreign character sets, each behind its own feature.
-- **Optional JSON codecs**: read and write a card as jCard JSON, and convert it to and from the Card object exchanged over JMAP.
+- **Optional jCard**: read and write a card as JSON.
+- **Optional JSContact**: convert a card to and from the Card object exchanged over JMAP.
 
 > [!TIP]
 > vcard-rs uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional support. The default feature set is declared in [Cargo.toml](./Cargo.toml) or on [docs.rs](https://docs.rs/crate/vcard-rs/latest/features).

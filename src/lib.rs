@@ -115,15 +115,16 @@
 //!
 //! - `parser` (default): the byte-faithful [`tree`] and its codec. Everything
 //!   under [`tree`] is gated on it; the decoded model is always available.
-//! - `jcard` (opt-in): both JSON codecs, via the `serde_json` crate (`no_std`,
-//!   alloc-only), and requiring `parser` for the property specs. The RFC 7095
-//!   jCard codec on the decoded model ([`to_jcard`](vcard::Vcard::to_jcard) /
-//!   [`from_jcard`](vcard::Vcard::from_jcard)), and the RFC 9555 conversion to
-//!   and from an RFC 9553 JSContact Card
+//! - `jcard` (opt-in): the RFC 7095 jCard codec on the decoded model
+//!   ([`to_jcard`](vcard::Vcard::to_jcard) /
+//!   [`from_jcard`](vcard::Vcard::from_jcard)), via the `serde_json` crate
+//!   (`no_std`, alloc-only). Requires `parser` for the property specs.
+//! - `jscontact` (opt-in): the RFC 9555 conversion between the decoded model
+//!   and an RFC 9553 JSContact Card
 //!   ([`to_jscontact`](vcard::Vcard::to_jscontact) /
-//!   [`from_jscontact`](vcard::Vcard::from_jscontact)), which rides on the same
-//!   crate because jCard syntax carries its vCardProps / vCardParams escape
-//!   hatches.
+//!   [`from_jscontact`](vcard::Vcard::from_jscontact)). Requires `jcard`,
+//!   whose syntax carries the vCardProps / vCardParams escape hatches, and
+//!   pulls no crate of its own on top of it.
 //! - `quoted-printable` (default): decode `QUOTED-PRINTABLE` value octets, via
 //!   the `quoted_printable` crate.
 //! - `base64` (default): decode inline `BASE64` binary values, via the `base64`
@@ -135,7 +136,7 @@ extern crate alloc;
 
 #[cfg(feature = "jcard")]
 pub mod jcard;
-#[cfg(feature = "jcard")]
+#[cfg(feature = "jscontact")]
 pub mod jscontact;
 pub mod param;
 pub mod prop;
