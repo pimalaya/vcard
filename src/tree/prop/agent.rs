@@ -23,16 +23,14 @@ use crate::{
 pub struct AGENT;
 
 impl VcardCst<'_> {
-    /// Parse the vCard embedded in this card's `AGENT` property. `AGENT` is
-    /// kept as opaque text and never decoded recursively (to bound the work),
-    /// so a consumer opts into exactly one level here. The vCard 3.0 escaped
-    /// form (newlines and delimiters backslash-escaped) is unescaped on read,
-    /// then re-parsed.
+    /// Parse the vCard embedded in this card's `AGENT` property, unescaping the
+    /// vCard 3.0 escaped form first. `AGENT` is opaque text and never decoded
+    /// recursively, to bound the work, so this is the opt-in for exactly one
+    /// level.
     ///
-    /// Returns `None` when there is no `AGENT`, or its value embeds no card: an
-    /// `AGENT` URI reference, or the empty value of a 2.1 inline agent (whose
-    /// embedded lines are separate properties of the outer card, not its
-    /// value).
+    /// `None` when there is no `AGENT`, or it embeds no card: a URI reference,
+    /// or the empty value of a 2.1 inline agent, whose lines are properties of
+    /// the outer card rather than its value.
     pub fn agent(&self) -> Option<Result<VcardCst<'static>, VcardParseError>> {
         let text = self.prop::<AGENT>()?;
         let bytes = text.0.into_owned().into_bytes();

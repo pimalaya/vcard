@@ -205,13 +205,10 @@ impl<'a> VcardLine<'a> {
 
         let mut value = &content[colon + 1..];
 
-        // NOTE: A QUOTED-PRINTABLE value ending in `=` is a dangling soft-break
-        // marker, however it got there (a soft-break join, a folded
-        // continuation, or raw input): valid content would encode a literal `=`
-        // as `=3D`. Left in, it would re-trigger soft-break joining on reparse
-        // and swallow the next line, so serialization would not round-trip;
-        // strip it. This never touches base64 padding, since `ENCODING=BASE64`
-        // is not quoted-printable.
+        // NOTE: A trailing `=` on a QUOTED-PRINTABLE value is always a dangling
+        // soft-break marker, since real content encodes `=` as `=3D`. Left in,
+        // it would re-trigger the join on reparse and swallow the next line.
+        // Base64 padding is safe: `ENCODING=BASE64` is not quoted-printable.
         if head_is_quoted_printable(content) {
             while value.last() == Some(&b'=') {
                 value = &value[..value.len() - 1];

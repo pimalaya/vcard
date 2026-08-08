@@ -25,10 +25,9 @@ use crate::{
 /// value-type in force for a given version and optionally declared `VALUE`.
 ///
 /// Implemented on the zero-sized lens markers. The defaults cover the uniform
-/// majority (a single text value, valid in every version), so a property
-/// overrides only where it diverges; the only required item is
-/// [`KIND`](Self::KIND). The value axis and the `VALUE` axis resolve together
-/// in [`value`](Self::value), which is what the decoder consults to pick a
+/// majority (a single text value, valid in every version), so only
+/// [`KIND`](Self::KIND) is required. The value and `VALUE` axes resolve
+/// together in [`value`](Self::value), which the decoder consults to pick a
 /// value kind.
 pub trait VcardPropSpec {
     /// The property this spec describes.

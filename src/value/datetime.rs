@@ -39,19 +39,14 @@ impl<'a> From<Cow<'a, str>> for VcardDateAndOrTime<'a> {
 pub struct VcardTimestamp<'a>(pub Cow<'a, str>);
 
 impl VcardTimestamp<'_> {
-    /// Normalizes the RFC 6350 timestamp to an instant, as seconds from
-    /// the Unix epoch, so two revisions can be ordered.
+    /// Normalizes the RFC 6350 timestamp to seconds from the Unix epoch, so two
+    /// revisions can be ordered; `None` when the text will not parse.
     ///
-    /// Handles the ISO 8601 basic (`20260711T172559Z`) and extended
-    /// (`2026-07-11T17:25:59Z`) forms, a `Z` or numeric zone offset
-    /// (`+0200`, `-05:00`), and reduced precision (omitted trailing time
-    /// components read as zero). A value with no zone is read as UTC.
-    /// Returns `None` when the text is not a parseable date-time.
-    ///
-    /// The instant is only meaningful relative to another one: it is for
-    /// comparison, not calendar arithmetic. Equality by instant differs
-    /// from the derived `PartialEq` (which compares the raw text), so it
-    /// is not exposed as an `Ord`.
+    /// Accepts the ISO 8601 basic (`20260711T172559Z`) and extended
+    /// (`2026-07-11T17:25:59Z`) forms, a `Z` or numeric offset, and reduced
+    /// precision (omitted trailing components read as zero); no zone means UTC.
+    /// For ordering only: it disagrees with the derived `PartialEq`, which
+    /// compares raw text, so it is not exposed as `Ord`.
     pub fn to_unix_seconds(&self) -> Option<i64> {
         parse_timestamp(self.0.as_ref())
     }

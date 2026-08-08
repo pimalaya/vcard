@@ -125,17 +125,14 @@ impl<'a> VcardCst<'a> {
     }
 
     /// Parse the first card from raw text, borrowing it for the Cst lifetime.
-    /// `VERSION` is taken as an ordinary property wherever it appears (or not
-    /// at all): the parser is liberal about its position, the way real cards
-    /// are. Any input after the card's `END` line is ignored; use
-    /// [`parse_many`](Self::parse_many) to read every card.
+    /// `VERSION` is an ordinary property wherever it appears, or nowhere: the
+    /// parser is as liberal about its position as real cards are. Anything
+    /// after `END` is ignored; use [`parse_many`](Self::parse_many) for a file.
     ///
-    /// A bare RFC 2425 directory record with no `BEGIN:VCARD` envelope is also
-    /// accepted: every line becomes a property and [`begin`](Self::begin) /
-    /// [`end`](Self::end) stay `None`, so it round-trips without a synthesised
-    /// envelope. This is only possible here, not in
-    /// [`parse_many`](Self::parse_many): without the envelope there is no
-    /// reliable boundary between records.
+    /// A bare RFC 2425 record with no `BEGIN:VCARD` is also accepted: every
+    /// line becomes a property, [`begin`](Self::begin) / [`end`](Self::end)
+    /// stay `None`, and it round-trips without a synthesised envelope. Only
+    /// here, since without the envelope `parse_many` has no record boundary.
     pub fn parse<T: AsRef<[u8]> + ?Sized>(input: &'a T) -> Result<Self, VcardParseError> {
         // NOTE: Trim leading blank-line bytes before the bare-vs-wrapped
         // decision, so it does not hinge on stray leading whitespace:
@@ -324,22 +321,15 @@ impl<'a> VcardCst<'a> {
         self
     }
 
-    /// Append an empty instance of every required property absent from the
-    /// card, so it meets the minimum multiplicity RFC 6350 section 6 sets for
-    /// its version. "Required" is a
-    /// [`cardinality`](crate::tree::prop::spec::VcardPropSpec::cardinality) of
-    /// one or more (`ExactlyOne`, `OneOrMore`): in practice `N` in 2.1 / 3.0
-    /// and `FN` from 3.0 on. The display value lives elsewhere in the card
-    /// (`FN`), so the placeholder is blank; strict servers (iCloud, Fastmail)
-    /// reject a vCard 3.0 that omits `N` with a parse error, and this supplies
-    /// the mandatory but empty `N:;;;;`.
+    /// Append a blank instance of every required property the card is missing
+    /// for its version: in practice `N` in 2.1 / 3.0 and `FN` from 3.0 on.
+    /// Strict servers (iCloud, Fastmail) reject a 3.0 card with no `N`, and an
+    /// empty `N:;;;;` satisfies them without inventing a display value.
     ///
-    /// The mirror of the cardinality half of
-    /// [`Vcard::validate`](crate::vcard::Vcard::validate), a repair rather than
-    /// a check. It only adds what is missing: an already valid card, or a
-    /// property already present, is left untouched, so it is idempotent.
-    /// Existing lines stay byte for byte intact (see [`push`](Self::push));
-    /// only the appended placeholders are canonical.
+    /// The repair half of
+    /// [`Vcard::validate`](crate::vcard::Vcard::validate)'s cardinality check.
+    /// Idempotent, and existing lines stay byte for byte intact (see
+    /// [`push`](Self::push)).
     pub fn fill_required(&mut self) -> &mut Self {
         let version = self.version();
         for kind in VcardPropKind::ALL {

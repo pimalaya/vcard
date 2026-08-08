@@ -37,13 +37,11 @@ use crate::tree::{
 /// A raw value: `;`-separated components, each a list of `,`-separated raw
 /// value leaves.
 ///
-/// From parse the value is held as one unsplit `raw` slice and walked lazily,
-/// so a parse that never decodes and a byte-faithful reserialize do no
-/// splitting at all. The first edit (or a model encode) splits it into owned
-/// `components`, which then take over as the source of
-/// truth. The `escaper` records which version's escaping rules the codec must
-/// apply; it is stamped from the card version after parsing (see
-/// `VcardCst::parse`).
+/// From parse it is one unsplit `raw` slice, walked lazily, so a parse that
+/// never decodes and a byte-faithful reserialize split nothing. The first edit
+/// (or a model encode) splits it into owned `components`, which then take over.
+/// `escaper` records which version's escaping rules to apply, stamped from the
+/// card version after parsing.
 #[derive(Clone, Debug, Default)]
 pub struct VcardValueNode<'a> {
     /// The unsplit value bytes, straight from parse and authoritative until an
