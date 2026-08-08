@@ -4,10 +4,12 @@
 //! the whole serialization equals the input with exactly one line swapped, so a
 //! setter that bled into another component, parameter or line would fail.
 
-use vcard::tree::cst::VcardCst;
-use vcard::tree::prop::{
-    adr::ADR, bday::BDAY, client_pid_map::CLIENTPIDMAP, r#fn::FN, gender::GENDER, lang::LANG, n::N,
-    nickname::NICKNAME, org::ORG, rev::REV, tz::TZ, url::URL,
+use vcard::tree::{
+    cst::VcardCst,
+    prop::{
+        adr::ADR, bday::BDAY, client_pid_map::CLIENTPIDMAP, r#fn::FN, gender::GENDER, lang::LANG,
+        n::N, nickname::NICKNAME, org::ORG, rev::REV, tz::TZ, url::URL,
+    },
 };
 
 const CARD: &str = concat!(

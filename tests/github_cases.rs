@@ -8,9 +8,13 @@
 
 use std::borrow::Cow;
 
-use vcard::tree::cst::VcardCst;
-use vcard::tree::prop::{r#fn::FN, n::N, nickname::NICKNAME, note::NOTE, org::ORG};
-use vcard::version::VcardVersion;
+use vcard::{
+    tree::{
+        cst::VcardCst,
+        prop::{r#fn::FN, n::N, nickname::NICKNAME, note::NOTE, org::ORG},
+    },
+    version::VcardVersion,
+};
 
 /// Collect a decoded component list into borrowed `&str`s for comparison.
 fn strs<'a>(list: &'a [Cow<'a, str>]) -> Vec<&'a str> {

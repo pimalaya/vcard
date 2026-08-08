@@ -495,10 +495,10 @@ mod tests {
     /// Every reader answers the same before and after the node materializes.
     ///
     /// A node holds its value as raw bytes until the first edit splits it into
-    /// components, and each reader has a branch per state. The lazy branches are
-    /// what a parse-and-read exercises; these are the other half, and a
-    /// disagreement between the two would surface as a value that changes shape
-    /// the moment an unrelated component is written.
+    /// components, and each reader has a branch per state. A parse-and-read
+    /// exercises the lazy branches; these are the other half, and a
+    /// disagreement between the two would surface as a value that changes
+    /// shape the moment an unrelated component is written.
     fn assert_readers_agree(node: &VcardValueNode<'_>, components: usize) {
         assert_eq!(node.component_count(), components);
         assert_eq!(node.value_count(1), 2);

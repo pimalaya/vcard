@@ -5,8 +5,7 @@
 //!
 //! Run with: `cargo run --example parse_edit_export`
 
-use vcard::tree::cst::VcardCst;
-use vcard::tree::prop::r#fn::FN;
+use vcard::tree::{cst::VcardCst, prop::r#fn::FN};
 
 fn main() {
     let input = concat!(

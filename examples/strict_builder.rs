@@ -8,14 +8,17 @@
 
 use std::borrow::Cow;
 
-use vcard::param::VcardParam;
-use vcard::tree::cst::VcardCst;
-use vcard::tree::prop::email::EMAIL;
-use vcard::tree::prop::r#fn::FN;
-use vcard::tree::vcard::builder::VcardPropBuilder;
-use vcard::value::VcardValue;
-use vcard::vcard::Vcard;
-use vcard::version::VcardVersion;
+use vcard::{
+    param::VcardParam,
+    tree::{
+        cst::VcardCst,
+        prop::{email::EMAIL, r#fn::FN},
+        vcard::builder::VcardPropBuilder,
+    },
+    value::VcardValue,
+    vcard::Vcard,
+    version::VcardVersion,
+};
 
 fn main() {
     let version = VcardVersion::V4_0;

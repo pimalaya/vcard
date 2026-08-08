@@ -7,10 +7,7 @@
 //!
 //! Run with: `cargo run --example raw_builder`
 
-use vcard::prop::VcardProp;
-use vcard::value::VcardValue;
-use vcard::vcard::Vcard;
-use vcard::version::VcardVersion;
+use vcard::{prop::VcardProp, value::VcardValue, vcard::Vcard, version::VcardVersion};
 
 fn main() {
     let card = Vcard {

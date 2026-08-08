@@ -6,24 +6,28 @@
 
 use std::borrow::Cow;
 
-use vcard::param::{VcardParam, VcardParamKind};
-use vcard::prop::{VcardProp, VcardPropName};
-use vcard::tree::cst::VcardCst;
-use vcard::value::adr::VcardAdr;
-use vcard::value::binary::VcardBinary;
-use vcard::value::client_pid_map::VcardClientPidMap;
-use vcard::value::datetime::{VcardDateAndOrTime, VcardTimestamp};
-use vcard::value::gender::VcardGender;
-use vcard::value::geo::VcardGeo;
-use vcard::value::language::VcardLanguageTag;
-use vcard::value::n::VcardN;
-use vcard::value::org::VcardOrg;
-use vcard::value::text::{VcardText, VcardTextList};
-use vcard::value::uri::VcardUri;
-use vcard::value::utc_offset::VcardUtcOffset;
-use vcard::value::{VcardValue, VcardValueKind, VcardValueUnknown};
-use vcard::vcard::Vcard;
-use vcard::version::VcardVersion;
+use vcard::{
+    param::{VcardParam, VcardParamKind},
+    prop::{VcardProp, VcardPropName},
+    tree::cst::VcardCst,
+    value::{
+        VcardValue, VcardValueKind, VcardValueUnknown,
+        adr::VcardAdr,
+        binary::VcardBinary,
+        client_pid_map::VcardClientPidMap,
+        datetime::{VcardDateAndOrTime, VcardTimestamp},
+        gender::VcardGender,
+        geo::VcardGeo,
+        language::VcardLanguageTag,
+        n::VcardN,
+        org::VcardOrg,
+        text::{VcardText, VcardTextList},
+        uri::VcardUri,
+        utc_offset::VcardUtcOffset,
+    },
+    vcard::Vcard,
+    version::VcardVersion,
+};
 
 const VALUE_KINDS: [VcardValueKind; 14] = [
     VcardValueKind::Adr,
@@ -485,17 +489,19 @@ fn every_property_kind_derefs_and_round_trips() {
 
 #[test]
 fn exercises_every_property_lens_and_bespoke_cursor() {
-    use vcard::tree::param::r#type::TYPE;
-    use vcard::tree::prop::{
-        adr::ADR, agent::AGENT, anniversary::ANNIVERSARY, bday::BDAY, caladruri::CALADRURI,
-        caluri::CALURI, categories::CATEGORIES, class::CLASS, client_pid_map::CLIENTPIDMAP,
-        created::CREATED, email::EMAIL, fburl::FBURL, r#fn::FN, gender::GENDER, geo::GEO,
-        gramgender::GRAMGENDER, impp::IMPP, jsprop::JSPROP, key::KEY, kind::KIND, label::LABEL,
-        lang::LANG, language::LANGUAGE, logo::LOGO, mailer::MAILER, member::MEMBER, n::N,
-        name::NAME, nickname::NICKNAME, note::NOTE, org::ORG, photo::PHOTO, prodid::PRODID,
-        profile::PROFILE, pronouns::PRONOUNS, related::RELATED, rev::REV, role::ROLE,
-        socialprofile::SOCIALPROFILE, sort_string::SORT_STRING, sound::SOUND, source::SOURCE,
-        tel::TEL, title::TITLE, tz::TZ, uid::UID, url::URL, xml::XML,
+    use vcard::tree::{
+        param::r#type::TYPE,
+        prop::{
+            adr::ADR, agent::AGENT, anniversary::ANNIVERSARY, bday::BDAY, caladruri::CALADRURI,
+            caluri::CALURI, categories::CATEGORIES, class::CLASS, client_pid_map::CLIENTPIDMAP,
+            created::CREATED, email::EMAIL, fburl::FBURL, r#fn::FN, gender::GENDER, geo::GEO,
+            gramgender::GRAMGENDER, impp::IMPP, jsprop::JSPROP, key::KEY, kind::KIND, label::LABEL,
+            lang::LANG, language::LANGUAGE, logo::LOGO, mailer::MAILER, member::MEMBER, n::N,
+            name::NAME, nickname::NICKNAME, note::NOTE, org::ORG, photo::PHOTO, prodid::PRODID,
+            profile::PROFILE, pronouns::PRONOUNS, related::RELATED, rev::REV, role::ROLE,
+            socialprofile::SOCIALPROFILE, sort_string::SORT_STRING, sound::SOUND, source::SOURCE,
+            tel::TEL, title::TITLE, tz::TZ, uid::UID, url::URL, xml::XML,
+        },
     };
 
     let raw = concat!(
@@ -723,13 +729,14 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
 
 #[test]
 fn exercises_every_parameter_lens() {
-    use vcard::tree::param::lens::VcardParamLens;
-    use vcard::tree::param::{
-        altid::ALTID, calscale::CALSCALE, geo::GEO as GEOP, label::LABEL as LABELP,
-        language::LANGUAGE, mediatype::MEDIATYPE, pid::PID, pref::PREF, sort_as::SORT_AS,
-        r#type::TYPE, tz::TZ as TZP, value::VALUE,
+    use vcard::tree::{
+        param::{
+            altid::ALTID, calscale::CALSCALE, geo::GEO as GEOP, label::LABEL as LABELP,
+            language::LANGUAGE, lens::VcardParamLens, mediatype::MEDIATYPE, pid::PID, pref::PREF,
+            sort_as::SORT_AS, r#type::TYPE, tz::TZ as TZP, value::VALUE,
+        },
+        prop::tel::TEL,
     };
-    use vcard::tree::prop::tel::TEL;
 
     let raw = concat!(
         "BEGIN:VCARD\r\nVERSION:4.0\r\n",
@@ -861,8 +868,7 @@ fn decodes_a_4_0_date_and_geo_uri() {
 
 #[test]
 fn decodes_a_value_node_through_the_value_codec_fallback() {
-    use vcard::tree::codec::VcardCodec;
-    use vcard::tree::value::node::VcardValueNode;
+    use vcard::tree::{codec::VcardCodec, value::node::VcardValueNode};
 
     // The VcardValue VcardCodec impl is the liberal raw fallback the divergent lenses
     // inherit; exercise it directly.
