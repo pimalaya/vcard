@@ -3,14 +3,14 @@
 //! Strict, version-aware construction of a whole card and of a single property.
 //!
 //! [`VcardBuilder`] assembles a card in one fluent chain: `new(version)` fixes
-//! the version once, then `prop::<L>()` opens a property segment keyed by a lens
-//! marker, `param` decorates it, and `value` closes it and returns to the card
-//! level. Because `value` yields the card builder and `prop` consumes it, the
-//! phases are enforced by the type system: a `param` before any `prop`, or a
-//! `build` with a property left half-open, does not compile.
+//! the version once, then `prop::<L>()` opens a property segment keyed by a
+//! lens marker, `param` decorates it, and `value` closes it and returns to the
+//! card level. Because `value` yields the card builder and `prop` consumes it,
+//! the phases are enforced by the type system: a `param` before any `prop`, or
+//! a `build` with a property left half-open, does not compile.
 //! [`build`](VcardBuilder::build) runs the same whole-card
 //! [`Vcard::validate`](crate::vcard::Vcard::validate) as any other decoded card
-//! and hands back the [`Valid`] proof;
+//! and hands back the [`VcardValid`] proof;
 //! [`build_unchecked`](VcardBuilder::build_unchecked) is the escape hatch that
 //! skips the check.
 //!
@@ -20,8 +20,8 @@
 //! [`VcardProp`]. Construction is the strict half of "liberal in, strict out":
 //! the name is pinned by the marker's [`VcardPropSpec`], and
 //! [`build`](VcardPropBuilder::build) runs the shared per-property check
-//! ([`validate_prop`](crate::tree::vcard::validate)) so the value kind and every
-//! known parameter must be allowed for the version (unknown, extension
+//! ([`validate_prop`](crate::tree::vcard::validate)) so the value kind and
+//! every known parameter must be allowed for the version (unknown, extension
 //! parameters pass). To emit something the spec forbids, construct the open
 //! [`VcardProp`] by hand. The version is a value the builders carry, never a
 //! type parameter.
@@ -57,8 +57,8 @@ use crate::{
     param::VcardParam,
     prop::{VcardProp, VcardPropName},
     tree::{
-        prop::VcardPropSpec,
-        vcard::validate::{Valid, VcardValidateError, validate_prop},
+        prop::spec::VcardPropSpec,
+        vcard::validate::{VcardValid, VcardValidateError, validate_prop},
     },
     value::VcardValue,
     vcard::Vcard,
@@ -97,8 +97,8 @@ impl<'a> VcardBuilder<'a> {
 
     /// Finish, checking the assembled card with the same
     /// [`Vcard::validate`](crate::vcard::Vcard::validate) as any decoded card
-    /// and yielding the [`Valid`] proof (or every violation).
-    pub fn build(self) -> Result<Valid<Vcard<'a>>, Vec<VcardValidateError>> {
+    /// and yielding the [`VcardValid`] proof (or every violation).
+    pub fn build(self) -> Result<VcardValid<Vcard<'a>>, Vec<VcardValidateError>> {
         self.build_unchecked().validate()
     }
 

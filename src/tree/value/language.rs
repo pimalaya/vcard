@@ -1,21 +1,22 @@
 //! # Language-tag value codec (RFC 6350 4.8)
 //!
-//! [`Codec`] for a language-tag value, a single scalar kept as its raw text.
+//! [`VcardCodec`] for a language-tag value, a single scalar kept as its raw
+//! text.
 
 use crate::{
     tree::{
-        codec::{Codec, encode::scalar_node, mode::Escaper},
-        value::VcardValueNode,
+        codec::{VcardCodec, encode::scalar_node, mode::VcardEscaper},
+        value::node::VcardValueNode,
     },
     value::language::VcardLanguageTag,
 };
 
-impl<'v> Codec<'v> for VcardLanguageTag<'v> {
+impl<'v> VcardCodec<'v> for VcardLanguageTag<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardLanguageTag(node.decode_scalar_at(0))
     }
 
-    fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
+    fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         scalar_node(&self.0, escaper)
     }
 }

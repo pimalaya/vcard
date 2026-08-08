@@ -4,7 +4,7 @@
 //! `ical_vcard` and `vparser`, which are also low-level content-line parsers
 //! (no decoding).
 //! `parse_to_model` pits our parse + decode (to the `Vcard` model, not the
-//! validated `Valid<Vcard>`) against the eager model parsers `calcard` and
+//! validated `VcardValid<Vcard>`) against the eager model parsers `calcard` and
 //! `vcard_parser`. The `vcard` crate is builder-only, so it has no parse path.
 //! Representations still differ in laziness, ownership and decoding depth, so
 //! read these as ballpark rather than a strict ranking.
@@ -59,7 +59,7 @@ fn parse_to_content_lines(c: &mut Criterion) {
 }
 
 /// Decoded-model level: full parse into a typed model. Ours is parse + decode
-/// into `Vcard` (not the validated `Valid<Vcard>`), compared against the eager
+/// into `Vcard` (not the validated `VcardValid<Vcard>`), compared against the eager
 /// model parsers.
 fn parse_to_model(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse_to_model");

@@ -7,7 +7,7 @@
 //! own module.
 
 use crate::{
-    tree::{codec::Codec, line::VcardLine, prop::VcardPropSpec},
+    tree::{codec::VcardCodec, line::VcardLine, prop::spec::VcardPropSpec},
     version::VcardVersion,
 };
 
@@ -17,8 +17,8 @@ use crate::{
 /// in sync.
 pub trait VcardPropLens: VcardPropSpec {
     /// The decoded value type, borrowing the syntax node for reads. Its
-    /// [`Codec`] impl is what the default `decode` delegates to.
-    type Target<'v>: Codec<'v>;
+    /// [`VcardCodec`] impl is what the default `decode` delegates to.
+    type Target<'v>: VcardCodec<'v>;
 
     /// The typed edit cursor over a content line.
     type Cursor<'c, 'a>
@@ -28,9 +28,10 @@ pub trait VcardPropLens: VcardPropSpec {
     /// Project a content line onto the decoded type, consulting the card
     /// version where the value's shape is version-specific (`GEO`, the binary
     /// props). The default ignores the version and decodes the value node
-    /// through the target's [`Codec`]; the version-specific lenses override it.
+    /// through the target's [`VcardCodec`]; the version-specific lenses
+    /// override it.
     fn decode<'v>(line: &'v VcardLine<'_>, _version: VcardVersion) -> Self::Target<'v> {
-        <Self::Target<'v> as Codec<'v>>::decode(&line.value)
+        <Self::Target<'v> as VcardCodec<'v>>::decode(&line.value)
     }
 
     /// Wrap a content line in the typed cursor for in-place editing.

@@ -10,8 +10,8 @@ use crate::{
     prop::VcardPropKind,
     tree::{
         line::VcardLine,
-        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
-        value::VcardValueCursor,
+        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
+        value::cursor::VcardValueCursor,
     },
     value::{VcardValueKind, datetime::VcardDateAndOrTime},
     version::VcardVersion,

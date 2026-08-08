@@ -47,9 +47,9 @@ use serde_json::{Map, Value, json};
 use crate::{
     param::{VcardParam, VcardParamKind},
     prop::{VcardProp, VcardPropName},
-    tree::prop::prop_spec,
+    tree::prop::spec::prop_spec,
     value::{
-        VcardUnknownValue, VcardValue, VcardValueKind,
+        VcardValue, VcardValueKind, VcardValueUnknown,
         adr::VcardAdr,
         binary::VcardBinary,
         client_pid_map::VcardClientPidMap,
@@ -69,14 +69,14 @@ use crate::{
 
 /// Parse jCard error.
 #[derive(Debug)]
-pub enum ParseJcardError {
+pub enum VcardJcardParseError {
     /// The root is not a two-element `["vcard", [...]]` array.
     InvalidCard,
     /// A property entry is not a `[name, {params}, type, ...]` array.
     InvalidProp(String),
 }
 
-impl fmt::Display for ParseJcardError {
+impl fmt::Display for VcardJcardParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidCard => {
@@ -87,7 +87,7 @@ impl fmt::Display for ParseJcardError {
     }
 }
 
-impl error::Error for ParseJcardError {}
+impl error::Error for VcardJcardParseError {}
 
 impl Vcard<'_> {
     /// Write the card as its RFC 7095 jCard [`Value`].
@@ -102,16 +102,18 @@ impl Vcard<'_> {
     ///
     /// Liberal: only a structurally broken root or property entry errors;
     /// unknown names, parameters and type slots are kept.
-    pub fn from_jcard(jcard: &Value) -> Result<Vcard<'_>, ParseJcardError> {
+    pub fn from_jcard(jcard: &Value) -> Result<Vcard<'_>, VcardJcardParseError> {
         let root = jcard
             .as_array()
             .filter(|root| root.len() == 2)
-            .ok_or(ParseJcardError::InvalidCard)?;
-        let tag = root[0].as_str().ok_or(ParseJcardError::InvalidCard)?;
+            .ok_or(VcardJcardParseError::InvalidCard)?;
+        let tag = root[0].as_str().ok_or(VcardJcardParseError::InvalidCard)?;
         if !tag.eq_ignore_ascii_case("vcard") {
-            return Err(ParseJcardError::InvalidCard);
+            return Err(VcardJcardParseError::InvalidCard);
         }
-        let entries = root[1].as_array().ok_or(ParseJcardError::InvalidCard)?;
+        let entries = root[1]
+            .as_array()
+            .ok_or(VcardJcardParseError::InvalidCard)?;
 
         // NOTE: the version is the card's indicator, not a free property,
         // mirroring the wire decoder; an unreadable one normalises to 4.0.
@@ -127,7 +129,7 @@ impl Vcard<'_> {
         let mut properties = Vec::new();
 
         for entry in entries {
-            let invalid = || ParseJcardError::InvalidProp(entry.to_string());
+            let invalid = || VcardJcardParseError::InvalidProp(entry.to_string());
             let entry = entry
                 .as_array()
                 .filter(|entry| entry.len() >= 3)
@@ -350,7 +352,7 @@ fn value_to_jcard(value: &VcardValue<'_>) -> (&'static str, Vec<Value>) {
 /// Write an undecoded value structurally: one component group collapses to a
 /// string or an array, several stay an array of arrays so the two nesting
 /// levels stay apart (see the module docs).
-fn unknown_to_jcard(unknown: &VcardUnknownValue<'_>) -> Value {
+fn unknown_to_jcard(unknown: &VcardValueUnknown<'_>) -> Value {
     match unknown.components.as_slice() {
         [] => Value::String(String::new()),
         [group] => text_or_list(group),
@@ -414,9 +416,10 @@ pub(crate) fn prop_from_jcard<'a>(
         .map(|(key, value)| param_from_jcard(key, value))
         .collect();
 
-    // The type slot goes back to a VALUE parameter only where the wire form
-    // would need one: when it differs from the kind the spec would pick with
-    // no declaration (for an unknown property, from its "unknown" default).
+    // NOTE: The type slot goes back to a VALUE parameter only where the wire
+    // form would need one: when it differs from the kind the spec would pick
+    // with no declaration (for an unknown property, from its "unknown"
+    // default).
     let kind = match &name {
         VcardPropName::Kind(prop) => {
             let spec = prop_spec(*prop);
@@ -584,7 +587,7 @@ fn value_from_jcard<'a>(kind: VcardValueKind, values: &'a [Value]) -> VcardValue
 
 /// Read an undecoded value's slots back into semicolon and comma components,
 /// the inverse of [`unknown_to_jcard`].
-fn unknown_from_jcard(values: &[Value]) -> VcardUnknownValue<'_> {
+fn unknown_from_jcard(values: &[Value]) -> VcardValueUnknown<'_> {
     let components = match values {
         [] => vec![vec![Cow::Borrowed("")]],
         [Value::Array(groups)] if groups.iter().any(Value::is_array) => {
@@ -595,7 +598,7 @@ fn unknown_from_jcard(values: &[Value]) -> VcardUnknownValue<'_> {
         values => values.iter().map(scalars).collect(),
     };
 
-    VcardUnknownValue { components }
+    VcardValueUnknown { components }
 }
 
 /// Whether a kind is one jCard spells with the plain "text" type slot: the
@@ -797,11 +800,11 @@ mod tests {
     use serde_json::json;
 
     use crate::{
-        jcard::{ParseJcardError, basic_to_extended, extended_str_to_basic},
+        jcard::{VcardJcardParseError, basic_to_extended, extended_str_to_basic},
         param::VcardParam,
         prop::VcardPropName,
         tree::cst::VcardCst,
-        value::{VcardUnknownValue, VcardValue, text::VcardText},
+        value::{VcardValue, VcardValueUnknown, text::VcardText},
         vcard::Vcard,
         version::VcardVersion,
     };
@@ -882,7 +885,7 @@ mod tests {
         );
         assert_eq!(
             prop.value,
-            VcardValue::Unknown(VcardUnknownValue {
+            VcardValue::Unknown(VcardValueUnknown {
                 components: vec![vec![Cow::Borrowed("Nickname")]],
             }),
         );
@@ -1018,14 +1021,14 @@ mod tests {
         for jcard in [json!({}), json!(["vcalendar", []]), json!(["vcard", [], 3])] {
             assert!(matches!(
                 Vcard::from_jcard(&jcard),
-                Err(ParseJcardError::InvalidCard),
+                Err(VcardJcardParseError::InvalidCard),
             ));
         }
 
         let jcard = json!(["vcard", [["fn", {}]]]);
         assert!(matches!(
             Vcard::from_jcard(&jcard),
-            Err(ParseJcardError::InvalidProp(_)),
+            Err(VcardJcardParseError::InvalidProp(_)),
         ));
     }
 }

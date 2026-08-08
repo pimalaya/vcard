@@ -3,7 +3,8 @@
 //! The decoded value of a property, one variant per RFC 6350 value kind.
 //!
 //! [`VcardValue`] is the semantic counterpart of a content line's raw value
-//! (the syntactic [`VcardValueNode`](crate::tree::value::VcardValueNode)). Most
+//! (the syntactic
+//! [`VcardValueNode`](crate::tree::value::node::VcardValueNode)). Most
 //! properties share a small set of value kinds: a single text, a text list, a
 //! URI, a date/time, a timestamp, a UTC offset, a language tag. A handful are
 //! genuinely structured and get their own bespoke types ([`n::VcardN`],
@@ -56,18 +57,18 @@ use crate::value::{
 
 /// Parse vCard value kind error.
 #[derive(Debug)]
-pub struct ParseVcardValueKindError(
+pub struct VcardValueKindParseError(
     /// The vCard value type that cannot be parsed.
     String,
 );
 
-impl fmt::Display for ParseVcardValueKindError {
+impl fmt::Display for VcardValueKindParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Cannot parse vCard value type `{}`", self.0)
     }
 }
 
-impl error::Error for ParseVcardValueKindError {}
+impl error::Error for VcardValueKindParseError {}
 
 /// The closed RFC 6350 value-type vocabulary, one fieldless variant per value
 /// kind. It is the discriminant of [`VcardValue`] (which also has an `Unknown`
@@ -106,7 +107,7 @@ pub enum VcardValueKind {
 }
 
 impl str::FromStr for VcardValueKind {
-    type Err = ParseVcardValueKindError;
+    type Err = VcardValueKindParseError;
 
     /// The value kind named by a `VALUE` parameter (case-insensitive). Liberal:
     /// it maps every wire spelling (and a few aliases) onto a model kind,
@@ -132,7 +133,7 @@ impl str::FromStr for VcardValueKind {
             kind if kind.eq_ignore_ascii_case("URI") => Ok(Self::Uri),
             kind if kind.eq_ignore_ascii_case("URL") => Ok(Self::Uri),
             kind if kind.eq_ignore_ascii_case("UTC-OFFSET") => Ok(Self::UtcOffset),
-            _ => Err(ParseVcardValueKindError(kind.to_string())),
+            _ => Err(VcardValueKindParseError(kind.to_string())),
         }
     }
 }
@@ -196,10 +197,9 @@ pub enum VcardValue<'a> {
     Uri(VcardUri<'a>),
     /// A UTC offset (one form of `TZ`).
     UtcOffset(VcardUtcOffset<'a>),
-
     /// Any value the model does not decode, kept as its raw components so it
     /// round-trips.
-    Unknown(VcardUnknownValue<'a>),
+    Unknown(VcardValueUnknown<'a>),
 }
 
 impl VcardValue<'_> {
@@ -257,7 +257,7 @@ impl VcardValue<'_> {
 /// An undecoded property value: its unescaped components, in source order. The
 /// property name lives on [`VcardProp::name`](crate::prop::VcardProp::name).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct VcardUnknownValue<'a> {
+pub struct VcardValueUnknown<'a> {
     /// The value, as components of values.
     pub components: Vec<Vec<Cow<'a, str>>>,
 }
@@ -266,7 +266,7 @@ pub struct VcardUnknownValue<'a> {
 mod tests {
     use core::str::FromStr;
 
-    use crate::value::{VcardUnknownValue, VcardValue, VcardValueKind, text::VcardText};
+    use crate::value::{VcardValue, VcardValueKind, VcardValueUnknown, text::VcardText};
 
     #[test]
     fn empty_is_the_inverse_of_kind() {
@@ -299,7 +299,7 @@ mod tests {
             Some(VcardValueKind::Text),
         );
         assert_eq!(
-            VcardValue::Unknown(VcardUnknownValue::default()).kind(),
+            VcardValue::Unknown(VcardValueUnknown::default()).kind(),
             None,
         );
     }

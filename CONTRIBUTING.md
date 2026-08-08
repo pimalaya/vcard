@@ -7,13 +7,23 @@ Whether you are a human or an AI agent, read these in order before touching the 
 1. the [Pimalaya README](https://github.com/pimalaya) for what the project is and how its repositories stack;
 2. the [Pimalaya CONTRIBUTING](https://github.com/pimalaya/.github/blob/master/CONTRIBUTING.md) guide, which chains to the shared architecture and guidelines;
 3. the inline header documentation, starting with src/lib.rs: it is the architecture document of this crate;
-4. the docs/ folder for the development history and design notes.
+4. the cairn/ folder for the development history and living plans (the Cairn convention: spec/, changes/, log/), activated by [AGENTS.md](./AGENTS.md).
 
 Everything below documents only what differs from the Pimalaya standards.
 
+## Deviation: wire-spelled lens markers
+
+The property and parameter lens markers are spelled exactly as their wire token (`FN`, `ADR`, `SORT_AS`, `TYPE`), against naming-007, which asks every public item to carry the `Vcard` domain prefix. Every other public item does carry it.
+
+They are type-level keys naming a spec token, written only inside a turbofish (`card.prop::<FN>()`), never constructed and never handled as values. Prefixing them would push the one thing they encode, the wire name, to the end of a longer identifier, and would make the call site read less like the card it is addressing. Two of them (`SORT_AS`, `SORT_STRING`) also carry `#[allow(non_camel_case_types)]` for the same reason.
+
+The discrepancy is flagged upstream, so the guideline can grow a third exception for spec-token type-level keys.
+
 ## Build
 
-vcard-rs is not an I/O library, so it has no coroutine, client or TLS layers. It is a no_std library (with alloc) whose core is dependency-free; every dependency sits behind an opt-in feature: parser (the byte-faithful content-line tree), quoted-printable, base64 and encoding (content decoders for encoded text, inline binary and foreign character sets), and jcard and jscontact (the JSON codecs). Everything under the tree module is gated on parser, while the decoded model is always available.
+vcard-rs is not an I/O library, so it has no coroutine, client or TLS layers. It is a no_std library (with alloc) whose core is dependency-free; every dependency sits behind an opt-in feature: parser (the byte-faithful content-line tree), quoted-printable, base64 and encoding (content decoders for encoded text, inline binary and foreign character sets), and jcard (both JSON codecs, jCard and JSContact). Everything under the tree module is gated on parser, while the decoded model is always available.
+
+A feature exists only where it pulls a crate into the build, per the guidelines' crate-003. That is why JSContact has no feature of its own: it needs nothing beyond what jcard already pulls.
 
 Check both the full build and the bare core, so gated code never leaks into the always-on core:
 
@@ -36,4 +46,4 @@ New parser inputs are also worth handing to the fuzzer, described in [fuzz/READM
 
 ## Examples and benchmarks
 
-The runnable programs from the docs live in [./examples](./examples); run one with cargo run --example followed by its name. The comparative parse benchmark runs with cargo bench --bench parse, and its methodology and current numbers are recorded in [docs/benchmarks.md](./docs/benchmarks.md).
+The runnable programs from the docs live in [./examples](./examples); run one with cargo run --example followed by its name. The comparative parse benchmark runs with cargo bench --bench parse, and its methodology and current numbers are recorded in [benches/README.md](./benches/README.md).

@@ -2,7 +2,7 @@
 //!
 //! The one place the codec consults the card version: value escaping (RFC 6350
 //! 3.4) differs between vCard 2.1 and the later versions, so a value node
-//! carries an [`Escaper`] telling the sibling
+//! carries an [`VcardEscaper`] telling the sibling
 //! [`escape`](crate::tree::codec::escape) and
 //! [`unescape`](crate::tree::codec::unescape) codecs which rules to apply.
 
@@ -10,7 +10,7 @@ use crate::version::VcardVersion;
 
 /// The value-escaping rules to apply, selected by the card version.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Escaper {
+pub enum VcardEscaper {
     /// vCard 2.1: only `;` is escaped (`\;`); a backslash before anything else
     /// is literal.
     V2_1,
@@ -19,7 +19,7 @@ pub enum Escaper {
     Modern,
 }
 
-impl Escaper {
+impl VcardEscaper {
     /// The escaping rules a card of `version` uses.
     pub fn for_version(version: VcardVersion) -> Self {
         match version {

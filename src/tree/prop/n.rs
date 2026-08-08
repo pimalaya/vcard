@@ -8,9 +8,9 @@
 //! [`VcardNCursor`] that names the five components, so callers write
 //! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. The
 //! decode/encode projections use the lens defaults, which delegate to
-//! [`VcardN`]'s [`Codec`] impl in [`crate::tree::value`]; only the cursor is
-//! bespoke. Edits are byte preserving: writing one component leaves the others,
-//! and every parameter, untouched.
+//! [`VcardN`]'s [`VcardCodec`] impl in [`crate::tree::value`]; only the cursor
+//! is bespoke. Edits are byte preserving: writing one component leaves the
+//! others, and every parameter, untouched.
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -18,10 +18,10 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        codec::Codec,
+        codec::VcardCodec,
         line::VcardLine,
-        param::VcardParamLens,
-        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        param::lens::VcardParamLens,
+        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
     },
     value::{VcardValueKind, n::VcardN},
     version::VcardVersion,

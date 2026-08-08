@@ -9,11 +9,11 @@ use crate::{
     tree::{
         param::COMMON_PARAMS,
         prop::{
-            VcardPropCardinality, adr, agent, anniversary, bday, caladruri, caluri, categories,
-            class, client_pid_map, created, email, fburl, r#fn, gender, geo, gramgender, impp,
-            jsprop, key, kind, label, lang, language, logo, mailer, member, n, name, nickname,
-            note, org, photo, prodid, profile, pronouns, related, rev, role, socialprofile,
-            sort_string, sound, source, tel, title, tz, uid, url, xml,
+            adr, agent, anniversary, bday, caladruri, caluri, cardinality::VcardPropCardinality,
+            categories, class, client_pid_map, created, email, fburl, r#fn, gender, geo,
+            gramgender, impp, jsprop, key, kind, label, lang, language, logo, mailer, member, n,
+            name, nickname, note, org, photo, prodid, profile, pronouns, related, rev, role,
+            socialprofile, sort_string, sound, source, tel, title, tz, uid, url, xml,
         },
     },
     value::VcardValueKind,
@@ -154,7 +154,8 @@ pub(crate) fn prop_spec(prop: VcardPropKind) -> VcardPropSpecFns {
 #[cfg(test)]
 mod tests {
     use crate::{
-        prop::VcardPropKind, tree::prop::prop_spec, value::VcardValueKind, version::VcardVersion,
+        prop::VcardPropKind, tree::prop::spec::prop_spec, value::VcardValueKind,
+        version::VcardVersion,
     };
 
     #[test]

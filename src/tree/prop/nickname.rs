@@ -8,8 +8,8 @@ use crate::{
     prop::VcardPropKind,
     tree::{
         line::VcardLine,
-        prop::{VcardPropLens, VcardPropSpec},
-        value::VcardValueCursor,
+        prop::{lens::VcardPropLens, spec::VcardPropSpec},
+        value::cursor::VcardValueCursor,
     },
     value::{VcardValueKind, text::VcardTextList},
     version::VcardVersion,

@@ -1,21 +1,21 @@
 //! # UTC-offset value codec (RFC 6350 4.7)
 //!
-//! [`Codec`] for a UTC-offset value, a single scalar kept as its raw text.
+//! [`VcardCodec`] for a UTC-offset value, a single scalar kept as its raw text.
 
 use crate::{
     tree::{
-        codec::{Codec, encode::scalar_node, mode::Escaper},
-        value::VcardValueNode,
+        codec::{VcardCodec, encode::scalar_node, mode::VcardEscaper},
+        value::node::VcardValueNode,
     },
     value::utc_offset::VcardUtcOffset,
 };
 
-impl<'v> Codec<'v> for VcardUtcOffset<'v> {
+impl<'v> VcardCodec<'v> for VcardUtcOffset<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardUtcOffset(node.decode_scalar_at(0))
     }
 
-    fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
+    fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         scalar_node(&self.0, escaper)
     }
 }

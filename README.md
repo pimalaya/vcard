@@ -22,15 +22,14 @@ vCard parser, validator, editor and builder library for Rust
 - **Strict building and validation**: construct cards checked against the standard, with an escape hatch when you need to step outside it.
 - **Small and portable**: no_std compatible, with an allocation-only core that pulls in no dependencies.
 - **Optional content decoding**: quoted-printable text, inline base64 binary and foreign character sets, each behind its own feature.
-- **Optional jCard**: read and write a card as JSON.
-- **Optional JSContact**: convert a card to and from the Card object exchanged over JMAP.
+- **Optional JSON codecs**: read and write a card as jCard JSON, and convert it to and from the Card object exchanged over JMAP.
 
 > [!TIP]
 > vcard-rs uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional support. The default feature set is declared in [Cargo.toml](./Cargo.toml) or on [docs.rs](https://docs.rs/crate/vcard-rs/latest/features).
 
 ## RFC coverage
 
-| RFC    | What is covered                                                                                          |
+| Spec   | What is covered                                                                                          |
 |--------|----------------------------------------------------------------------------------------------------------|
 | [2.1]  | vCard 2.1: the original versit format, including its quoted-printable and charset conventions              |
 | [2425] | text/directory: bare directory records carrying no BEGIN and END envelope                                 |
@@ -67,7 +66,7 @@ This project is developed with AI assistance. This section documents how, so use
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
 - **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit. Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
 - **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 16/07/2026
+- **Last reviewed**: 08/08/2026
 
 ## License
 

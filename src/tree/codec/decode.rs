@@ -20,15 +20,15 @@ use crate::{
     param::{VcardParam, VcardParamKind},
     prop::{VcardProp, VcardPropKind, VcardPropName},
     tree::{
-        codec::{Codec, unescape::unescape},
+        codec::{VcardCodec, unescape::unescape},
         cst::VcardCst,
         line::VcardLine,
-        param::VcardParamNode,
-        prop::prop_spec,
-        value::VcardValueNode,
+        param::node::VcardParamNode,
+        prop::spec::prop_spec,
+        value::node::VcardValueNode,
     },
     value::{
-        VcardUnknownValue, VcardValue, VcardValueKind,
+        VcardValue, VcardValueKind, VcardValueUnknown,
         adr::VcardAdr,
         binary::VcardBinary,
         client_pid_map::VcardClientPidMap,
@@ -77,7 +77,7 @@ impl VcardLine<'_> {
 
         let value = match name.parse::<VcardPropKind>() {
             Ok(prop) => self.decode_value(prop, version),
-            Err(_) => VcardValue::Unknown(VcardUnknownValue::decode(&self.value)),
+            Err(_) => VcardValue::Unknown(VcardValueUnknown::decode(&self.value)),
         };
 
         VcardProp {
@@ -131,8 +131,8 @@ impl VcardLine<'_> {
 }
 
 /// Decode a value node as the given value kind, routing to that value type's
-/// [`Codec`]. No version is needed: the one version-specific shape (the `GEO`
-/// pair separator) is resolved from the node's escaper inside its codec.
+/// [`VcardCodec`]. No version is needed: the one version-specific shape (the
+/// `GEO` pair separator) is resolved from the node's escaper inside its codec.
 fn decode_value_kind<'v>(kind: VcardValueKind, node: &'v VcardValueNode<'_>) -> VcardValue<'v> {
     match kind {
         VcardValueKind::Text => VcardValue::Text(VcardText::decode(node)),
@@ -225,7 +225,7 @@ mod tests {
 
     use crate::{
         param::VcardParam,
-        tree::{codec::Codec, cst::VcardCst, value::VcardValueNode},
+        tree::{codec::VcardCodec, cst::VcardCst, value::node::VcardValueNode},
         value::{
             VcardValue, binary::VcardBinary, geo::VcardGeo, n::VcardN, text::VcardText,
             uri::VcardUri,

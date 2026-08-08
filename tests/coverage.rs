@@ -21,7 +21,7 @@ use vcard::value::org::VcardOrg;
 use vcard::value::text::{VcardText, VcardTextList};
 use vcard::value::uri::VcardUri;
 use vcard::value::utc_offset::VcardUtcOffset;
-use vcard::value::{VcardUnknownValue, VcardValue, VcardValueKind};
+use vcard::value::{VcardValue, VcardValueKind, VcardValueUnknown};
 use vcard::vcard::Vcard;
 use vcard::version::VcardVersion;
 
@@ -127,7 +127,7 @@ fn every_value_variant_reports_its_kind() {
             VcardValue::UtcOffset(VcardUtcOffset::default()),
             Some(VcardValueKind::UtcOffset),
         ),
-        (VcardValue::Unknown(VcardUnknownValue::default()), None),
+        (VcardValue::Unknown(VcardValueUnknown::default()), None),
     ];
 
     for (value, kind) in values {
@@ -297,7 +297,7 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
             "KEY",
             VcardValue::Binary(VcardBinary::Uri(Cow::Borrowed("http://x"))),
         ),
-        ("X-FOO", VcardValue::Unknown(VcardUnknownValue::default())),
+        ("X-FOO", VcardValue::Unknown(VcardValueUnknown::default())),
     ];
 
     let all_params = vec![
@@ -607,7 +607,7 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
 
 #[test]
 fn exercises_every_parameter_lens() {
-    use vcard::tree::param::VcardParamLens;
+    use vcard::tree::param::lens::VcardParamLens;
     use vcard::tree::param::{
         altid::ALTID, calscale::CALSCALE, geo::GEO as GEOP, label::LABEL as LABELP,
         language::LANGUAGE, mediatype::MEDIATYPE, pid::PID, pref::PREF, sort_as::SORT_AS,
@@ -692,7 +692,7 @@ fn decodes_a_card_covering_every_value_kind_and_parameter() {
 fn covers_prop_name_conversions_and_errors() {
     use vcard::prop::{VcardPropKind, VcardPropName};
 
-    // ParseVcardPropKindError Display.
+    // VcardPropKindParseError Display.
     assert!(
         "X-BOGUS"
             .parse::<VcardPropKind>()
@@ -737,12 +737,12 @@ fn decodes_a_4_0_date_and_geo_uri() {
 
 #[test]
 fn decodes_a_value_node_through_the_value_codec_fallback() {
-    use vcard::tree::codec::Codec;
-    use vcard::tree::value::VcardValueNode;
+    use vcard::tree::codec::VcardCodec;
+    use vcard::tree::value::node::VcardValueNode;
 
-    // The VcardValue Codec impl is the liberal raw fallback the divergent lenses
+    // The VcardValue VcardCodec impl is the liberal raw fallback the divergent lenses
     // inherit; exercise it directly.
     let node = VcardValueNode::parse(b"a;b,c");
-    let value = <VcardValue as Codec>::decode(&node);
+    let value = <VcardValue as VcardCodec>::decode(&node);
     assert!(matches!(value, VcardValue::Unknown(_)));
 }

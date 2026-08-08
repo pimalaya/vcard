@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the public items that did not carry the `Vcard` domain prefix: `Codec` to `VcardCodec`, `Escaper` to `VcardEscaper`, `Valid` to `VcardValid`, and `VcardUnknownValue` to `VcardValueUnknown`.
+
+  The property and parameter lens markers keep their wire spelling (`FN`, `ADR`, `SORT_AS`), a deliberate deviation documented in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+- Renamed the `FromStr` errors onto the `<Domain><Target><Verb><Ext>` pattern: `ParseVcardPropKindError` to `VcardPropKindParseError`, and likewise `ParseVcardParamKindError`, `ParseVcardValueKindError`, `ParseVcardVersionError`, `ParseJcardError` (now `VcardJcardParseError`) and `ParseJscontactError` (now `VcardJscontactParseError`).
+
+- Moved the flattened re-exports onto their real module paths.
+
+  `tree::param::lens`, `tree::param::node`, `tree::prop::cardinality`, `tree::prop::lens`, `tree::prop::spec`, `tree::value::cursor` and `tree::value::node` are public modules, and the module name is now part of the public path (`tree::prop::lens::VcardPropLens`, `tree::value::cursor::VcardValueCursor`). The `#[doc(inline)] pub use` re-exports that hid them are gone.
+
+- Pinned every dependency and dev-dependency to `default-features = false` with only the features it needs.
+
+- Replaced the docs/ folder with a cairn/ folder holding the living spec, the in-flight proposals and the dated history, activated by [AGENTS.md](./AGENTS.md). The benchmark methodology and numbers moved to [benches/README.md](./benches/README.md).
+
+### Removed
+
+- Removed the `jscontact` cargo feature; the JSContact conversion now ships under `jcard`.
+
+  The feature pulled no crate of its own, so it gated only which of this crate's own code compiled. Replace `features = ["jscontact"]` with `features = ["jcard"]`.
+
 ## [0.1.0] - 2026-07-16
 
 ### Added
@@ -24,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added `Vcard::validate`, an RFC 6350 conformance check over the decoded model.
 
-  It verifies per-version property existence, value kind, version-aware parameters and cardinality (including required-but-absent) while still permitting extensions. A card that passes earns `Valid<Vcard>`, a proof only validation can mint (`TryFrom<Vcard>`); both `Vcard` and `Valid<Vcard>` convert into a `VcardCst`.
+  It verifies per-version property existence, value kind, version-aware parameters and cardinality (including required-but-absent) while still permitting extensions. A card that passes earns `VcardValid<Vcard>`, a proof only validation can mint (`TryFrom<Vcard>`); both `Vcard` and `VcardValid<Vcard>` convert into a `VcardCst`.
 
 - Added `VcardPropBuilder`, a version-aware, spec-driven builder for strict construction.
 

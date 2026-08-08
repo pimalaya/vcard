@@ -19,8 +19,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lib]
 name = "vcard"
 
+[features]
+default = ["parser", "quoted-printable", "base64", "encoding"]
+parser = ["dep:memchr"]
+jcard = ["parser", "dep:serde_json"]
+quoted-printable = ["dep:quoted_printable"]
+base64 = ["dep:base64"]
+encoding = ["dep:encoding_rs"]
+
 [[bench]]
 name = "parse"
+path = "benches/parse.rs"
 harness = false
 required-features = ["parser"]
 
@@ -39,25 +48,16 @@ name = "raw_builder"
 path = "examples/raw_builder.rs"
 required-features = ["parser"]
 
-[features]
-default = ["parser", "quoted-printable", "base64", "encoding"]
-parser = ["dep:memchr"]
-jcard = ["parser", "dep:serde_json"]
-jscontact = ["jcard"]
-quoted-printable = ["dep:quoted_printable"]
-base64 = ["dep:base64"]
-encoding = ["dep:encoding_rs"]
-
 [dev-dependencies]
-calcard = "0.3"
-criterion = "0.8"
-ical_vcard = "0.4"
-vcard_parser = "0.2"
-vparser = "1"
+calcard = { version = "0.3", default-features = false }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+ical_vcard = { version = "0.4", default-features = false }
+vcard_parser = { version = "0.2", default-features = false }
+vparser = { version = "1", default-features = false }
 
 [dependencies]
-base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
-encoding_rs = { version = "0.8", optional = true }
+base64 = { version = "0.23", default-features = false, features = ["alloc"], optional = true }
+encoding_rs = { version = "0.8", default-features = false, features = ["alloc"], optional = true }
 memchr = { version = "2", default-features = false, optional = true }
 quoted_printable = { version = "0.5", default-features = false, optional = true }
 serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }

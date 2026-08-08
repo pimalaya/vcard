@@ -21,7 +21,7 @@
 
 use alloc::{borrow::Cow, vec::Vec};
 
-use crate::tree::{line::VcardLine, param::VcardParamLens, value::VcardValueNode};
+use crate::tree::{line::VcardLine, param::lens::VcardParamLens, value::node::VcardValueNode};
 
 /// A typed cursor over a content line's value, editing in place and byte
 /// preserving for the components it does not touch.
@@ -308,7 +308,8 @@ mod tests {
 
         card.prop_mut::<NICKNAME>().unwrap().list_mut().remove(1);
 
-        // The surviving `a\:b` keeps its bytes; only `middle` and its comma go.
+        // NOTE: The surviving `a\:b` keeps its bytes; only `middle` and its
+        // comma go.
         let out = card.to_string();
         assert!(out.contains("NICKNAME:a\\:b,z\r\n"), "got: {out}");
     }

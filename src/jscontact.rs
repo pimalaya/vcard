@@ -67,15 +67,15 @@ use crate::{
 
 /// Parse JSContact error.
 #[derive(Debug)]
-pub struct ParseJscontactError;
+pub struct VcardJscontactParseError;
 
-impl fmt::Display for ParseJscontactError {
+impl fmt::Display for VcardJscontactParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Cannot parse JSContact card: the root is not an object")
     }
 }
 
-impl error::Error for ParseJscontactError {}
+impl error::Error for VcardJscontactParseError {}
 
 impl Vcard<'_> {
     /// Convert the card into an RFC 9553 JSContact Card [`Value`], following
@@ -98,8 +98,8 @@ impl Vcard<'_> {
     ///
     /// Liberal: only a non-object root errors; a member (or nested piece)
     /// with no vCard counterpart is preserved as a JSPROP property.
-    pub fn from_jscontact(jscontact: &Value) -> Result<Vcard<'_>, ParseJscontactError> {
-        let card = jscontact.as_object().ok_or(ParseJscontactError)?;
+    pub fn from_jscontact(jscontact: &Value) -> Result<Vcard<'_>, VcardJscontactParseError> {
+        let card = jscontact.as_object().ok_or(VcardJscontactParseError)?;
         let mut import = Import::default();
 
         for (member, value) in card {

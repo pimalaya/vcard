@@ -23,18 +23,18 @@ use alloc::{
 
 /// Parse vCard parameter kind error.
 #[derive(Debug)]
-pub struct ParseVcardParamKindError(
+pub struct VcardParamKindParseError(
     /// The vCard parameter that cannot be parsed.
     String,
 );
 
-impl fmt::Display for ParseVcardParamKindError {
+impl fmt::Display for VcardParamKindParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Cannot parse vCard parameter `{}`", self.0)
     }
 }
 
-impl error::Error for ParseVcardParamKindError {}
+impl error::Error for VcardParamKindParseError {}
 
 /// The closed RFC 6350 parameter-name vocabulary, one fieldless variant per
 /// known parameter. An identity for dispatch and allowed-sets; the open
@@ -94,7 +94,7 @@ pub enum VcardParamKind {
 }
 
 impl str::FromStr for VcardParamKind {
-    type Err = ParseVcardParamKindError;
+    type Err = VcardParamKindParseError;
 
     /// The known parameter for a wire name (case-insensitive).
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
@@ -123,7 +123,7 @@ impl str::FromStr for VcardParamKind {
             kind if kind.eq_ignore_ascii_case("TZ") => Self::Tz,
             kind if kind.eq_ignore_ascii_case("USERNAME") => Self::Username,
             kind if kind.eq_ignore_ascii_case("VALUE") => Self::Value,
-            _ => return Err(ParseVcardParamKindError(kind.to_string())),
+            _ => return Err(VcardParamKindParseError(kind.to_string())),
         };
 
         Ok(kind)
@@ -214,10 +214,11 @@ pub enum VcardParam<'a> {
     Username(Cow<'a, str>),
     /// `VALUE`: the value type the property value is to be read as.
     Value(Cow<'a, str>),
-
     /// Any parameter the model does not decode: its name and its values.
     Unknown {
+        /// The verbatim parameter name, as it was spelled on the wire.
         name: Cow<'a, str>,
+        /// The `,`-separated raw values, empty when the parameter carries none.
         values: Vec<Cow<'a, str>>,
     },
 }

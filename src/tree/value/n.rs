@@ -1,18 +1,18 @@
 //! # N value codec (RFC 6350 6.2.2)
 //!
-//! [`Codec`] for the structured name: five `;`-separated components.
+//! [`VcardCodec`] for the structured name: five `;`-separated components.
 
 use alloc::vec;
 
 use crate::{
     tree::{
-        codec::{Codec, encode::encode_component, mode::Escaper},
-        value::VcardValueNode,
+        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        value::node::VcardValueNode,
     },
     value::n::VcardN,
 };
 
-impl<'v> Codec<'v> for VcardN<'v> {
+impl<'v> VcardCodec<'v> for VcardN<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardN {
             family: node.decode_at(0),
@@ -23,7 +23,7 @@ impl<'v> Codec<'v> for VcardN<'v> {
         }
     }
 
-    fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
+    fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         VcardValueNode::from_components(
             vec![
                 encode_component(&self.family, escaper),

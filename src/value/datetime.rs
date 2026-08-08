@@ -120,7 +120,7 @@ fn parse_time(time: &str) -> Option<(i64, i64, i64, i64)> {
         (time, 0)
     };
 
-    // Trailing time components may be omitted; pad them to zero.
+    // NOTE: Trailing time components may be omitted; pad them to zero.
     let mut digits: String = clock.chars().filter(|c| *c != ':').collect();
     if digits.is_empty() || digits.len() > 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
@@ -132,7 +132,7 @@ fn parse_time(time: &str) -> Option<(i64, i64, i64, i64)> {
     let hour = digits[0..2].parse().ok()?;
     let minute = digits[2..4].parse().ok()?;
     let second = digits[4..6].parse().ok()?;
-    // A leap second (60) is accepted and folds into the next minute.
+    // NOTE: A leap second (60) is accepted and folds into the next minute.
     if hour > 23 || minute > 59 || second > 60 {
         return None;
     }
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn zone_offset_folds_into_utc() {
-        // 19:25:59+02:00 is the same instant as 17:25:59Z.
+        // NOTE: 19:25:59+02:00 is the same instant as 17:25:59Z.
         assert_eq!(
             seconds("2026-07-11T19:25:59+02:00"),
             seconds("2026-07-11T17:25:59Z"),

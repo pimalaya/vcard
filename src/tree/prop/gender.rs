@@ -11,10 +11,10 @@ use crate::{
     param::VcardParamKind,
     prop::VcardPropKind,
     tree::{
-        codec::Codec,
+        codec::VcardCodec,
         line::VcardLine,
-        param::VcardParamLens,
-        prop::{VcardPropCardinality, VcardPropLens, VcardPropSpec},
+        param::lens::VcardParamLens,
+        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
     },
     value::{VcardValueKind, gender::VcardGender},
     version::VcardVersion,

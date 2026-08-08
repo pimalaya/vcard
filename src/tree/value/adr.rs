@@ -1,19 +1,19 @@
 //! # ADR value codec (RFC 6350 6.3.1, RFC 9554)
 //!
-//! [`Codec`] for the structured address: seven `;`-separated components,
+//! [`VcardCodec`] for the structured address: seven `;`-separated components,
 //! eighteen when any RFC 9554 component carries a value.
 
 use alloc::vec;
 
 use crate::{
     tree::{
-        codec::{Codec, encode::encode_component, mode::Escaper},
-        value::VcardValueNode,
+        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        value::node::VcardValueNode,
     },
     value::adr::VcardAdr,
 };
 
-impl<'v> Codec<'v> for VcardAdr<'v> {
+impl<'v> VcardCodec<'v> for VcardAdr<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardAdr {
             po_box: node.decode_at(0),
@@ -37,7 +37,7 @@ impl<'v> Codec<'v> for VcardAdr<'v> {
         }
     }
 
-    fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
+    fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         let mut components = vec![
             encode_component(&self.po_box, escaper),
             encode_component(&self.extended, escaper),
@@ -74,8 +74,8 @@ mod tests {
 
     use crate::{
         tree::{
-            codec::{Codec, mode::Escaper},
-            value::VcardValueNode,
+            codec::{VcardCodec, mode::VcardEscaper},
+            value::node::VcardValueNode,
         },
         value::adr::VcardAdr,
     };
@@ -94,7 +94,7 @@ mod tests {
 
         // NOTE: eighteen slots come back once any extended component is set.
         assert_eq!(
-            adr.encode(Escaper::Modern).to_string(),
+            adr.encode(VcardEscaper::Modern).to_string(),
             ";;;Quebec;;;Canada;8th wing;;2;2875;boul. Laurier;;;;;;",
         );
     }
@@ -109,7 +109,7 @@ mod tests {
 
         assert!(!adr.has_extended_components());
         assert_eq!(
-            adr.encode(Escaper::Modern).to_string(),
+            adr.encode(VcardEscaper::Modern).to_string(),
             ";;2875 boul. Laurier;Quebec;;;",
         );
     }

@@ -1,16 +1,17 @@
 //! # Encode (model to syntax)
 //!
 //! The write side of the structural bridge: project the decoded model onto a
-//! raw syntax tree. A value's [`Codec`] impl encodes it into a
+//! raw syntax tree. A value's [`VcardCodec`] impl encodes it into a
 //! [`VcardValueNode`], a [`VcardParam`] encodes into a [`VcardParamNode`], a
 //! [`VcardProp`] encodes into a [`VcardLine`] (its name taken verbatim from the
 //! property, its value delegated to the value codec), and a [`Vcard`] encodes
 //! into a whole [`VcardCst`]. The whole card is encoded for its version's
-//! [`Escaper`], which the value codecs use to escape every leaf and to pick any
-//! version-specific value shape; byte-preserving edits are the cursors' job,
-//! not this module's. [`Display`](core::fmt::Display) for [`Vcard`] renders a
-//! decoded card straight to its serialized bytes through here. Value leaves are
-//! escaped by the sibling [`escape`](crate::tree::codec::escape) codec.
+//! [`VcardEscaper`], which the value codecs use to escape every leaf and to
+//! pick any version-specific value shape; byte-preserving edits are the
+//! cursors' job, not this module's. [`Display`](core::fmt::Display) for
+//! [`Vcard`] renders a decoded card straight to its serialized bytes through
+//! here. Value leaves are escaped by the sibling
+//! [`escape`](crate::tree::codec::escape) codec.
 
 use core::fmt;
 
@@ -20,12 +21,12 @@ use crate::{
     param::VcardParam,
     prop::VcardProp,
     tree::{
-        codec::{Codec, escape::escape_with, mode::Escaper},
+        codec::{VcardCodec, escape::escape_with, mode::VcardEscaper},
         cst::VcardCst,
         leaf::{VcardLeaf, VcardValueLeaf},
         line::VcardLine,
-        param::VcardParamNode,
-        value::VcardValueNode,
+        param::node::VcardParamNode,
+        value::node::VcardValueNode,
     },
     vcard::Vcard,
 };
@@ -33,7 +34,7 @@ use crate::{
 impl Vcard<'_> {
     /// Encode the whole card into a CST for its version's escaping mode.
     pub fn encode(&self) -> VcardCst<'static> {
-        let escaper = Escaper::for_version(self.version);
+        let escaper = VcardEscaper::for_version(self.version);
 
         let mut cst = VcardCst::v4();
         // NOTE: v4() seeds a VERSION line as the first property; set it to this
@@ -56,7 +57,7 @@ impl<'a> From<Vcard<'a>> for VcardCst<'static> {
 impl VcardProp<'_> {
     /// Encode the property into a raw content line for the given escaping mode,
     /// dispatching on its value.
-    pub fn encode(&self, escaper: Escaper) -> VcardLine<'static> {
+    pub fn encode(&self, escaper: VcardEscaper) -> VcardLine<'static> {
         VcardLine {
             name: VcardLeaf::from(self.name.to_string()),
             params: self.params.iter().map(VcardParam::encode).collect(),
@@ -117,14 +118,14 @@ impl fmt::Display for Vcard<'_> {
 
 /// A one-component, one-value syntax node, escaping the value by the given
 /// mode.
-pub(crate) fn scalar_node(value: &str, escaper: Escaper) -> VcardValueNode<'static> {
+pub(crate) fn scalar_node(value: &str, escaper: VcardEscaper) -> VcardValueNode<'static> {
     VcardValueNode::from_components(vec![encode_component(&[value], escaper)], escaper)
 }
 
 /// Escape and own a clean value list into one component, by escaping mode.
 pub(crate) fn encode_component<S: AsRef<str>>(
     values: &[S],
-    escaper: Escaper,
+    escaper: VcardEscaper,
 ) -> Vec<VcardValueLeaf<'static>> {
     values.iter().map(|v| encode_leaf(v, escaper)).collect()
 }
@@ -132,7 +133,10 @@ pub(crate) fn encode_component<S: AsRef<str>>(
 /// Escape one value into an owned leaf, by escaping mode. Backs the per-item
 /// value edits, which splice a single leaf and leave its siblings' bytes as
 /// they were parsed.
-pub(crate) fn encode_leaf<S: AsRef<str>>(value: S, escaper: Escaper) -> VcardValueLeaf<'static> {
+pub(crate) fn encode_leaf<S: AsRef<str>>(
+    value: S,
+    escaper: VcardEscaper,
+) -> VcardValueLeaf<'static> {
     VcardValueLeaf::from(escape_with(value.as_ref().as_bytes(), escaper).into_owned())
 }
 
@@ -162,7 +166,7 @@ mod tests {
 
     use crate::{
         tree::{
-            codec::{Codec, mode::Escaper},
+            codec::{VcardCodec, mode::VcardEscaper},
             cst::VcardCst,
         },
         value::{n::VcardN, text::VcardText},
@@ -170,7 +174,7 @@ mod tests {
 
     #[test]
     fn encodes_a_text_value_escaping_it() {
-        let node = VcardText(Cow::Borrowed("hi, there")).encode(Escaper::Modern);
+        let node = VcardText(Cow::Borrowed("hi, there")).encode(VcardEscaper::Modern);
         assert_eq!(node.to_string(), r"hi\, there");
     }
 
@@ -180,7 +184,7 @@ mod tests {
             family: vec![Cow::Borrowed("Doe")],
             ..Default::default()
         };
-        assert_eq!(n.encode(Escaper::Modern).to_string(), "Doe;;;;");
+        assert_eq!(n.encode(VcardEscaper::Modern).to_string(), "Doe;;;;");
     }
 
     #[test]

@@ -16,18 +16,18 @@ use alloc::string::{String, ToString};
 
 /// Parse vCard version error.
 #[derive(Debug)]
-pub struct ParseVcardVersionError(
+pub struct VcardVersionParseError(
     /// The vCard version that cannot be parsed.
     String,
 );
 
-impl fmt::Display for ParseVcardVersionError {
+impl fmt::Display for VcardVersionParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Cannot parse vCard version `{}`", self.0)
     }
 }
 
-impl error::Error for ParseVcardVersionError {}
+impl error::Error for VcardVersionParseError {}
 
 /// The vCard version: one of the three defined versions. An unrecognised or
 /// missing version normalises to [`V4_0`](Self::V4_0) (see the module docs).
@@ -42,7 +42,7 @@ pub enum VcardVersion {
 }
 
 impl str::FromStr for VcardVersion {
-    type Err = ParseVcardVersionError;
+    type Err = VcardVersionParseError;
 
     /// The defined version for a wire string (`2.1`, `3.0`, `4.0`).
     fn from_str(version: &str) -> Result<Self, Self::Err> {
@@ -50,7 +50,7 @@ impl str::FromStr for VcardVersion {
             "2.1" => Ok(Self::V2_1),
             "3.0" => Ok(Self::V3_0),
             "4.0" => Ok(Self::V4_0),
-            _ => Err(ParseVcardVersionError(version.to_string())),
+            _ => Err(VcardVersionParseError(version.to_string())),
         }
     }
 }

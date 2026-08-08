@@ -47,8 +47,8 @@
 //! ```
 //!
 //! Build a property from the strict builder, validate a whole card into a
-//! [`Valid`](crate::tree::vcard::validate::Valid) proof, then turn it back into
-//! a CST:
+//! [`VcardValid`](crate::tree::vcard::validate::VcardValid) proof, then turn it
+//! back into a CST:
 //!
 //! ```rust
 //! use vcard::tree::cst::VcardCst;
@@ -72,7 +72,7 @@
 //! };
 //! let valid = card.validate().expect("a conformant 4.0 card");
 //!
-//! // 3. A Valid<Vcard> converts back into a byte tree for free.
+//! // 3. A VcardValid<Vcard> converts back into a byte tree for free.
 //! let cst = VcardCst::from(valid);
 //! assert!(cst.to_string().contains("FN:John Doe\r\n"));
 //! ```
@@ -88,10 +88,10 @@ use alloc::{
 use crate::{
     prop::{VcardProp, VcardPropKind},
     tree::{
-        codec::mode::Escaper,
+        codec::mode::VcardEscaper,
         error::VcardParseError,
         line::VcardLine,
-        prop::{VcardPropCardinality, VcardPropLens, prop_spec},
+        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::prop_spec},
     },
     value::VcardValue,
     version::VcardVersion,
@@ -137,11 +137,11 @@ impl<'a> VcardCst<'a> {
     /// [`parse_many`](Self::parse_many): without the envelope there is no
     /// reliable boundary between records.
     pub fn parse<T: AsRef<[u8]> + ?Sized>(input: &'a T) -> Result<Self, VcardParseError> {
-        // Trim leading blank-line bytes before the bare-vs-wrapped decision, so
-        // it does not hinge on stray leading whitespace: serialization
-        // normalises that away, so a classification that depended on it would
-        // make the round-trip non-idempotent (a bare record whose first line
-        // then reads as BEGIN would reparse as a wrapped card).
+        // NOTE: Trim leading blank-line bytes before the bare-vs-wrapped
+        // decision, so it does not hinge on stray leading whitespace:
+        // serialization normalises that away, so a classification that depended
+        // on it would make the round-trip non-idempotent (a bare record whose
+        // first line then reads as BEGIN would reparse as a wrapped card).
         let input = trim_leading_eol(input.as_ref());
         let (first, _rest) = VcardLine::take(input)?;
 
@@ -168,7 +168,7 @@ impl<'a> VcardCst<'a> {
         let escaper = props
             .iter()
             .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
-            .map(|line| Escaper::for_version_str(line.raw_value_str().as_ref()))
+            .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
             .unwrap_or_default();
 
         for line in &mut props {
@@ -263,7 +263,7 @@ impl<'a> VcardCst<'a> {
                 let escaper = props
                     .iter()
                     .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
-                    .map(|line| Escaper::for_version_str(line.raw_value_str().as_ref()))
+                    .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
                     .unwrap_or_default();
 
                 for line in &mut props {
@@ -310,7 +310,7 @@ impl<'a> VcardCst<'a> {
     pub fn push(&mut self, prop: VcardProp<'a>) -> &mut Self {
         let escaper = self
             .version_line()
-            .map(|line| Escaper::for_version_str(line.raw_value_str().as_ref()))
+            .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
             .unwrap_or_default();
 
         self.props.push(prop.encode(escaper));
@@ -327,12 +327,12 @@ impl<'a> VcardCst<'a> {
     /// Append an empty instance of every required property absent from the
     /// card, so it meets the minimum multiplicity RFC 6350 section 6 sets for
     /// its version. "Required" is a
-    /// [`cardinality`](crate::tree::prop::VcardPropSpec::cardinality) of one or
-    /// more (`ExactlyOne`, `OneOrMore`): in practice `N` in 2.1 / 3.0 and `FN`
-    /// from 3.0 on. The display value lives elsewhere in the card (`FN`), so
-    /// the placeholder is blank; strict servers (iCloud, Fastmail) reject a
-    /// vCard 3.0 that omits `N` with a parse error, and this supplies the
-    /// mandatory but empty `N:;;;;`.
+    /// [`cardinality`](crate::tree::prop::spec::VcardPropSpec::cardinality) of
+    /// one or more (`ExactlyOne`, `OneOrMore`): in practice `N` in 2.1 / 3.0
+    /// and `FN` from 3.0 on. The display value lives elsewhere in the card
+    /// (`FN`), so the placeholder is blank; strict servers (iCloud, Fastmail)
+    /// reject a vCard 3.0 that omits `N` with a parse error, and this supplies
+    /// the mandatory but empty `N:;;;;`.
     ///
     /// The mirror of the cardinality half of
     /// [`Vcard::validate`](crate::vcard::Vcard::validate), a repair rather than
@@ -460,7 +460,7 @@ mod tests {
         param::VcardParam,
         prop::VcardProp,
         tree::{cst::VcardCst, prop::n::N},
-        value::{VcardUnknownValue, VcardValue, n::VcardN, text::VcardText},
+        value::{VcardValue, VcardValueUnknown, n::VcardN, text::VcardText},
         vcard::Vcard,
     };
 
@@ -527,23 +527,25 @@ mod tests {
 
     #[test]
     fn round_trips_fuzz_regressions() {
-        // Inputs the coverage-guided fuzzer found where a parsed card serialized
-        // to bytes that either failed to reparse or reparsed to different bytes.
-        // Every one must now parse, and its serialization must be a byte-stable
-        // fixpoint (its own output reparses identically).
+        // NOTE: Inputs the coverage-guided fuzzer found where a parsed card
+        // serialized to bytes that either failed to reparse or reparsed to
+        // different bytes. Every one must now parse, and its serialization must
+        // be a byte-stable fixpoint (its own output reparses identically).
         let cases: &[&[u8]] = &[
-            // QP value left ending in `=` (a dangling soft-break marker) would,
-            // once serialized, re-trigger soft-break joining and swallow the END
-            // line on reparse. Two ways in: a soft-break join over a blank
-            // continuation (`x==` -> `x=`)...
+            // NOTE: QP value left ending in `=` (a dangling soft-break marker)
+            // would, once serialized, re-trigger soft-break joining and swallow
+            // the END line on reparse. Two ways in: a soft-break join over a
+            // blank continuation (`x==` -> `x=`)...
             b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;ENCODING=QUOTED-PRINTABLE:x==\r\n\r\nEND:VCARD\r\n",
-            // ...and a folded continuation that appends the `=` (`Luo` + ` =`).
+            // NOTE: ...and a folded continuation that appends the `=` (`Luo` +
+            // ` =`).
             b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;ENCODING=QUOTED-PRINTABLE:Luo\r\n =\r\nEND:VCARD\r\n",
-            // A dropped blank line before a space-prefixed (fold-looking) line
-            // must not let that line fold into the previous one on reparse.
+            // NOTE: A dropped blank line before a space-prefixed (fold-looking)
+            // line must not let that line fold into the previous one on
+            // reparse.
             b"BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a\r\n\r\n FN:b\r\nEND:VCARD\r\n",
-            // A line whose content starts with folding whitespace or a stray CR
-            // must strip to a stable form (leading `\t`/`\r` here).
+            // NOTE: A line whose content starts with folding whitespace or a
+            // stray CR must strip to a stable form (leading `\t`/`\r` here).
             b"\t\r:",
         ];
 
@@ -660,7 +662,7 @@ mod tests {
 
     #[test]
     fn fill_required_injects_the_mandatory_empty_n_into_a_3_0_card() {
-        // A 3.0 card with only a display name: FN but no N (mandatory).
+        // NOTE: A 3.0 card with only a display name: FN but no N (mandatory).
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nUID:x\r\nFN:Only\r\nEND:VCARD\r\n")
                 .unwrap();
@@ -668,28 +670,29 @@ mod tests {
 
         let out = card.to_string();
         assert!(out.contains("N:;;;;\r\n"), "{out}");
-        // Existing lines stay verbatim.
+        // NOTE: Existing lines stay verbatim.
         assert!(out.contains("UID:x\r\n"), "{out}");
         assert!(out.contains("FN:Only\r\n"), "{out}");
-        // The repair makes the card conformant.
+        // NOTE: The repair makes the card conformant.
         assert!(card.decode().validate().is_ok());
     }
 
     #[test]
     fn fill_required_is_idempotent_and_leaves_valid_cards_untouched() {
-        // Running twice adds only the one missing N.
+        // NOTE: Running twice adds only the one missing N.
         let mut once =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Only\r\nEND:VCARD\r\n").unwrap();
         once.fill_required().fill_required();
         assert_eq!(once.to_string().matches("N:;;;;").count(), 1);
 
-        // 4.0 makes N optional, so a card with FN is left exactly as it was.
+        // NOTE: 4.0 makes N optional, so a card with FN is left exactly as it
+        // was.
         let mut v4 =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Only\r\nEND:VCARD\r\n").unwrap();
         let before = v4.to_string();
         assert_eq!(v4.fill_required().to_string(), before);
 
-        // A 3.0 card that already has N (and FN) is untouched too.
+        // NOTE: A 3.0 card that already has N (and FN) is untouched too.
         let mut has = VcardCst::parse(
             "BEGIN:VCARD\r\nVERSION:3.0\r\nN:Doe;Jane;;;\r\nFN:Jane\r\nEND:VCARD\r\n",
         )
@@ -789,7 +792,7 @@ mod tests {
         let vcard = cst.decode();
 
         match &vcard.properties[0].value {
-            VcardValue::Unknown(VcardUnknownValue { components }) => {
+            VcardValue::Unknown(VcardValueUnknown { components }) => {
                 assert_eq!(components.len(), 2);
                 assert_eq!(components[1], vec![Cow::Borrowed("b"), Cow::Borrowed("c")]);
             }

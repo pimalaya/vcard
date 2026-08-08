@@ -1,23 +1,12 @@
 # Test corpus attribution
 
-The vCard fixtures under `ez-vcard/` are imported **unmodified** from the
-[ez-vcard](https://github.com/mangstadt/ez-vcard) project's test resources and
-are redistributed under their original licenses (all BSD). They are used solely
-as parser / round-trip test inputs.
+The vCard fixtures under `ez-vcard/` are imported **unmodified** from the [ez-vcard](https://github.com/mangstadt/ez-vcard) project's test resources and are redistributed under their original licenses (all BSD). They are used solely as parser / round-trip test inputs.
 
 ## Provenance
 
-- **ez-vcard** — Copyright (c) Michael Angstadt. Licensed under the BSD 2-Clause
-  License. Source of: `fullcontact.vcf`, `gmail-list.vcf`, `gmail-single.vcf`,
-  `gmail-single2.vcf`, `outlook-2003.vcf`, `outlook-2007.vcf`,
-  `thunderbird-MoreFunctionsForAddressBook-extension.vcf`. The two RFC examples
-  `rfc2426-example.vcf` and `rfc6350-example.vcf` reproduce examples from RFC
-  2426 and RFC 6350 respectively (IETF Trust).
+- **ez-vcard**: Copyright (c) Michael Angstadt. Licensed under the BSD 2-Clause License. Source of: fullcontact.vcf, gmail-list.vcf, gmail-single.vcf, gmail-single2.vcf, outlook-2003.vcf, outlook-2007.vcf, thunderbird-MoreFunctionsForAddressBook-extension.vcf. The two RFC examples rfc2426-example.vcf and rfc6350-example.vcf reproduce examples from RFC 2426 and RFC 6350 respectively (IETF Trust).
 
-- **Card Me** — Copyright (c) George El-Haddad. Licensed under the BSD License.
-  Repositories: <https://github.com/george-haddad/cardme>,
-  <https://sourceforge.net/projects/cardme/>. Source of the eight
-  `John_Doe_*.vcf` per-platform sample exports; see `ez-vcard/vcard-samples-license.txt`.
+- **Card Me**: Copyright (c) George El-Haddad. Licensed under the BSD License. Repositories: <https://github.com/george-haddad/cardme>, <https://sourceforge.net/projects/cardme/>. Source of the eight John_Doe_*.vcf per-platform sample exports; see ez-vcard/vcard-samples-license.txt.
 
 ## License (BSD 2-Clause, applies to all imported fixtures)
 

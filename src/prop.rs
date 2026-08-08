@@ -30,18 +30,18 @@ use crate::{param::VcardParam, value::VcardValue};
 
 /// Parse vCard property kind error.
 #[derive(Debug)]
-pub struct ParseVcardPropKindError(
+pub struct VcardPropKindParseError(
     /// The vCard property that cannot be parsed.
     String,
 );
 
-impl fmt::Display for ParseVcardPropKindError {
+impl fmt::Display for VcardPropKindParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Cannot parse vCard property `{}`", self.0)
     }
 }
 
-impl error::Error for ParseVcardPropKindError {}
+impl error::Error for VcardPropKindParseError {}
 
 /// A decoded property: its wire name, its parameters, and its decoded value.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -270,7 +270,7 @@ impl VcardPropKind {
 }
 
 impl str::FromStr for VcardPropKind {
-    type Err = ParseVcardPropKindError;
+    type Err = VcardPropKindParseError;
 
     /// The known property for a wire name (case-insensitive), or `None`.
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
@@ -323,7 +323,7 @@ impl str::FromStr for VcardPropKind {
             kind if kind.eq_ignore_ascii_case("UID") => Ok(Self::Uid),
             kind if kind.eq_ignore_ascii_case("URL") => Ok(Self::Url),
             kind if kind.eq_ignore_ascii_case("XML") => Ok(Self::Xml),
-            _ => Err(ParseVcardPropKindError(kind.to_string())),
+            _ => Err(VcardPropKindParseError(kind.to_string())),
         }
     }
 }

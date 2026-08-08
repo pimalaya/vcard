@@ -1,26 +1,26 @@
 //! # Unknown value codec
 //!
-//! [`Codec`] for a value the model does not decode: its raw components are kept
-//! (unescaped on read, re-escaped on write) so anything round-trips.
+//! [`VcardCodec`] for a value the model does not decode: its raw components are
+//! kept (unescaped on read, re-escaped on write) so anything round-trips.
 
 use crate::{
     tree::{
-        codec::{Codec, encode::encode_component, mode::Escaper},
-        value::VcardValueNode,
+        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        value::node::VcardValueNode,
     },
-    value::VcardUnknownValue,
+    value::VcardValueUnknown,
 };
 
-impl<'v> Codec<'v> for VcardUnknownValue<'v> {
+impl<'v> VcardCodec<'v> for VcardValueUnknown<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardUnknownValue {
+        VcardValueUnknown {
             components: (0..node.component_count())
                 .map(|i| node.decode_at(i))
                 .collect(),
         }
     }
 
-    fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
+    fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         VcardValueNode::from_components(
             self.components
                 .iter()

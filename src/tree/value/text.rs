@@ -1,37 +1,37 @@
 //! # Text value codec (RFC 6350 4.1)
 //!
-//! [`Codec`] for a single text value and a comma-separated text list.
+//! [`VcardCodec`] for a single text value and a comma-separated text list.
 
 use alloc::vec;
 
 use crate::{
     tree::{
         codec::{
-            Codec,
+            VcardCodec,
             encode::{encode_component, scalar_node},
-            mode::Escaper,
+            mode::VcardEscaper,
         },
-        value::VcardValueNode,
+        value::node::VcardValueNode,
     },
     value::text::{VcardText, VcardTextList},
 };
 
-impl<'v> Codec<'v> for VcardText<'v> {
+impl<'v> VcardCodec<'v> for VcardText<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardText(node.decode_scalar_at(0))
     }
 
-    fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
+    fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         scalar_node(&self.0, escaper)
     }
 }
 
-impl<'v> Codec<'v> for VcardTextList<'v> {
+impl<'v> VcardCodec<'v> for VcardTextList<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardTextList(node.decode_at(0))
     }
 
-    fn encode(&self, escaper: Escaper) -> VcardValueNode<'static> {
+    fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         VcardValueNode::from_components(vec![encode_component(&self.0, escaper)], escaper)
     }
 }

@@ -5,8 +5,8 @@
 //! [`VcardValueNode`] is the syntactic peer of the decoded
 //! [`VcardValue`](crate::value::VcardValue): the bytes after a line's colon,
 //! understood as `;`-separated components of `,`-separated
-//! [`VcardValueLeaf`](crate::tree::leaf::VcardValueLeaf) values (raw bytes, so
-//! a foreign charset survives). Straight from parse the value is kept as one
+//! [`crate::tree::leaf::VcardValueLeaf`] values (raw bytes, so a foreign
+//! charset survives). Straight from parse the value is kept as one
 //! unsplit `raw` slice and only walked on demand; an edit or a model encode
 //! splits it into owned `components`, which then become the source of truth.
 //! Either way the splitting is generic (it counts and preserves separators so
@@ -28,7 +28,7 @@ use crate::tree::{
     codec::{
         encode::{encode_component, encode_leaf},
         escape::escape_with,
-        mode::Escaper,
+        mode::VcardEscaper,
         unescape::{unescape_bytes, unescape_with},
     },
     leaf::VcardValueLeaf,
@@ -37,10 +37,10 @@ use crate::tree::{
 /// A raw value: `;`-separated components, each a list of `,`-separated raw
 /// value leaves.
 ///
-/// From parse the value is held as one unsplit [`raw`](Self::raw) slice and
-/// walked lazily, so a parse that never decodes and a byte-faithful reserialize
-/// do no splitting at all. The first edit (or a model encode) splits it into
-/// owned [`components`](Self::components), which then take over as the source of
+/// From parse the value is held as one unsplit `raw` slice and walked lazily,
+/// so a parse that never decodes and a byte-faithful reserialize do no
+/// splitting at all. The first edit (or a model encode) splits it into owned
+/// `components`, which then take over as the source of
 /// truth. The `escaper` records which version's escaping rules the codec must
 /// apply; it is stamped from the card version after parsing (see
 /// `VcardCst::parse`).
@@ -54,7 +54,7 @@ pub struct VcardValueNode<'a> {
     /// `Some` this stays empty and reads split `raw` on demand.
     components: Vec<Vec<VcardValueLeaf<'a>>>,
     /// The escaping rules to read and write this value with.
-    pub escaper: Escaper,
+    pub escaper: VcardEscaper,
 }
 
 impl<'a> VcardValueNode<'a> {
@@ -65,15 +65,15 @@ impl<'a> VcardValueNode<'a> {
         Self {
             raw: Some(Cow::Borrowed(value)),
             components: Vec::new(),
-            escaper: Escaper::default(),
+            escaper: VcardEscaper::default(),
         }
     }
 
-    /// Build a value node from already-split components (the model encode path);
-    /// there is no `raw`, so the components are the source of truth.
+    /// Build a value node from already-split components (the model encode
+    /// path); there is no `raw`, so the components are the source of truth.
     pub(crate) fn from_components(
         components: Vec<Vec<VcardValueLeaf<'a>>>,
-        escaper: Escaper,
+        escaper: VcardEscaper,
     ) -> Self {
         Self {
             raw: None,
@@ -143,8 +143,8 @@ impl<'a> VcardValueNode<'a> {
     /// value, not a list separator (so they must not be truncated).
     pub fn decode_joined_at(&self, i: usize) -> Cow<'_, str> {
         match self.component_at(i) {
-            // The whole component slice already has the commas in place, so
-            // unescaping it verbatim keeps them literal.
+            // NOTE: The whole component slice already has the commas in place,
+            // so unescaping it verbatim keeps them literal.
             Some(Component::Raw(bytes)) => unescape_with(bytes, self.escaper),
             Some(Component::Split(leaves)) => {
                 if leaves.len() <= 1 {
@@ -222,9 +222,9 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
-    /// Replace the `j`th value of the `i`th component in place, re-escaping only
-    /// that leaf; every sibling value keeps its parsed bytes. Pads with empty
-    /// values when `j` is past the end.
+    /// Replace the `j`th value of the `i`th component in place, re-escaping
+    /// only that leaf; every sibling value keeps its parsed bytes. Pads with
+    /// empty values when `j` is past the end.
     pub fn set_value_at<S: AsRef<str>>(&mut self, i: usize, j: usize, value: S) {
         let escaper = self.escaper;
         let component = self.component_mut(i);
@@ -257,8 +257,8 @@ impl<'a> VcardValueNode<'a> {
     }
 
     /// Remove the `j`th value of the `i`th component, splicing it out and
-    /// leaving every sibling's bytes untouched; a no-op when either index is out
-    /// of range.
+    /// leaving every sibling's bytes untouched; a no-op when either index is
+    /// out of range.
     pub fn remove_value_at(&mut self, i: usize, j: usize) {
         self.materialize();
 
@@ -394,7 +394,8 @@ impl fmt::Display for VcardValueNode<'_> {
 /// One located component: a slice of the still-unsplit value, or its leaves
 /// once the value has been split for editing.
 enum Component<'s, 'a> {
-    /// The component's bytes, still `,`-joined, borrowed from the unsplit value.
+    /// The component's bytes, still `,`-joined, borrowed from the unsplit
+    /// value.
     Raw(&'s [u8]),
     /// The component's already-split leaves.
     Split(&'s [VcardValueLeaf<'a>]),
@@ -465,7 +466,7 @@ fn split_on<'b>(bytes: &'b [u8], sep: u8, mut piece: impl FnMut(&'b [u8])) {
 mod tests {
     use alloc::{borrow::Cow, string::ToString, vec};
 
-    use crate::tree::value::VcardValueNode;
+    use crate::tree::value::node::VcardValueNode;
 
     #[test]
     fn splits_components_and_values_then_round_trips() {

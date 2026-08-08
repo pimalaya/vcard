@@ -3,16 +3,18 @@
 //! The property lens contract, the per-property spec, and one hand-written
 //! module per RFC 6350 property.
 //!
-//! [`VcardPropLens`] ties a wire name to a decoded value type plus the `decode`
-//! projection and an edit cursor; each property implements it on the marker in
-//! its own module, the type-level key for
+//! [`VcardPropLens`](lens::VcardPropLens) ties a wire name to a decoded value
+//! type plus the `decode` projection and an edit cursor; each property
+//! implements it on the marker in its own module, the type-level key for
 //! [`VcardCst::prop`](crate::tree::cst::VcardCst::prop). Scalar, list and URI
 //! properties share the generic
-//! [`VcardValueCursor`](crate::tree::value::VcardValueCursor); the structured
-//! ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor that names their
-//! components. The per-property contract is [`VcardPropSpec`], with the
-//! [`VcardPropCardinality`] multiplicity axis; the name dispatch for whole-card
-//! decoding lives in [`crate::tree::codec::decode`].
+//! [`VcardValueCursor`](crate::tree::value::cursor::VcardValueCursor); the
+//! structured ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor that
+//! names their components. The per-property contract is
+//! [`VcardPropSpec`](spec::VcardPropSpec), with the
+//! [`VcardPropCardinality`](cardinality::VcardPropCardinality) multiplicity
+//! axis; the name dispatch for whole-card decoding lives in
+//! [`crate::tree::codec::decode`].
 
 pub mod adr;
 pub mod agent;
@@ -20,6 +22,7 @@ pub mod anniversary;
 pub mod bday;
 pub mod caladruri;
 pub mod caluri;
+pub mod cardinality;
 pub mod categories;
 pub mod class;
 pub mod client_pid_map;
@@ -37,6 +40,7 @@ pub mod kind;
 pub mod label;
 pub mod lang;
 pub mod language;
+pub mod lens;
 pub mod logo;
 pub mod mailer;
 pub mod member;
@@ -56,22 +60,10 @@ pub mod socialprofile;
 pub mod sort_string;
 pub mod sound;
 pub mod source;
+pub mod spec;
 pub mod tel;
 pub mod title;
 pub mod tz;
 pub mod uid;
 pub mod url;
 pub mod xml;
-
-mod cardinality;
-mod lens;
-mod spec;
-
-#[doc(inline)]
-pub use cardinality::*;
-#[doc(inline)]
-pub use lens::*;
-#[doc(inline)]
-pub use spec::VcardPropSpec;
-
-pub(crate) use spec::{VcardPropSpecFns, prop_spec};

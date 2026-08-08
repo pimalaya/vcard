@@ -5,10 +5,13 @@
 
 use alloc::{borrow::Cow, string::ToString, vec};
 
-use crate::tree::leaf::VcardLeaf;
 use crate::{
     param::VcardParamKind,
-    tree::{codec::unescape::unescape, param::VcardParamLens, param::VcardParamNode},
+    tree::{
+        codec::unescape::unescape,
+        leaf::VcardLeaf,
+        param::{lens::VcardParamLens, node::VcardParamNode},
+    },
 };
 
 /// The `ALTID` parameter lens.

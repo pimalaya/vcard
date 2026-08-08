@@ -7,12 +7,12 @@
 //! extensions (`X-`/IANA properties, unknown parameters), so "valid" cannot be
 //! a type with no `Unknown` arms. [`Vcard::validate`] therefore checks the
 //! *known* parts of the (lossy) model against the per-property
-//! [`VcardPropSpec`](crate::tree::prop::VcardPropSpec) for the card version
-//! (existence, value kind, parameters, cardinality) and leaves the unknown
-//! parts alone. A passing check yields a [`Valid`] marker: it is the only thing
-//! that can mint one, so holding a `Valid<Vcard>` is proof the check passed.
-//! The same per-property check backs the [`VcardPropBuilder`]'s strict
-//! construction.
+//! [`VcardPropSpec`](crate::tree::prop::spec::VcardPropSpec) for the card
+//! version (existence, value kind, parameters, cardinality) and leaves the
+//! unknown parts alone. A passing check yields a [`VcardValid`] marker: it is
+//! the only thing that can mint one, so holding a `VcardValid<Vcard>` is proof
+//! the check passed. The same per-property check backs the
+//! [`VcardPropBuilder`]'s strict construction.
 //!
 //! [`VcardPropBuilder`]: crate::tree::vcard::builder::VcardPropBuilder
 //!
@@ -44,7 +44,7 @@ use crate::{
     prop::{VcardProp, VcardPropKind, VcardPropName},
     tree::{
         cst::VcardCst,
-        prop::{VcardPropCardinality, VcardPropSpecFns, prop_spec},
+        prop::{cardinality::VcardPropCardinality, spec::VcardPropSpecFns, spec::prop_spec},
     },
     value::VcardValueKind,
     vcard::Vcard,
@@ -132,9 +132,9 @@ impl<'a> Vcard<'a> {
     /// must exist in the version, carry an allowed value kind and allowed
     /// parameters, and respect its multiplicity. Extensions (unknown
     /// properties and parameters) are conformant and pass. On success the card
-    /// is yielded back as a [`Valid`] proof; on failure every violation is
+    /// is yielded back as a [`VcardValid`] proof; on failure every violation is
     /// collected.
-    pub fn validate(self) -> Result<Valid<Vcard<'a>>, Vec<VcardValidateError>> {
+    pub fn validate(self) -> Result<VcardValid<Vcard<'a>>, Vec<VcardValidateError>> {
         let mut errors = Vec::new();
         let mut counts: Vec<(VcardPropKind, usize)> = Vec::new();
 
@@ -171,7 +171,7 @@ impl<'a> Vcard<'a> {
         }
 
         if errors.is_empty() {
-            Ok(Valid(self))
+            Ok(VcardValid(self))
         } else {
             Err(errors)
         }
@@ -278,21 +278,21 @@ fn cardinality_ok(cardinality: VcardPropCardinality, count: usize) -> bool {
 }
 
 /// A value that has passed validation. The only way to mint one is a validating
-/// conversion ([`Vcard::validate`] or its `TryFrom`), so holding a `Valid<T>`
-/// is proof the check passed; it derefs to the inner value for reads and yields
-/// it back with [`into_inner`](Self::into_inner). It is never constructed
-/// directly: it is a marker, not data.
+/// conversion ([`Vcard::validate`] or its `TryFrom`), so holding a
+/// `VcardValid<T>` is proof the check passed; it derefs to the inner value for
+/// reads and yields it back with [`into_inner`](Self::into_inner). It is never
+/// constructed directly: it is a marker, not data.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Valid<T>(T);
+pub struct VcardValid<T>(T);
 
-impl<T> Valid<T> {
+impl<T> VcardValid<T> {
     /// Take the validated value back out.
     pub fn into_inner(self) -> T {
         self.0
     }
 }
 
-impl<T> Deref for Valid<T> {
+impl<T> Deref for VcardValid<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -300,7 +300,7 @@ impl<T> Deref for Valid<T> {
     }
 }
 
-impl<'a> TryFrom<Vcard<'a>> for Valid<Vcard<'a>> {
+impl<'a> TryFrom<Vcard<'a>> for VcardValid<Vcard<'a>> {
     type Error = Vec<VcardValidateError>;
 
     fn try_from(card: Vcard<'a>) -> Result<Self, Self::Error> {
@@ -308,8 +308,8 @@ impl<'a> TryFrom<Vcard<'a>> for Valid<Vcard<'a>> {
     }
 }
 
-impl From<Valid<Vcard<'_>>> for VcardCst<'static> {
-    fn from(card: Valid<Vcard<'_>>) -> Self {
+impl From<VcardValid<Vcard<'_>>> for VcardCst<'static> {
+    fn from(card: VcardValid<Vcard<'_>>) -> Self {
         card.into_inner().encode()
     }
 }
@@ -323,8 +323,8 @@ mod tests {
         prop::{VcardProp, VcardPropKind},
         tree::{
             cst::VcardCst,
-            prop::VcardPropCardinality,
-            vcard::validate::{Valid, VcardValidateError},
+            prop::cardinality::VcardPropCardinality,
+            vcard::validate::{VcardValid, VcardValidateError},
         },
         value::{VcardValue, VcardValueKind, n::VcardN, text::VcardText, uri::VcardUri},
         vcard::Vcard,
@@ -570,15 +570,15 @@ mod tests {
             )],
         );
 
-        // TryFrom mints the proof; Deref reads through it.
-        let valid = Valid::try_from(vcard.clone()).expect("a conformant card");
+        // NOTE: TryFrom mints the proof; Deref reads through it.
+        let valid = VcardValid::try_from(vcard.clone()).expect("a conformant card");
         assert_eq!(valid.version, VcardVersion::V4_0);
 
-        // A proof converts back into a byte tree.
+        // NOTE: A proof converts back into a byte tree.
         let cst = VcardCst::from(valid);
         assert!(cst.to_string().contains("FN:John"));
 
-        // into_inner yields the card back.
+        // NOTE: into_inner yields the card back.
         let inner = vcard.validate().unwrap().into_inner();
         assert_eq!(inner.version, VcardVersion::V4_0);
     }

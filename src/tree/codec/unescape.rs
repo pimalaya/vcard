@@ -3,26 +3,26 @@
 //! Resolve the RFC 6350 3.4 value escapes when parsing. The read half of the
 //! escaping codec; its exact inverse is
 //! [`escape`](crate::tree::codec::escape), and the version-specific rules are
-//! selected by the [`Escaper`]. The structural decoders in
+//! selected by the [`VcardEscaper`]. The structural decoders in
 //! [`decode`](crate::tree::codec::decode) run every value leaf through here.
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
-use crate::tree::codec::mode::Escaper;
+use crate::tree::codec::mode::VcardEscaper;
 
 /// Resolve value escapes by the card's escaping mode, reading raw value bytes
 /// and yielding the decoded text (lossily when the bytes are not UTF-8; the
 /// caller keeps the raw bytes on the syntax leaf for fidelity).
-pub(crate) fn unescape_with(bytes: &[u8], escaper: Escaper) -> Cow<'_, str> {
+pub(crate) fn unescape_with(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, str> {
     lossy(unescape_bytes(bytes, escaper))
 }
 
 /// Resolve value escapes by the card's escaping mode at the byte level,
 /// preserving any non-UTF-8 content verbatim.
-pub(crate) fn unescape_bytes(bytes: &[u8], escaper: Escaper) -> Cow<'_, [u8]> {
+pub(crate) fn unescape_bytes(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8]> {
     match escaper {
-        Escaper::Modern => unescape_modern(bytes),
-        Escaper::V2_1 => unescape_v21(bytes),
+        VcardEscaper::Modern => unescape_modern(bytes),
+        VcardEscaper::V2_1 => unescape_v21(bytes),
     }
 }
 
@@ -120,10 +120,10 @@ mod tests {
 
     #[test]
     fn unescapes_only_the_semicolon_in_v2_1() {
-        use crate::tree::codec::{mode::Escaper, unescape::unescape_with};
+        use crate::tree::codec::{mode::VcardEscaper, unescape::unescape_with};
 
-        // vCard 2.1 resolves `\;` only; `\n` keeps its literal backslash, and a
-        // trailing backslash stays.
-        assert_eq!(unescape_with(br"a\;b\nc\", Escaper::V2_1), "a;b\\nc\\");
+        // NOTE: vCard 2.1 resolves `\;` only; `\n` keeps its literal backslash,
+        // and a trailing backslash stays.
+        assert_eq!(unescape_with(br"a\;b\nc\", VcardEscaper::V2_1), "a;b\\nc\\");
     }
 }

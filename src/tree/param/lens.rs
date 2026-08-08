@@ -5,7 +5,7 @@
 //! and it is the type-level key for
 //! [`VcardLine::param`](crate::tree::line::VcardLine::param).
 
-use crate::{param::VcardParamKind, tree::param::VcardParamNode};
+use crate::{param::VcardParamKind, tree::param::node::VcardParamNode};
 
 /// A parameter identified by type, projecting a generic syntax parameter onto a
 /// decoded value type and back.
@@ -27,7 +27,9 @@ pub trait VcardParamLens {
 mod tests {
     use alloc::{borrow::Cow, string::ToString, vec};
 
-    use crate::tree::param::{VcardParamLens, VcardParamNode, language::LANGUAGE, pid::PID};
+    use crate::tree::param::{
+        language::LANGUAGE, lens::VcardParamLens, node::VcardParamNode, pid::PID,
+    };
 
     #[test]
     fn decodes_a_list_parameter_through_its_lens() {
