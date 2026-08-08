@@ -7,11 +7,8 @@
 //!
 //! Run with: `cargo run --example raw_builder`
 
-use std::borrow::Cow;
-
 use vcard::prop::VcardProp;
 use vcard::value::VcardValue;
-use vcard::value::text::VcardText;
 use vcard::vcard::Vcard;
 use vcard::version::VcardVersion;
 
@@ -22,14 +19,14 @@ fn main() {
             VcardProp {
                 name: "FN".into(),
                 params: vec![],
-                value: VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
+                value: VcardValue::Text("John Doe".into()),
             },
             // A custom extension property the strict builder has no marker for.
             // Nothing here is validated; it is written out as given.
             VcardProp {
                 name: "X-CUSTOM".into(),
                 params: vec![],
-                value: VcardValue::Text(VcardText(Cow::Borrowed("anything goes"))),
+                value: VcardValue::Text("anything goes".into()),
             },
         ],
     };

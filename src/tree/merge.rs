@@ -1270,4 +1270,89 @@ mod tests {
         assert_eq!(merged.matches("EMAIL:x@y\r\n").count(), 1, "got: {merged}");
         assert!(report.conflicts.is_empty());
     }
+
+    // NOTE: The three whole-parameter edits below are the right side's replay
+    // path: the left side edits the value so the two never meet, and what is
+    // asserted is that the right card's parameter lands on the left card's
+    // line. The list-item paths are covered by the TYPE test above.
+
+    #[test]
+    fn a_right_side_parameter_addition_lands_on_the_left_line() {
+        let base = card("TEL;TYPE=work:+1\r\n");
+        let left = card("TEL;TYPE=work:+2\r\n");
+        let right = card("TEL;TYPE=work;PREF=1:+1\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(merged, card("TEL;TYPE=work;PREF=1:+2\r\n"), "got: {merged}");
+        assert!(report.conflicts.is_empty());
+        assert!(matches!(
+            &report.right[0],
+            VcardMergeAction::ParamAdded { param, .. } if param.kind().is_some(),
+        ));
+    }
+
+    #[test]
+    fn a_right_side_parameter_removal_takes_it_off_the_left_line() {
+        let base = card("TEL;TYPE=work;PREF=1:+1\r\n");
+        let left = card("TEL;TYPE=work;PREF=1:+2\r\n");
+        let right = card("TEL;TYPE=work:+1\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(merged, card("TEL;TYPE=work:+2\r\n"), "got: {merged}");
+        assert!(report.conflicts.is_empty());
+        assert!(matches!(
+            &report.right[0],
+            VcardMergeAction::ParamRemoved { .. },
+        ));
+    }
+
+    #[test]
+    fn a_right_side_parameter_change_replaces_it_on_the_left_line() {
+        let base = card("TEL;PREF=1:+1\r\n");
+        let left = card("TEL;PREF=1:+2\r\n");
+        let right = card("TEL;PREF=2:+1\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(merged, card("TEL;PREF=2:+2\r\n"), "got: {merged}");
+        assert!(report.conflicts.is_empty());
+        assert!(matches!(
+            &report.right[0],
+            VcardMergeAction::ParamChanged { .. },
+        ));
+    }
+
+    #[test]
+    fn divergent_parameter_changes_conflict_and_the_left_wins() {
+        let base = card("TEL;PREF=1:+1\r\n");
+        let left = card("TEL;PREF=2:+1\r\n");
+        let right = card("TEL;PREF=3:+1\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(merged, card("TEL;PREF=2:+1\r\n"), "got: {merged}");
+        assert_eq!(report.conflicts.len(), 1);
+    }
 }

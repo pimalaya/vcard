@@ -964,6 +964,16 @@ mod tests {
             "REV:19961022T140000Z\r\n",
             "TZ;VALUE=utc-offset:-0500\r\n",
             "UID:urn:uuid:4fbe8971-0bc3-424c-9c26-36c3e1eff6b1\r\n",
+            // NOTE: The structured and binary values below each take their own
+            // branch in both directions, so a card without them leaves half of
+            // the conversion unwalked.
+            "GENDER:F;grrrl\r\n",
+            "ORG:Example;Research;Optics\r\n",
+            "ORG:Solo\r\n",
+            "CLIENTPIDMAP:1;urn:uuid:3df67951-1932-4fc6-9d54-8b4c0e0ba0b2\r\n",
+            "GEO:geo:37.386013\r\n",
+            "PHOTO:data:image/jpeg;base64,Zm9v\r\n",
+            "KEY;ENCODING=b:Zm9v\r\n",
             "X-SKI:snowboard\r\n",
             "END:VCARD\r\n",
         );

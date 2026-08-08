@@ -42,22 +42,67 @@ const VALUE_KINDS: [VcardValueKind; 14] = [
     VcardValueKind::UtcOffset,
 ];
 
-const PARAM_KINDS: [VcardParamKind; 14] = [
+const PARAM_KINDS: [VcardParamKind; 24] = [
     VcardParamKind::AltId,
+    VcardParamKind::Author,
+    VcardParamKind::AuthorName,
     VcardParamKind::CalScale,
     VcardParamKind::Charset,
+    VcardParamKind::Created,
+    VcardParamKind::Derived,
     VcardParamKind::Encoding,
     VcardParamKind::Geo,
+    VcardParamKind::Jsptr,
     VcardParamKind::Label,
     VcardParamKind::Language,
     VcardParamKind::MediaType,
+    VcardParamKind::Phonetic,
     VcardParamKind::Pid,
     VcardParamKind::Pref,
+    VcardParamKind::PropId,
+    VcardParamKind::Script,
+    VcardParamKind::ServiceType,
     VcardParamKind::SortAs,
     VcardParamKind::Type,
     VcardParamKind::Tz,
+    VcardParamKind::Username,
     VcardParamKind::Value,
 ];
+
+/// The wire name each parameter kind is spelled with, stated here rather than
+/// read back from the kind's own `Deref`.
+///
+/// The match is exhaustive on purpose: a kind added to the vocabulary and left
+/// out of `PARAM_KINDS` fails to compile here rather than quietly escaping
+/// every sweep in this file.
+fn param_wire_name(kind: VcardParamKind) -> &'static str {
+    match kind {
+        VcardParamKind::AltId => "ALTID",
+        VcardParamKind::Author => "AUTHOR",
+        VcardParamKind::AuthorName => "AUTHOR-NAME",
+        VcardParamKind::CalScale => "CALSCALE",
+        VcardParamKind::Charset => "CHARSET",
+        VcardParamKind::Created => "CREATED",
+        VcardParamKind::Derived => "DERIVED",
+        VcardParamKind::Encoding => "ENCODING",
+        VcardParamKind::Geo => "GEO",
+        VcardParamKind::Jsptr => "JSPTR",
+        VcardParamKind::Label => "LABEL",
+        VcardParamKind::Language => "LANGUAGE",
+        VcardParamKind::MediaType => "MEDIATYPE",
+        VcardParamKind::Phonetic => "PHONETIC",
+        VcardParamKind::Pid => "PID",
+        VcardParamKind::Pref => "PREF",
+        VcardParamKind::PropId => "PROP-ID",
+        VcardParamKind::Script => "SCRIPT",
+        VcardParamKind::ServiceType => "SERVICE-TYPE",
+        VcardParamKind::SortAs => "SORT-AS",
+        VcardParamKind::Type => "TYPE",
+        VcardParamKind::Tz => "TZ",
+        VcardParamKind::Username => "USERNAME",
+        VcardParamKind::Value => "VALUE",
+    }
+}
 
 #[test]
 fn every_kind_derefs_to_its_wire_name_and_round_trips() {
@@ -67,6 +112,7 @@ fn every_kind_derefs_to_its_wire_name_and_round_trips() {
     }
     for kind in PARAM_KINDS {
         let name: &str = &kind;
+        assert_eq!(name, param_wire_name(kind), "{name} is spelled wrong");
         assert_eq!(name.parse::<VcardParamKind>().unwrap(), kind);
     }
 }
@@ -206,28 +252,6 @@ fn every_param_variant_reports_its_kind() {
 }
 
 #[test]
-fn model_value_types_convert_from_owned_and_borrowed() {
-    let owned = String::from("x");
-    let cow: Cow<'static, str> = Cow::Owned(String::from("y"));
-    let list = vec![Cow::Borrowed("a"), Cow::Borrowed("b")];
-
-    let _ = VcardText::from(owned.clone());
-    let _ = VcardText::from(cow.clone());
-    let _ = VcardTextList::from(list.clone());
-    let _ = VcardUri::from(owned.clone());
-    let _ = VcardUri::from(cow.clone());
-    let _ = VcardLanguageTag::from(owned.clone());
-    let _ = VcardLanguageTag::from(cow.clone());
-    let _ = VcardUtcOffset::from(owned.clone());
-    let _ = VcardUtcOffset::from(cow.clone());
-    let _ = VcardDateAndOrTime::from(owned.clone());
-    let _ = VcardDateAndOrTime::from(cow.clone());
-    let _ = VcardTimestamp::from(owned.clone());
-    let _ = VcardTimestamp::from(cow.clone());
-    let _ = VcardOrg::from(list);
-}
-
-#[test]
 fn encodes_a_card_with_every_value_kind_and_parameter() {
     let value_props = [
         ("FN", VcardValue::Text(VcardText::from("John"))),
@@ -337,19 +361,81 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
         value: VcardValue::Text(VcardText::from("hi")),
     });
 
-    // Encode across versions so the version-specific value shapes (GEO) run.
-    for version in [VcardVersion::V2_1, VcardVersion::V3_0, VcardVersion::V4_0] {
+    // Encode across versions so the version-specific value shapes (GEO) run:
+    // 2.1 writes the coordinate pair `lat,long`, 3.0 writes `lat;long`, and 4.0
+    // carries GEO as a URI instead (RFC 6350 6.5.2), which is why the value
+    // itself, not just its encoding, changes with the version.
+    // NOTE: The 4.0 URI is comma-free on purpose. A URI carrying a comma, which
+    // a `geo:` URI does, comes back out escaped as `geo:1.0\,2.0`: the encoder
+    // runs a URI through the text escaper, which RFC 6350 4.2 does not call
+    // for. Pinning that here would settle a question that is still open.
+    let cases = [
+        (VcardVersion::V2_1, "2.1", "GEO:1.0,2.0\r\n"),
+        (VcardVersion::V3_0, "3.0", "GEO:1.0;2.0\r\n"),
+        (
+            VcardVersion::V4_0,
+            "4.0",
+            "GEO:https://example.com/where\r\n",
+        ),
+    ];
+
+    for (version, wire_version, geo) in cases {
+        let properties: Vec<VcardProp> = properties
+            .iter()
+            .cloned()
+            .map(|prop| match (version, &*prop.name) {
+                (VcardVersion::V4_0, "GEO") => VcardProp {
+                    value: VcardValue::Uri(VcardUri::from("https://example.com/where")),
+                    ..prop
+                },
+                _ => prop,
+            })
+            .collect();
+
         let card = Vcard {
             version,
-            properties: properties.clone(),
+            properties,
         };
-        let out = card.to_string();
-        assert!(out.starts_with("BEGIN:VCARD"));
-        assert!(out.trim_end().ends_with("END:VCARD"));
+
+        // NOTE: The whole card, not a BEGIN/END sanity check: every value kind
+        // above encodes to a shape this pins, so a value that silently encoded
+        // to nothing would still have passed before.
+        let expected = alloc_expected(wire_version, geo);
+        assert_eq!(card.to_string(), expected, "{wire_version} does not encode");
 
         // The From<Vcard> conversion (distinct from Display's encode path).
-        let _ = VcardCst::from(card);
+        assert_eq!(VcardCst::from(card).to_string(), expected);
     }
+}
+
+/// The wire text [`encodes_a_card_with_every_value_kind_and_parameter`] expects,
+/// which differs between versions only in the `VERSION` and `GEO` lines.
+fn alloc_expected(version: &str, geo: &str) -> String {
+    let head = concat!(
+        "FN:John\r\n",
+        "NICKNAME:JD\r\n",
+        "URL:http://x\r\n",
+        "BDAY:1980\r\n",
+        "REV:20200102T030405Z\r\n",
+        "LANG:en\r\n",
+        "TZ:-0500\r\n",
+        "N:Doe;John;;;\r\n",
+        "ADR:;;Main St;;;;\r\n",
+        "GENDER:M;man\r\n",
+        "ORG:Acme\r\n",
+    );
+    let tail = concat!(
+        "CLIENTPIDMAP:1;urn:x\r\n",
+        "PHOTO:Zm9v\r\n",
+        "KEY:http://x\r\n",
+        "X-FOO:\r\n",
+        "NOTE;ALTID=1;CALSCALE=gregorian;CHARSET=UTF-8;ENCODING=8BIT;GEO=geo:1,2;",
+        "LABEL=addr;LANGUAGE=en;MEDIATYPE=text/plain;PID=1,2;PREF=1;SORT-AS=Doe;",
+        "TYPE=home,work;TZ=-0500;VALUE=text;X-CUSTOM=v:hi\r\n",
+        "END:VCARD\r\n",
+    );
+
+    format!("BEGIN:VCARD\r\nVERSION:{version}\r\n{head}{geo}{tail}")
 }
 
 #[test]
@@ -403,11 +489,13 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
     use vcard::tree::prop::{
         adr::ADR, agent::AGENT, anniversary::ANNIVERSARY, bday::BDAY, caladruri::CALADRURI,
         caluri::CALURI, categories::CATEGORIES, class::CLASS, client_pid_map::CLIENTPIDMAP,
-        email::EMAIL, fburl::FBURL, r#fn::FN, gender::GENDER, geo::GEO, impp::IMPP, key::KEY,
-        kind::KIND, label::LABEL, lang::LANG, logo::LOGO, mailer::MAILER, member::MEMBER, n::N,
+        created::CREATED, email::EMAIL, fburl::FBURL, r#fn::FN, gender::GENDER, geo::GEO,
+        gramgender::GRAMGENDER, impp::IMPP, jsprop::JSPROP, key::KEY, kind::KIND, label::LABEL,
+        lang::LANG, language::LANGUAGE, logo::LOGO, mailer::MAILER, member::MEMBER, n::N,
         name::NAME, nickname::NICKNAME, note::NOTE, org::ORG, photo::PHOTO, prodid::PRODID,
-        profile::PROFILE, related::RELATED, rev::REV, role::ROLE, sort_string::SORT_STRING,
-        sound::SOUND, source::SOURCE, tel::TEL, title::TITLE, tz::TZ, uid::UID, url::URL, xml::XML,
+        profile::PROFILE, pronouns::PRONOUNS, related::RELATED, rev::REV, role::ROLE,
+        socialprofile::SOCIALPROFILE, sort_string::SORT_STRING, sound::SOUND, source::SOURCE,
+        tel::TEL, title::TITLE, tz::TZ, uid::UID, url::URL, xml::XML,
     };
 
     let raw = concat!(
@@ -454,15 +542,37 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
         "UID:x\r\n",
         "URL:http://x\r\n",
         "XML:<x/>\r\n",
+        // The properties RFC 9554 and RFC 9555 added.
+        "CREATED:20260101T000000Z\r\n",
+        "GRAMGENDER:neuter\r\n",
+        "JSPROP;JSPTR=x:{}\r\n",
+        "LANGUAGE:en\r\n",
+        "PRONOUNS:they/them\r\n",
+        "SOCIALPROFILE;SERVICE-TYPE=Mastodon:https://example.com/@ann\r\n",
         "END:VCARD\r\n",
     );
     let mut cst = VcardCst::parse(raw).unwrap();
 
+    // NOTE: A lens pointing at the wrong property name reads `None` on a card
+    // that carries every property, so the assertion, not the call, is what
+    // proves the marker is wired to its own line.
     macro_rules! read {
-        ($($m:ty),+ $(,)?) => {{ $( let _ = cst.prop::<$m>(); )+ }};
+        ($($m:ty),+ $(,)?) => {{ $(
+            assert!(
+                cst.prop::<$m>().is_some(),
+                "{} does not read its own property",
+                stringify!($m),
+            );
+        )+ }};
     }
     macro_rules! edit {
-        ($($m:ty),+ $(,)?) => {{ $( let _ = cst.prop_mut::<$m>(); )+ }};
+        ($($m:ty),+ $(,)?) => {{ $(
+            assert!(
+                cst.prop_mut::<$m>().is_some(),
+                "{} does not reach its own property",
+                stringify!($m),
+            );
+        )+ }};
     }
 
     read!(
@@ -475,16 +585,20 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
         CATEGORIES,
         CLASS,
         CLIENTPIDMAP,
+        CREATED,
         EMAIL,
         FBURL,
         FN,
         GENDER,
         GEO,
+        GRAMGENDER,
         IMPP,
+        JSPROP,
         KEY,
         KIND,
         LABEL,
         LANG,
+        LANGUAGE,
         LOGO,
         MAILER,
         MEMBER,
@@ -496,9 +610,11 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
         PHOTO,
         PRODID,
         PROFILE,
+        PRONOUNS,
         RELATED,
         REV,
         ROLE,
+        SOCIALPROFILE,
         SORT_STRING,
         SOUND,
         SOURCE,
@@ -623,36 +739,44 @@ fn exercises_every_parameter_lens() {
     );
     let mut cst = VcardCst::parse(raw).unwrap();
 
-    // decode: read each parameter through its lens.
+    // decode: each lens reads the value its own parameter carries on the line.
     let c = cst.prop_mut::<TEL>().unwrap();
-    let _ = c.param::<ALTID>();
-    let _ = c.param::<CALSCALE>();
-    let _ = c.param::<GEOP>();
-    let _ = c.param::<LABELP>();
-    let _ = c.param::<LANGUAGE>();
-    let _ = c.param::<MEDIATYPE>();
-    let _ = c.param::<PID>();
-    let _ = c.param::<PREF>();
-    let _ = c.param::<SORT_AS>();
-    let _ = c.param::<TYPE>();
-    let _ = c.param::<TZP>();
-    let _ = c.param::<VALUE>();
+    assert_eq!(c.param::<ALTID>().as_deref(), Some("1"));
+    assert_eq!(c.param::<CALSCALE>().as_deref(), Some("gregorian"));
+    assert_eq!(c.param::<GEOP>().as_deref(), Some("x"));
+    assert_eq!(c.param::<LABELP>().as_deref(), Some("addr"));
+    assert_eq!(c.param::<LANGUAGE>().as_deref(), Some("en"));
+    assert_eq!(c.param::<MEDIATYPE>().as_deref(), Some("text/plain"));
+    assert_eq!(
+        c.param::<PID>(),
+        Some(vec![Cow::Borrowed("1"), Cow::Borrowed("2")])
+    );
+    assert_eq!(c.param::<PREF>().as_deref(), Some("1"));
+    assert_eq!(c.param::<SORT_AS>(), Some(vec![Cow::Borrowed("Doe")]));
+    assert_eq!(
+        c.param::<TYPE>(),
+        Some(vec![Cow::Borrowed("home"), Cow::Borrowed("work")]),
+    );
+    assert_eq!(c.param::<TZP>().as_deref(), Some("-0500"));
+    assert_eq!(c.param::<VALUE>().as_deref(), Some("text"));
 
-    // encode: mint a parameter node from a decoded value through each lens.
+    // encode: each lens mints a node under the name it is named after. The
+    // names are spelled out rather than read back from the lens' own KIND, so a
+    // marker pointing at the wrong kind has somewhere to fail.
     let scalar: Cow<'static, str> = Cow::Borrowed("x");
     let list = vec![Cow::Borrowed("x")];
-    let _ = ALTID::encode(&scalar);
-    let _ = CALSCALE::encode(&scalar);
-    let _ = GEOP::encode(&scalar);
-    let _ = LABELP::encode(&scalar);
-    let _ = LANGUAGE::encode(&scalar);
-    let _ = MEDIATYPE::encode(&scalar);
-    let _ = PID::encode(&list);
-    let _ = PREF::encode(&scalar);
-    let _ = SORT_AS::encode(&list);
-    let _ = TYPE::encode(&list);
-    let _ = TZP::encode(&scalar);
-    let _ = VALUE::encode(&scalar);
+    assert_eq!(ALTID::encode(&scalar).to_string(), "ALTID=x");
+    assert_eq!(CALSCALE::encode(&scalar).to_string(), "CALSCALE=x");
+    assert_eq!(GEOP::encode(&scalar).to_string(), "GEO=x");
+    assert_eq!(LABELP::encode(&scalar).to_string(), "LABEL=x");
+    assert_eq!(LANGUAGE::encode(&scalar).to_string(), "LANGUAGE=x");
+    assert_eq!(MEDIATYPE::encode(&scalar).to_string(), "MEDIATYPE=x");
+    assert_eq!(PID::encode(&list).to_string(), "PID=x");
+    assert_eq!(PREF::encode(&scalar).to_string(), "PREF=x");
+    assert_eq!(SORT_AS::encode(&list).to_string(), "SORT-AS=x");
+    assert_eq!(TYPE::encode(&list).to_string(), "TYPE=x");
+    assert_eq!(TZP::encode(&scalar).to_string(), "TZ=x");
+    assert_eq!(VALUE::encode(&scalar).to_string(), "VALUE=x");
 }
 
 #[test]
@@ -745,4 +869,63 @@ fn decodes_a_value_node_through_the_value_codec_fallback() {
     let node = VcardValueNode::parse(b"a;b,c");
     let value = <VcardValue as VcardCodec>::decode(&node);
     assert!(matches!(value, VcardValue::Unknown(_)));
+}
+
+/// The parameters RFC 9554 and RFC 9555 added, from the wire to the model and
+/// back.
+///
+/// They were reachable only through the vocabulary sweeps before, so nothing
+/// proved that a card carrying them decodes onto the right variants, or that
+/// what is decoded encodes back to the line it came from.
+///
+/// NOTE: Every value here is free of colons and quotes. A quoted parameter
+/// value is not yet read as RFC 6350 3.3 defines it (the quotes stay in the
+/// decoded value, and a colon inside them splits the line), so a card built
+/// around that would be pinning a bug rather than the parameters.
+#[test]
+fn the_newer_parameters_decode_onto_their_own_variants_and_encode_back() {
+    let raw = concat!(
+        "BEGIN:VCARD\r\nVERSION:4.0\r\n",
+        "NOTE;AUTHOR=urn-ann;AUTHOR-NAME=Ann;CREATED=20260101T000000Z;DERIVED=TRUE;",
+        "JSPTR=addresses/a1;PHONETIC=ipa;PROP-ID=n1;SCRIPT=Latn;SERVICE-TYPE=Mastodon;",
+        "USERNAME=ann:hi\r\n",
+        "END:VCARD\r\n",
+    );
+
+    let cst = VcardCst::parse(raw).unwrap();
+    let card = cst.decode();
+    let params = &card.properties[0].params;
+
+    let expected = [
+        (VcardParam::Author(Cow::Borrowed("urn-ann")), "AUTHOR"),
+        (VcardParam::AuthorName(Cow::Borrowed("Ann")), "AUTHOR-NAME"),
+        (
+            VcardParam::Created(Cow::Borrowed("20260101T000000Z")),
+            "CREATED",
+        ),
+        (VcardParam::Derived(Cow::Borrowed("TRUE")), "DERIVED"),
+        (VcardParam::Jsptr(Cow::Borrowed("addresses/a1")), "JSPTR"),
+        (VcardParam::Phonetic(Cow::Borrowed("ipa")), "PHONETIC"),
+        (VcardParam::PropId(Cow::Borrowed("n1")), "PROP-ID"),
+        (VcardParam::Script(Cow::Borrowed("Latn")), "SCRIPT"),
+        (
+            VcardParam::ServiceType(Cow::Borrowed("Mastodon")),
+            "SERVICE-TYPE",
+        ),
+        (VcardParam::Username(Cow::Borrowed("ann")), "USERNAME"),
+    ];
+
+    assert_eq!(params.len(), expected.len(), "a parameter went missing");
+
+    for (decoded, (want, name)) in params.iter().zip(expected) {
+        assert_eq!(decoded, &want, "{name} decodes onto the wrong variant");
+        assert_eq!(
+            decoded.kind().map(|kind| param_wire_name(kind)),
+            Some(name),
+            "{name} reports the wrong kind",
+        );
+    }
+
+    // The decoded card writes the same line back out.
+    assert_eq!(VcardCst::from(card).to_string(), raw);
 }

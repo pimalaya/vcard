@@ -14,7 +14,6 @@ use vcard::tree::prop::email::EMAIL;
 use vcard::tree::prop::r#fn::FN;
 use vcard::tree::vcard::builder::VcardPropBuilder;
 use vcard::value::VcardValue;
-use vcard::value::text::VcardText;
 use vcard::vcard::Vcard;
 use vcard::version::VcardVersion;
 
@@ -24,14 +23,12 @@ fn main() {
     // The builder pins each property's name and rejects a value or a parameter
     // the property is not allowed to carry.
     let full_name = VcardPropBuilder::<FN>::new(version)
-        .build(VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))))
+        .build(VcardValue::Text("John Doe".into()))
         .expect("FN accepts a text value");
 
     let email = VcardPropBuilder::<EMAIL>::new(version)
         .param(VcardParam::Pref(Cow::Borrowed("1")))
-        .build(VcardValue::Text(VcardText(Cow::Borrowed(
-            "john@example.com",
-        ))))
+        .build(VcardValue::Text("john@example.com".into()))
         .expect("EMAIL accepts a text value with a PREF parameter");
 
     let card = Vcard {

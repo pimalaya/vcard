@@ -491,4 +491,45 @@ mod tests {
         node.set_at(1, &["X"]);
         assert_eq!(node.to_string(), "a;X;c");
     }
+
+    /// Every reader answers the same before and after the node materializes.
+    ///
+    /// A node holds its value as raw bytes until the first edit splits it into
+    /// components, and each reader has a branch per state. The lazy branches are
+    /// what a parse-and-read exercises; these are the other half, and a
+    /// disagreement between the two would surface as a value that changes shape
+    /// the moment an unrelated component is written.
+    fn assert_readers_agree(node: &VcardValueNode<'_>, components: usize) {
+        assert_eq!(node.component_count(), components);
+        assert_eq!(node.value_count(1), 2);
+        assert_eq!(node.decode_scalar_at(0), "a");
+        assert_eq!(
+            node.decode_at(1),
+            vec![Cow::Borrowed("b"), Cow::Borrowed("c")],
+        );
+        assert_eq!(node.decode_joined_at(1), "b,c");
+        assert_eq!(node.decode_bytes_at(2).as_ref(), b"d");
+    }
+
+    #[test]
+    fn readers_agree_before_and_after_an_edit_materializes_the_node() {
+        let mut node = VcardValueNode::parse(b"a;b,c;d");
+        assert_readers_agree(&node, 3);
+
+        // NOTE: Writing component 3 leaves the read components alone, but it is
+        // what moves the node off its raw bytes.
+        node.set_at(3, &["e"]);
+        assert_readers_agree(&node, 4);
+        assert_eq!(node.to_string(), "a;b,c;d;e");
+    }
+
+    #[test]
+    fn readers_agree_after_an_owned_node_is_edited() {
+        let mut node = VcardValueNode::parse(b"a;b,c;d").into_static();
+        assert_readers_agree(&node, 3);
+
+        node.set_at(3, &["e"]);
+        assert_readers_agree(&node, 4);
+        assert_eq!(node.to_string(), "a;b,c;d;e");
+    }
 }

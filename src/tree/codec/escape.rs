@@ -84,4 +84,30 @@ mod tests {
             br"a,b\;c".as_slice(),
         );
     }
+
+    /// A literal backslash doubles on the way out and resolves on the way back,
+    /// so a value carrying one survives a write it did not before.
+    #[test]
+    fn a_literal_backslash_doubles_and_resolves_back() {
+        use crate::tree::codec::unescape::unescape_with;
+
+        assert_eq!(
+            escape_with(br"C:\path", VcardEscaper::Modern).as_ref(),
+            br"C:\\path".as_slice(),
+        );
+        assert_eq!(
+            unescape_with(br"C:\\path", VcardEscaper::Modern),
+            r"C:\path",
+        );
+
+        // A value ending in a backslash is escaped whole, not left dangling.
+        assert_eq!(
+            escape_with(br"trailing\", VcardEscaper::Modern).as_ref(),
+            br"trailing\\".as_slice(),
+        );
+        assert_eq!(
+            unescape_with(br"dangling\", VcardEscaper::Modern),
+            r"dangling\"
+        );
+    }
 }

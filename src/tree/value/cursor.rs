@@ -195,7 +195,7 @@ impl VcardListCursor<'_, '_> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
+    use alloc::{string::ToString, vec};
 
     use crate::tree::{
         cst::VcardCst,
@@ -341,13 +341,29 @@ mod tests {
 
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a,b\r\nEND:VCARD\r\n").unwrap();
-        let mut cursor = card.prop_mut::<NOTE>().unwrap();
 
-        let _ = cursor.text();
-        let _ = cursor.list();
-        let _ = cursor.component(0);
-        cursor.set_text("x");
-        cursor.set_list(&["a", "b"]);
-        cursor.set_component(1, &["y"]);
+        {
+            let mut cursor = card.prop_mut::<NOTE>().unwrap();
+
+            // NOTE: A text read takes one value (component 0, value 0), while a
+            // list read takes the whole first component, and a component read
+            // takes one `;`-separated slot.
+            assert_eq!(cursor.text(), "a");
+            assert_eq!(cursor.list(), vec!["a", "b"]);
+            assert_eq!(cursor.component(0), vec!["a", "b"]);
+
+            cursor.set_text("x");
+            assert_eq!(cursor.text(), "x");
+
+            cursor.set_list(&["a", "b"]);
+            assert_eq!(cursor.list(), vec!["a", "b"]);
+
+            // A component past the last one extends the value rather than
+            // dropping the write.
+            cursor.set_component(1, &["y"]);
+            assert_eq!(cursor.component(1), vec!["y"]);
+        }
+
+        assert!(card.to_string().contains("NOTE:a,b;y\r\n"), "got: {card}");
     }
 }

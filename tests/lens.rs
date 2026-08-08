@@ -131,3 +131,117 @@ fn language_tag() {
         c.prop_mut::<LANG>().unwrap().set_text("fr");
     });
 }
+
+/// Every `ADR` component, in the order RFC 6350 6.3.1 and RFC 9554 3.1 lay them
+/// out, filled with its own index so a reader off by one reads a neighbour.
+const ADR_COMPONENTS: [&str; 18] = [
+    "c0-po-box",
+    "c1-extended",
+    "c2-street",
+    "c3-locality",
+    "c4-region",
+    "c5-postal-code",
+    "c6-country",
+    "c7-room",
+    "c8-apartment",
+    "c9-floor",
+    "c10-street-number",
+    "c11-street-name",
+    "c12-building",
+    "c13-block",
+    "c14-subdistrict",
+    "c15-district",
+    "c16-landmark",
+    "c17-direction",
+];
+
+#[test]
+fn every_adr_component_reads_its_own_slot() {
+    let card = format!(
+        "BEGIN:VCARD\r\nVERSION:4.0\r\nADR:{}\r\nEND:VCARD\r\n",
+        ADR_COMPONENTS.join(";")
+    );
+    let mut cst = VcardCst::parse(&card).unwrap();
+    let adr = cst.prop_mut::<ADR>().unwrap();
+
+    let read = [
+        adr.po_box(),
+        adr.extended(),
+        adr.street(),
+        adr.locality(),
+        adr.region(),
+        adr.postal_code(),
+        adr.country(),
+        adr.room(),
+        adr.apartment(),
+        adr.floor(),
+        adr.street_number(),
+        adr.street_name(),
+        adr.building(),
+        adr.block(),
+        adr.subdistrict(),
+        adr.district(),
+        adr.landmark(),
+        adr.direction(),
+    ];
+
+    for (component, expected) in read.iter().zip(ADR_COMPONENTS) {
+        assert_eq!(component.as_slice(), [expected], "{expected} is misread");
+    }
+}
+
+#[test]
+fn every_adr_component_writes_its_own_slot() {
+    let blank = ";".repeat(17);
+    let card = format!("BEGIN:VCARD\r\nVERSION:4.0\r\nADR:{blank}\r\nEND:VCARD\r\n");
+    let mut cst = VcardCst::parse(&card).unwrap();
+
+    {
+        let mut adr = cst.prop_mut::<ADR>().unwrap();
+        adr.set_po_box(&[ADR_COMPONENTS[0]]);
+        adr.set_extended(&[ADR_COMPONENTS[1]]);
+        adr.set_street(&[ADR_COMPONENTS[2]]);
+        adr.set_locality(&[ADR_COMPONENTS[3]]);
+        adr.set_region(&[ADR_COMPONENTS[4]]);
+        adr.set_postal_code(&[ADR_COMPONENTS[5]]);
+        adr.set_country(&[ADR_COMPONENTS[6]]);
+        adr.set_room(&[ADR_COMPONENTS[7]]);
+        adr.set_apartment(&[ADR_COMPONENTS[8]]);
+        adr.set_floor(&[ADR_COMPONENTS[9]]);
+        adr.set_street_number(&[ADR_COMPONENTS[10]]);
+        adr.set_street_name(&[ADR_COMPONENTS[11]]);
+        adr.set_building(&[ADR_COMPONENTS[12]]);
+        adr.set_block(&[ADR_COMPONENTS[13]]);
+        adr.set_subdistrict(&[ADR_COMPONENTS[14]]);
+        adr.set_district(&[ADR_COMPONENTS[15]]);
+        adr.set_landmark(&[ADR_COMPONENTS[16]]);
+        adr.set_direction(&[ADR_COMPONENTS[17]]);
+    }
+
+    assert_eq!(
+        cst.to_string(),
+        format!(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nADR:{}\r\nEND:VCARD\r\n",
+            ADR_COMPONENTS.join(";")
+        ),
+    );
+}
+
+/// A card serializes back through `to_bytes` as well as through `Display`.
+///
+/// The two are separate paths: `to_bytes` writes into one buffer without the
+/// intermediate `String`, and its multi-value parameter branch (the `,` between
+/// a parameter's values) had nothing driving it.
+#[test]
+fn a_multi_valued_parameter_survives_the_byte_serializer() {
+    let card = concat!(
+        "BEGIN:VCARD\r\n",
+        "VERSION:4.0\r\n",
+        "TEL;TYPE=work,voice;PID=1,2:+1\r\n",
+        "END:VCARD\r\n",
+    );
+    let cst = VcardCst::parse(card).unwrap();
+
+    assert_eq!(cst.to_bytes(), card.as_bytes());
+    assert_eq!(cst.to_string(), card);
+}

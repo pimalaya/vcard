@@ -195,6 +195,12 @@ mod tests {
             seconds("2026-07-11T12:25:59-0500"),
             seconds("2026-07-11T17:25:59Z"),
         );
+        // NOTE: The hour-only form, which the offset grammar allows and nothing
+        // exercised before.
+        assert_eq!(
+            seconds("2026-07-11T19:25:59+02"),
+            seconds("2026-07-11T17:25:59Z"),
+        );
     }
 
     #[test]
@@ -223,5 +229,12 @@ mod tests {
         assert_eq!(seconds("not-a-date"), None);
         assert_eq!(seconds("2026-13-11T00:00:00Z"), None);
         assert_eq!(seconds("2026-07-11T25:00:00Z"), None);
+        // An offset with no sign, with non-digits, of an unusable width, or out
+        // of range is not an offset.
+        assert_eq!(seconds("2026-07-11T19:25:5902:00"), None);
+        assert_eq!(seconds("2026-07-11T19:25:59+ab:00"), None);
+        assert_eq!(seconds("2026-07-11T19:25:59+020"), None);
+        assert_eq!(seconds("2026-07-11T19:25:59+24:00"), None);
+        assert_eq!(seconds("2026-07-11T19:25:59+02:60"), None);
     }
 }
