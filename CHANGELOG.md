@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-08
+
 ### Changed
 
 - Renamed the public items that did not carry the `Vcard` domain prefix: `Codec` to `VcardCodec`, `Escaper` to `VcardEscaper`, `Valid` to `VcardValid`, and `VcardUnknownValue` to `VcardValueUnknown`.
@@ -18,7 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `tree::param::lens`, `tree::param::node`, `tree::prop::cardinality`, `tree::prop::lens`, `tree::prop::spec`, `tree::value::cursor` and `tree::value::node` are public modules, and the module name is now part of the public path (`tree::prop::lens::VcardPropLens`, `tree::value::cursor::VcardValueCursor`). The `#[doc(inline)] pub use` re-exports that hid them are gone.
 
-- Pinned every dependency and dev-dependency to `default-features = false` with only the features it needs.
+- Bumped `base64` from 0.22 to 0.23, which moves the `base64::DecodeError` that `VcardBinary::decode_base64` returns.
+
+- Pinned every dependency and dev-dependency to `default-features = false` with only the features it needs, so `encoding_rs` is now pulled in its alloc-only mode.
 
 - Replaced the docs/ folder with a cairn/ folder holding the living spec, the in-flight proposals and the dated history, activated by [AGENTS.md](./AGENTS.md). The benchmark methodology and numbers moved to [benches/README.md](./benches/README.md).
 
@@ -40,7 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added `Vcard::validate`, an RFC 6350 conformance check over the decoded model.
 
-  It verifies per-version property existence, value kind, version-aware parameters and cardinality (including required-but-absent) while still permitting extensions. A card that passes earns `VcardValid<Vcard>`, a proof only validation can mint (`TryFrom<Vcard>`); both `Vcard` and `VcardValid<Vcard>` convert into a `VcardCst`.
+  It verifies per-version property existence, value kind, version-aware parameters and cardinality (including required-but-absent) while still permitting extensions. A card that passes earns `Valid<Vcard>`, a proof only validation can mint (`TryFrom<Vcard>`); both `Vcard` and `Valid<Vcard>` convert into a `VcardCst`.
 
 - Added `VcardPropBuilder`, a version-aware, spec-driven builder for strict construction.
 
@@ -80,5 +84,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `Vcard::to_jscontact` converts the decoded model into an RFC 9553 Card `serde_json::Value` and `Vcard::from_jscontact` converts one back; both directions are infallible aside from a non-object import root. `TYPE`, `PREF` and `PROP-ID` map to contexts and features, `pref`, and the object key, while unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams` (both in jCard syntax) and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.1.0..HEAD
+[unreleased]: https://github.com/pimalaya/vcard/compare/v0.2.0..HEAD
+[0.2.0]: https://github.com/pimalaya/vcard/compare/v0.1.0..v0.2.0
 [0.1.0]: https://github.com/pimalaya/vcard/compare/root..v0.1.0
