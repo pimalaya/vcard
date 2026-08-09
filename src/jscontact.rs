@@ -204,27 +204,27 @@ impl Card {
             VcardPropKind::Bday => self.anniversary(prop, "birth"),
             VcardPropKind::Anniversary => self.anniversary(prop, "wedding"),
             VcardPropKind::Photo => {
-                self.resource(prop, |card| &mut card.media, "MediaResource", Some("photo"))
+                self.resource(prop, |card| &mut card.media, "Media", Some("photo"))
             }
             VcardPropKind::Logo => {
-                self.resource(prop, |card| &mut card.media, "MediaResource", Some("logo"))
+                self.resource(prop, |card| &mut card.media, "Media", Some("logo"))
             }
             VcardPropKind::Sound => {
-                self.resource(prop, |card| &mut card.media, "MediaResource", Some("sound"))
+                self.resource(prop, |card| &mut card.media, "Media", Some("sound"))
             }
             VcardPropKind::Key => {
-                self.resource(prop, |card| &mut card.crypto_keys, "CryptoResource", None)
+                self.resource(prop, |card| &mut card.crypto_keys, "CryptoKey", None)
             }
             VcardPropKind::CalUri => self.resource(
                 prop,
                 |card| &mut card.calendars,
-                "CalendarResource",
+                "Calendar",
                 Some("calendar"),
             ),
             VcardPropKind::FbUrl => self.resource(
                 prop,
                 |card| &mut card.calendars,
-                "CalendarResource",
+                "Calendar",
                 Some("freeBusy"),
             ),
             VcardPropKind::CalAdrUri => self.resource(
@@ -233,11 +233,11 @@ impl Card {
                 "SchedulingAddress",
                 None,
             ),
-            VcardPropKind::Url => self.resource(prop, |card| &mut card.links, "LinkResource", None),
+            VcardPropKind::Url => self.resource(prop, |card| &mut card.links, "Link", None),
             VcardPropKind::Source => self.resource(
                 prop,
                 |card| &mut card.directories,
-                "DirectoryResource",
+                "Directory",
                 Some("entry"),
             ),
             VcardPropKind::Categories => self.categories(prop),
@@ -566,8 +566,9 @@ impl Card {
     }
 
     /// A URI-valued resource property (PHOTO, KEY, URL, ...) as its
-    /// collection's Resource object; an inline 2.1 / 3.0 binary payload has
-    /// no URI to point at and is escaped.
+    /// collection's object, tagged with the type name RFC 9553 §2.6
+    /// registers for that collection; an inline 2.1 / 3.0 binary payload
+    /// has no URI to point at and is escaped.
     fn resource(
         &mut self,
         prop: &VcardProp<'_>,
@@ -932,7 +933,7 @@ fn nickname_value(value: Cow<'_, str>) -> VcardValue<'_> {
     VcardValue::TextList(VcardTextList(vec![value]))
 }
 
-/// The media property for a MediaResource kind.
+/// The media property for a Media kind.
 fn media_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     match kind {
         Some("photo") => Some(VcardPropKind::Photo),
@@ -942,7 +943,7 @@ fn media_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     }
 }
 
-/// The calendar property for a CalendarResource kind.
+/// The calendar property for a Calendar kind.
 fn calendar_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     match kind {
         Some("calendar") => Some(VcardPropKind::CalUri),
@@ -951,7 +952,7 @@ fn calendar_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     }
 }
 
-/// The directory property for a DirectoryResource kind.
+/// The directory property for a Directory kind.
 fn directory_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     match kind {
         Some("entry") => Some(VcardPropKind::Source),
@@ -959,7 +960,7 @@ fn directory_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     }
 }
 
-/// A kind-less CryptoResource is a KEY.
+/// A kind-less CryptoKey is a KEY.
 fn crypto_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     kind.is_none().then_some(VcardPropKind::Key)
 }
@@ -969,7 +970,7 @@ fn scheduling_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     kind.is_none().then_some(VcardPropKind::CalAdrUri)
 }
 
-/// A kind-less LinkResource is a URL.
+/// A kind-less Link is a URL.
 fn link_kind(kind: Option<&str>) -> Option<VcardPropKind> {
     kind.is_none().then_some(VcardPropKind::Url)
 }
@@ -1476,8 +1477,10 @@ impl<'a> Import<'a> {
         }
     }
 
-    /// A Resource collection back to its URI-valued property, the property
-    /// picked from the entry's `kind` member.
+    /// A resource collection back to its URI-valued property, the property
+    /// picked from the entry's `kind` member. The entry's `@type` is
+    /// ignored, so a Card written against an earlier JSContact draft
+    /// converts back just as well.
     fn resources(
         &mut self,
         prefix: &str,
@@ -2116,10 +2119,10 @@ mod tests {
                 },
                 "keywords": { "developer": true, "ietf": true },
                 "notes": { "1": { "@type": "Note", "note": "Hello" } },
-                "links": { "1": { "@type": "LinkResource", "uri": "https://example.com" } },
+                "links": { "1": { "@type": "Link", "uri": "https://example.com" } },
                 "cryptoKeys": {
                     "1": {
-                        "@type": "CryptoResource",
+                        "@type": "CryptoKey",
                         "uri": "https://example.com/key.asc",
                         "mediaType": "application/pgp-keys",
                     },
@@ -2130,6 +2133,52 @@ mod tests {
                 ],
             }),
         );
+    }
+
+    #[test]
+    fn tags_resource_objects_with_their_rfc_type_names() {
+        let input = concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:4.0\r\n",
+            "FN:John\r\n",
+            "PHOTO:https://example.com/photo.png\r\n",
+            "KEY:https://example.com/key.asc\r\n",
+            "CALURI:https://example.com/cal.ics\r\n",
+            "CALADRURI:mailto:john@example.com\r\n",
+            "URL:https://example.com\r\n",
+            "SOURCE:https://example.com/john.vcf\r\n",
+            "END:VCARD\r\n",
+        );
+        let cst = VcardCst::parse(input).unwrap();
+        let card = cst.decode().to_jscontact();
+
+        // RFC 9553 §2.6 registers these names; the pre-RFC drafts spelled
+        // them `MediaResource`, `CryptoResource` and so on, and a strict
+        // server (Fastmail) rejects the draft spelling outright.
+        assert_eq!(card["media"]["1"]["@type"], json!("Media"));
+        assert_eq!(card["cryptoKeys"]["1"]["@type"], json!("CryptoKey"));
+        assert_eq!(card["calendars"]["1"]["@type"], json!("Calendar"));
+        assert_eq!(
+            card["schedulingAddresses"]["1"]["@type"],
+            json!("SchedulingAddress")
+        );
+        assert_eq!(card["links"]["1"]["@type"], json!("Link"));
+        assert_eq!(card["directories"]["1"]["@type"], json!("Directory"));
+    }
+
+    #[test]
+    fn reads_back_a_resource_written_with_a_draft_type_name() {
+        let card = json!({
+            "@type": "Card",
+            "version": "1.0",
+            "links": { "1": { "@type": "LinkResource", "uri": "https://example.com" } },
+        });
+        let vcard = Vcard::from_jscontact(&card).unwrap();
+
+        // Import ignores `@type`, so a Card written by an older version
+        // still converts back to URL rather than falling into JSPROP.
+        let names: Vec<&str> = vcard.properties.iter().map(|prop| &*prop.name).collect();
+        assert_eq!(names, ["URL"]);
     }
 
     #[test]

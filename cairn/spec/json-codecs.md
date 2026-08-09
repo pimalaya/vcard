@@ -41,6 +41,17 @@ The type slot goes back to a `VALUE` parameter only where the wire form needs it
 - WHEN it is converted to a Card and back
 - THEN the property returns unchanged, having travelled through `vCardProps`
 
+### Requirement: Object types are spelled as the RFC names them
+
+Every `@type` the JSContact export emits SHALL be the object type name RFC 9553 registers, never a name from an earlier draft. The URI-valued resource collections SHALL therefore be tagged `Media`, `CryptoKey`, `Calendar`, `Link` and `Directory`.
+
+Import stays liberal and ignores `@type` entirely, so a Card written with a draft-era name still converts back unchanged.
+
+#### Scenario: A card carrying a URL
+- GIVEN a card carrying `URL:https://example.org`
+- WHEN it is converted to a JSContact Card
+- THEN the entry under `links` is tagged `"@type": "Link"`
+
 ### Requirement: RFC 9554 is modeled first-class, not escaped
 
 The RFC 9554 properties (`CREATED`, `GRAMGENDER`, `LANGUAGE`, `PRONOUNS`, `SOCIALPROFILE`), its parameters, and the RFC 9555 `JSPROP` property and `JSPTR` parameter SHALL each have a lens marker and spec, so the JSContact conversion maps them directly instead of dropping them into the escape hatch.
