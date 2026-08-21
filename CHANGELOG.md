@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Fixed the JSContact export tagging every URI-valued resource object with a pre-RFC draft type name.
 
-  `MediaResource` (PHOTO, LOGO, SOUND), `CryptoResource` (KEY), `CalendarResource` (CALURI, FBURL), `LinkResource` (URL) and `DirectoryResource` (SOURCE) are now `Media`, `CryptoKey`, `Calendar`, `Link` and `Directory`, as RFC 9553 §2.6 registers them. A strict server rejects the draft spelling outright, so a contact carrying so much as a `URL` could not be written over JMAP. Import is unchanged and still ignores `@type`, so a Card produced by an earlier version converts back exactly as before.
+  `MediaResource`, `CryptoResource`, `CalendarResource`, `LinkResource` and `DirectoryResource` are now `Media`, `CryptoKey`, `Calendar`, `Link` and `Directory`, as RFC 9553 §2.6 registers them; a strict server rejected the draft spelling, so a contact carrying so much as a `URL` could not be written over JMAP. Import still ignores `@type`, so an earlier Card converts back unchanged.
 
 ## [0.2.0] - 2026-08-08
 
@@ -26,7 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Moved the flattened re-exports onto their real module paths.
 
-  `tree::param::lens`, `tree::param::node`, `tree::prop::cardinality`, `tree::prop::lens`, `tree::prop::spec`, `tree::value::cursor` and `tree::value::node` are public modules, and the module name is now part of the public path (`tree::prop::lens::VcardPropLens`, `tree::value::cursor::VcardValueCursor`). The `#[doc(inline)] pub use` re-exports that hid them are gone.
+  The lens, spec, cardinality, node and cursor types now carry the module that owns them (`tree::prop::lens::VcardPropLens`, `tree::value::cursor::VcardValueCursor`), and the `#[doc(inline)] pub use` re-exports that hid those modules are gone.
 
 - Bumped `base64` from 0.22 to 0.23, which moves the `base64::DecodeError` that `VcardBinary::decode_base64` returns.
 
@@ -40,31 +40,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added the version-agnostic decoded model, available without the `parser` feature.
 
-  A `Vcard` is a version plus a list of `VcardProp` (a name, parameters and one value). Parameters and values are the open `VcardParam` and `VcardValue` enums, each with an `Unknown` arm so anything outside the model survives, alongside the structured value types `VcardN`, `VcardAdr`, `VcardGender`, `VcardOrg`, `VcardGeo`, `VcardClientPidMap`, `VcardBinary`, `VcardDateAndOrTime`, `VcardTimestamp`, `VcardUtcOffset`, `VcardText`, `VcardTextList`, `VcardUri` and `VcardLanguageTag`.
+  A `Vcard` is a version plus a list of `VcardProp` (a name, parameters and one value). `VcardParam` and `VcardValue` are open enums with an `Unknown` arm, beside the structured value types `VcardN`, `VcardAdr`, `VcardGender`, `VcardOrg`, `VcardClientPidMap` and the scalar ones.
 
 - Added the closed `VcardPropKind`, `VcardParamKind`, `VcardValueKind` and `VcardVersion` vocabularies.
 
-  Each reaches its wire spelling through `FromStr` and `Deref<str>`, and `VcardValue::kind` / `VcardParam::kind` recover the kind of an open value or parameter. `VcardPropName` holds either a known `VcardPropKind` or a verbatim unknown name; an unrecognised or missing card version normalises to `VcardVersion::V4_0` in the decoded model, while byte-faithful round-tripping stays on the syntax tree.
+  Each reaches its wire spelling through `FromStr` and `Deref<str>`, and `VcardValue::kind` / `VcardParam::kind` recover the kind of an open value or parameter. An unknown name is kept verbatim, and an unrecognised or missing card version normalises to `VcardVersion::V4_0`.
 
 - Added the per-property `VcardPropSpec` contract on the lens markers.
 
-  It declares the versions a property lives in, its `VcardPropCardinality` (version-forked where RFC 6350 forks it, as for `FN` and `N`), the value kinds and parameters it allows per version, and the value kind in force for a declared `VALUE`. `VcardPropKind::ALL` enumerates every known property.
+  It declares the versions a property lives in, its `VcardPropCardinality` (version-forked where RFC 6350 forks it, as for `FN` and `N`), the value kinds and parameters it allows per version, and the value kind in force for a declared `VALUE`.
 
 - Added `Vcard::validate`, an RFC 6350 conformance check over the decoded model.
 
-  It verifies per-version property existence, value kind, version-aware parameters and cardinality (including required-but-absent) while still permitting extensions. A card that passes earns `Valid<Vcard>`, a proof only validation can mint (`TryFrom<Vcard>`); both `Vcard` and `Valid<Vcard>` convert into a `VcardCst`.
+  It verifies per-version property existence, value kind, version-aware parameters and cardinality, including required-but-absent, while extensions pass. A card that passes earns `Valid<Vcard>`, which only validation can mint.
 
 - Added `VcardPropBuilder`, a version-aware, spec-driven builder for strict construction.
 
-  It pins the property name and reuses the per-property validation, rejecting a disallowed value kind or known parameter through `Result` while still accepting extension parameters.
+  It pins the property name and reuses the per-property validation, rejecting a disallowed value kind or known parameter while still accepting extension parameters.
 
 - Added the byte-faithful syntax tree behind the `parser` feature (on by default).
 
-  `VcardCst` parses bytes or text into a tree that reproduces the wire exactly, decodes onto the model, encodes back to a canonical tree, and edits one property in place through per-property lenses and byte-preserving cursors. `to_bytes` is the byte-faithful serializer, while `Display` / `to_string` is a convenience that is lossy only for a non-UTF-8 value.
+  `VcardCst` parses bytes or text into a tree that reproduces the wire exactly, decodes onto the model, encodes back, and edits one property in place through per-property lenses and byte-preserving cursors. `to_bytes` is the faithful serializer; `Display` is a convenience that is lossy only for a non-UTF-8 value.
 
 - Added raw-byte value handling for foreign character sets.
 
-  A property value is kept as bytes, so a value in a vCard 2.1 `CHARSET` survives byte for byte, while a name or parameter must be UTF-8 (a non-UTF-8 one is a parse error). `VcardValueCursor::bytes` and `set_bytes` are the byte escape hatch.
+  A property value is kept as bytes, so a vCard 2.1 `CHARSET` survives byte for byte, while a name or parameter must be UTF-8; `VcardValueCursor::bytes` and `set_bytes` are the escape hatch.
 
 - Added multi-card and bare-record parsing.
 
@@ -74,23 +74,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added the three-way merge `tree::merge::merge`.
 
-  It diffs two divergent edits of a card against their common base into per-side `VcardMergeAction` lists, matches property instances by PID then equality then position, and replays the right side onto a clone of the left through the byte-preserving edit layer. Divergent same-field changes are surfaced as `VcardMergeConflict`, where the left action wins except an update over a removal.
+  It diffs two divergent edits against their common base into per-side `VcardMergeAction` lists, matching property instances by PID then equality then position, and replays the right side onto a clone of the left byte-preservingly. A divergent same-field change becomes a `VcardMergeConflict`, where the left action wins except an update over a removal.
 
 - Added opt-in content-decoding features, each backed by a `no_std` crate.
 
-  `quoted-printable` decodes `=XX` octets (`VcardValueCursor::quoted_printable`), `base64` decodes inline binary values (`VcardBinary::decode_base64`), and `encoding` transcodes a foreign `CHARSET` (`VcardValueCursor::charset`, via `encoding_rs`). The core keeps such values raw and their parameters intact, so nothing is silently lost or transcoded.
+  `quoted-printable` decodes `=XX` octets, `base64` decodes inline binary values, and `encoding` transcodes a foreign `CHARSET`. The core keeps such values raw and their parameters intact, so nothing is silently transcoded.
 
 - Added the RFC 7095 jCard codec behind the `jcard` feature (off by default, requires `parser`).
 
-  `Vcard::to_jcard` writes the decoded model as a `serde_json::Value` and `Vcard::from_jcard` reads one back, borrowing the JSON and resolving value kinds through the property specs. Export follows the RFC (lowercased names, group prefix to the `group` parameter, `VALUE` to the type slot, dates re-spelled extended); import accepts anything structurally sound. `serde_json` is pulled in its `no_std` alloc-only mode.
+  `Vcard::to_jcard` and `from_jcard` project the decoded model to and from a `serde_json::Value`, resolving value kinds through the property specs. Export follows the RFC; import accepts anything structurally sound.
 
 - Added the RFC 9554 vocabulary, modeled first-class.
 
-  The `CREATED`, `GRAMGENDER`, `LANGUAGE`, `PRONOUNS` and `SOCIALPROFILE` properties and the `AUTHOR`, `AUTHOR-NAME`, `CREATED`, `DERIVED`, `PHONETIC`, `PROP-ID`, `SCRIPT`, `SERVICE-TYPE` and `USERNAME` parameters (plus the RFC 9555 `JSPROP` property and `JSPTR` parameter) each gain a lens marker and spec, and validation allows the property-agnostic RFC 9554 parameters on any 4.0 property. `VcardAdr` carries the full eighteen address components, writing the eleven extended slots only when one is filled.
+  The `CREATED`, `GRAMGENDER`, `LANGUAGE`, `PRONOUNS` and `SOCIALPROFILE` properties and the nine new parameters (plus the RFC 9555 `JSPROP` and `JSPTR`) each gain a lens marker and spec, and the property-agnostic ones are allowed on any 4.0 property. `VcardAdr` carries all eighteen address components, writing the extended slots only when one is filled.
 
 - Added the RFC 9555 JSContact conversion behind the `jscontact` feature (off by default, requires `jcard`).
 
-  `Vcard::to_jscontact` converts the decoded model into an RFC 9553 Card `serde_json::Value` and `Vcard::from_jscontact` converts one back; both directions are infallible aside from a non-object import root. `TYPE`, `PREF` and `PROP-ID` map to contexts and features, `pref`, and the object key, while unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams` (both in jCard syntax) and unknown Card members as `JSPROP` properties.
+  `Vcard::to_jscontact` and `from_jscontact` convert to and from an RFC 9553 Card, infallibly aside from a non-object import root. Unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams`, and unknown Card members as `JSPROP` properties.
 
 [unreleased]: https://github.com/pimalaya/vcard/compare/v0.2.1..HEAD
 [0.2.1]: https://github.com/pimalaya/vcard/compare/v0.2.0..v0.2.1
