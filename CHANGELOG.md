@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-21
+
 ### Fixed
 
 - Fixed the JSContact export tagging every URI-valued resource object with a pre-RFC draft type name.
@@ -90,6 +92,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `Vcard::to_jscontact` converts the decoded model into an RFC 9553 Card `serde_json::Value` and `Vcard::from_jscontact` converts one back; both directions are infallible aside from a non-object import root. `TYPE`, `PREF` and `PROP-ID` map to contexts and features, `pref`, and the object key, while unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams` (both in jCard syntax) and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.2.0..HEAD
+[unreleased]: https://github.com/pimalaya/vcard/compare/v0.2.1..HEAD
+[0.2.1]: https://github.com/pimalaya/vcard/compare/v0.2.0..v0.2.1
 [0.2.0]: https://github.com/pimalaya/vcard/compare/v0.1.0..v0.2.0
 [0.1.0]: https://github.com/pimalaya/vcard/compare/root..v0.1.0
