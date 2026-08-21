@@ -1,31 +1,30 @@
 //! # Three-way merge
 //!
-//! Diff two divergent edits of a card against their common base and
-//! reconcile them into one merged card.
+//! Diff two divergent edits of a card against their common base and reconcile
+//! them into one merged card.
 //!
-//! [`merge`] is the reconciliation unit a synchronisation engine needs: given
-//! a base card and two cards derived from it (left and right), it reports
-//! every change each side made relative to the base as a list of
-//! [`VcardMergeAction`]s, and builds a merged card. The merged card starts as
-//! a clone of the left card, so the left side's edits are present byte for
-//! byte; the right side's actions are then replayed onto it through the
-//! byte-preserving edit layer ([`crate::tree::value`]), so every field the
-//! right side did not touch keeps its exact bytes.
+//! Given a base card and two cards derived from it (left and right), [`merge`]
+//! reports every change each side made as a list of [`VcardMergeAction`]s and
+//! builds the merged card, the reconciliation unit a synchronisation engine
+//! needs. That card starts as a clone of the left one, so the left side's edits
+//! are present byte for byte; the right side's actions are then replayed onto it
+//! through the byte-preserving edit layer ([`crate::tree::value`]), so every
+//! field the right side did not touch keeps its exact bytes.
 //!
-//! Property instances of the same name are matched across cards by `PID`
-//! first (the RFC 6350 section 7 synchronisation identity), then by equality,
-//! then by position. Changes are diffed at the finest granularity the value
-//! shape allows: whole property, whole value, one component of a structured
-//! value, one item of a list value, one parameter, one item of a list
-//! parameter. List items merge as a set (both sides' additions and removals
-//! all apply), so they never conflict.
+//! Property instances of the same name are matched across cards by `PID` first
+//! (the RFC 6350 section 7 synchronisation identity), then by equality, then by
+//! position. Changes are diffed at the finest granularity the value shape
+//! allows: whole property, whole value, one component of a structured value, one
+//! item of a list value, one parameter, one item of a list parameter. List items
+//! merge as a set (both sides' additions and removals all apply), so they never
+//! conflict.
 //!
-//! Divergent changes to the same field are conflicts
-//! ([`VcardMergeConflict`]): the left action wins in the merged card, except
-//! when a removal meets an update, where the update wins (data survives over
-//! silent loss). Every conflict is reported either way, so a caller can
-//! resolve differently. The merged card keeps the left card's `VERSION`; a
-//! version change is not reconciled.
+//! Divergent changes to the same field are conflicts ([`VcardMergeConflict`]):
+//! the left action wins in the merged card, except when a removal meets an
+//! update, where the update wins (data survives over silent loss). Every
+//! conflict is reported either way, so a caller can resolve differently. The
+//! merged card keeps the left card's `VERSION`; a version change is not
+//! reconciled.
 
 use core::mem;
 

@@ -1,11 +1,10 @@
 //! # GEO lens
 //!
-//! The `GEO` property lens. Its value shape is version-specific, so the lens
-//! decodes through the card version: a `geo:` URI in 4.0
-//! ([`VcardValue::Uri`]), a `lat;long` coordinate pair in 2.1 / 3.0
-//! ([`VcardValue::Geo`]). The lens overrides
-//! [`decode`](VcardPropLens::decode) to resolve the shape from the version
-//! through the property spec.
+//! The `GEO` property lens: a geographic position. Its value shape is
+//! version-specific, so the lens overrides [`decode`](VcardPropLens::decode) to
+//! resolve it from the card version through the property spec: a `geo:` URI in
+//! 4.0 ([`VcardValue::Uri`]), a `lat;long` coordinate pair in 2.1 / 3.0
+//! ([`VcardValue::Geo`]).
 //!
 //! See RFC 6350 6.5.2.
 

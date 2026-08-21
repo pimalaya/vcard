@@ -3,11 +3,9 @@
 //! The decoded `CLIENTPIDMAP` value.
 //!
 //! `CLIENTPIDMAP` ties the PID source identifiers used by `PID` parameters to
-//! the client (a URI) that produced them. It is a structured RFC 6350 6.7.7
-//! value of two `;`-ordered components: a small integer source id and a URI.
-//! This bespoke type names the two parts. Pure, always-unescaped data; framing
-//! and escaping live on the syntax side ([`crate::tree`]). The wire name lives
-//! on [`crate::prop::VcardProp::name`].
+//! the client (a URI) that produced them: a structured RFC 6350 6.7.7 value of
+//! two `;`-ordered components, a small integer source id and a URI, which this
+//! bespoke type names.
 
 use alloc::borrow::Cow;
 

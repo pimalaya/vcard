@@ -3,10 +3,8 @@
 //! The decoded UTC-offset value kind.
 //!
 //! One of the forms the `TZ` property may take: a signed `hhmm` offset from UTC
-//! (RFC 6350 4.7; e.g. `-0500`). The offset is kept as its raw text; `TZ` may
-//! instead be plain text or a URI, decoded as the corresponding kinds. Pure
-//! data, no escaping; the owning property's wire name lives on
-//! [`crate::prop::VcardProp::name`].
+//! (RFC 6350 4.7; e.g. `-0500`), kept as its raw text. `TZ` may instead be plain
+//! text or a URI, decoded as the corresponding kinds.
 
 use alloc::{borrow::Cow, string::String};
 

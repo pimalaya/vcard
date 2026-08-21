@@ -4,18 +4,15 @@
 //!
 //! [`VcardLine`] is the syntactic unit a property occupies. It owns the line
 //! tokeniser ([`take`](VcardLine::take), which splits one logical line off the
-//! remaining input for [`VcardCst::parse`](crate::tree::cst::VcardCst::parse),
-//! unfolding any RFC 6350 3.2 folded continuation lines) and the head splitter
-//! that separates the name from its parameters. It exposes its raw value and
-//! typed parameter access by lens, but stays generic: the meaning of the name
-//! and the decoding of the value belong to the lens markers and the
-//! [`decode`](crate::tree::codec::decode) /
-//! [`encode`](crate::tree::codec::encode) bridges.
+//! remaining input, unfolding RFC 6350 3.2 continuations) and the head splitter
+//! separating the name from its parameters, but stays generic: what the name
+//! means and how the value decodes belong to the lens markers and the
+//! [`codec`](crate::tree::codec).
 //!
-//! Folding and stray blank lines are normalised away on parse, not preserved: a
-//! folded line unfolds to its logical content, blank lines are dropped, and the
-//! final line needs no trailing break. A clean, unfolded card still round-trips
-//! byte for byte.
+//! Folding and stray blank lines are normalised away on parse rather than
+//! preserved: a folded line unfolds to its logical content, blank lines are
+//! dropped, and the final line needs no trailing break. A clean, unfolded card
+//! still round-trips byte for byte.
 
 use core::{fmt, str};
 

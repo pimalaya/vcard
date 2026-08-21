@@ -3,11 +3,10 @@
 //! The parsing errors.
 //!
 //! [`VcardParseError`] is the single error type returned by `VcardCst::parse`
-//! and the line tokeniser it drives. Each variant pinpoints one structural
-//! failure (a missing CRLF, a missing colon, an absent or malformed envelope)
-//! and carries the offending text for context. Parsing is the only fallible
-//! bridge in the crate; decoding, encoding and serializing never fail, so this
-//! is the whole error surface.
+//! and the line tokeniser it drives, each variant pinpointing one structural
+//! failure and carrying the offending text. Parsing is the only fallible bridge
+//! in the crate: decoding, encoding and serializing never fail, so this is the
+//! whole error surface.
 
 use core::{error, fmt};
 

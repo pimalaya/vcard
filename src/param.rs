@@ -2,16 +2,13 @@
 //!
 //! A decoded parameter and the RFC 6350 parameter-name vocabulary.
 //!
-//! [`VcardParam`] is a closed set of the parameters defined by RFC 6350, one
+//! [`VcardParam`] is a closed set of the parameters the RFCs define, one
 //! variant each, plus an [`Unknown`](VcardParam::Unknown) arm so anything else
 //! round-trips. Parameters are few and simple (a text, a list, a small
 //! integer), so unlike properties each variant carries its value directly
 //! rather than through a shared value type; the variant itself names the
 //! parameter. A known name is the closed [`VcardParamKind`], reached through
-//! `FromStr` and `Deref`; the lens markers in [`crate::tree::param`] carry the
-//! kind to match, and the decode registry parses a raw name onto its variant.
-//!
-//! This module is pure model: no dependency on [`crate::tree`].
+//! `FromStr` and `Deref`. Pure model, no [`crate::tree`] dependency.
 
 use core::{error, fmt, ops, str};
 

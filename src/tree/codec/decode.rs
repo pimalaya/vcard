@@ -2,17 +2,15 @@
 //!
 //! The read side of the structural bridge: project a raw syntax tree onto the
 //! decoded model. A [`VcardValueNode`] decodes its components, a
-//! [`VcardParamNode`] decodes into a [`VcardParam`], a [`VcardLine`] decodes
-//! into a [`VcardProp`], and a [`VcardCst`] decodes into a whole [`Vcard`].
+//! [`VcardParamNode`] decodes into a [`VcardParam`], a [`VcardLine`] into a
+//! [`VcardProp`], and a [`VcardCst`] into a whole [`Vcard`].
 //!
 //! A property's value kind is resolved through its spec, not a name match:
-//! [`VcardLine::decode`] maps the name to a [`VcardPropKind`], asks the spec
-//! for the in-force value kind (version plus any declared `VALUE`), then routes
-//! to that kind's decoder. The parameter name dispatch is the match in
-//! [`VcardParamNode::decode`]. Value escapes are resolved by the sibling
-//! [`unescape`](crate::tree::codec::unescape) codec; content transfer
-//! encodings (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are left to the
-//! feature helpers.
+//! [`VcardLine::decode`] maps the name to a [`VcardPropKind`], asks the spec for
+//! the in-force value kind (version plus any declared `VALUE`), then routes to
+//! that kind's decoder. Value escapes are resolved by the sibling
+//! [`unescape`](crate::tree::codec::unescape) codec; content transfer encodings
+//! (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are left to the feature helpers.
 
 use alloc::{borrow::Cow, vec::Vec};
 

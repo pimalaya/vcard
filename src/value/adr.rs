@@ -3,15 +3,12 @@
 //! The decoded `ADR` (structured address) value.
 //!
 //! `ADR` is a structured value of `;`-ordered components, each a possibly
-//! multi-valued `,`-separated list: seven in RFC 6350 6.3.1 (post office
-//! box, extended address, street, locality, region, postal code, country;
-//! the first two deprecated but kept for round-tripping), extended to
-//! eighteen by RFC 9554 (room, apartment, floor, street number, street name,
-//! building, block, subdistrict, district, landmark, direction). This
-//! bespoke type names the components so callers read `adr.street` rather
-//! than indexing. Pure, always-unescaped data; framing and escaping live on
-//! the syntax side ([`crate::tree`]). The wire name lives on
-//! [`crate::prop::VcardProp::name`].
+//! multi-valued `,`-separated list: seven in RFC 6350 6.3.1 (post office box,
+//! extended address, street, locality, region, postal code, country; the first
+//! two deprecated but kept for round-tripping), extended to eighteen by RFC
+//! 9554 (room, apartment, floor, street number, street name, building, block,
+//! subdistrict, district, landmark, direction). This bespoke type names them,
+//! so callers read `adr.street` rather than indexing.
 
 use alloc::{borrow::Cow, vec::Vec};
 

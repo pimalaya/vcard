@@ -3,29 +3,27 @@
 //! Strict, version-aware construction of a whole card and of a single property.
 //!
 //! [`VcardBuilder`] assembles a card in one fluent chain: `new(version)` fixes
-//! the version once, then `prop::<L>()` opens a property segment keyed by a
-//! lens marker, `param` decorates it, and `value` closes it and returns to the
-//! card level. Because `value` yields the card builder and `prop` consumes it,
-//! the phases are enforced by the type system: a `param` before any `prop`, or
-//! a `build` with a property left half-open, does not compile.
+//! the version once, then `prop::<L>()` opens a property segment keyed by a lens
+//! marker, `param` decorates it, and `value` closes it and returns to the card
+//! level. Since `value` yields the card builder and `prop` consumes it, the
+//! phases are enforced by the type system: a `param` before any `prop`, or a
+//! `build` with a property left half-open, does not compile.
 //! [`build`](VcardBuilder::build) runs the same whole-card
 //! [`Vcard::validate`](crate::vcard::Vcard::validate) as any other decoded card
 //! and hands back the [`VcardValid`] proof;
 //! [`build_unchecked`](VcardBuilder::build_unchecked) is the escape hatch that
 //! skips the check.
 //!
-//! [`VcardPropBuilder`] is the single-property piece underneath, and the
-//! write-side counterpart of the lenses: keyed by the same zero-sized markers,
-//! it carries the card version and accumulates parameters, then emits an open
-//! [`VcardProp`]. Construction is the strict half of "liberal in, strict out":
-//! the name is pinned by the marker's [`VcardPropSpec`], and
+//! [`VcardPropBuilder`] is the single-property piece underneath, the write-side
+//! counterpart of the lenses: keyed by the same zero-sized markers, it carries
+//! the card version, accumulates parameters, and emits an open [`VcardProp`].
+//! Its name is pinned by the marker's [`VcardPropSpec`], and
 //! [`build`](VcardPropBuilder::build) runs the shared per-property check
-//! ([`validate_prop`](crate::tree::vcard::validate)) so the value kind and
+//! ([`validate_prop`](crate::tree::vcard::validate)), so the value kind and
 //! every known parameter must be allowed for the version (unknown, extension
 //! parameters pass). To emit something the spec forbids, construct the open
 //! [`VcardProp`] by hand. The version is a value the builders carry, never a
 //! type parameter.
-//!
 //! # Example
 //!
 //! ```rust

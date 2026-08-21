@@ -5,19 +5,17 @@
 //! [`VcardValue`] is the semantic counterpart of a content line's raw value
 //! (the syntactic
 //! [`VcardValueNode`](crate::tree::value::node::VcardValueNode)). Most
-//! properties share a small set of value kinds: a single text, a text list, a
-//! URI, a date/time, a timestamp, a UTC offset, a language tag. A handful are
-//! genuinely structured and get their own bespoke types ([`n::VcardN`],
+//! properties share a small set of kinds: a single text, a text list, a URI, a
+//! date/time, a timestamp, a UTC offset, a language tag. The genuinely
+//! structured ones get a bespoke type in a submodule here ([`n::VcardN`],
 //! [`adr::VcardAdr`], [`gender::VcardGender`], [`org::VcardOrg`],
-//! [`client_pid_map::VcardClientPidMap`]), each in a submodule here. Anything
-//! the model does not decode falls back to [`Unknown`](VcardValue::Unknown),
-//! which keeps the raw components so it round-trips.
+//! [`client_pid_map::VcardClientPidMap`]). Anything the model does not decode
+//! falls back to [`Unknown`](VcardValue::Unknown), which keeps the raw
+//! components so it round-trips.
 //!
-//! These types carry no wire name and no escaping: the property name lives on
-//! [`VcardProp::name`](crate::prop::VcardProp::name), and the escaping and
-//! framing live on the syntax side ([`crate::tree`]). That keeps the whole
-//! decoded model free of any dependency on `tree`, so it can be used on its
-//! own.
+//! These types carry no wire name and no escaping: the name lives on
+//! [`VcardProp::name`](crate::prop::VcardProp::name), the escaping and framing
+//! on the syntax side, so the decoded model stays free of [`crate::tree`].
 
 pub mod adr;
 pub mod binary;

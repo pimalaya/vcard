@@ -8,7 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Fixed the JSContact export tagging every URI-valued resource object with a pre-RFC draft type name: `MediaResource` (PHOTO, LOGO, SOUND), `CryptoResource` (KEY), `CalendarResource` (CALURI, FBURL), `LinkResource` (URL) and `DirectoryResource` (SOURCE) are now `Media`, `CryptoKey`, `Calendar`, `Link` and `Directory`, as RFC 9553 §2.6 registers them. A strict server rejects the draft spelling outright, so a contact carrying so much as a `URL` could not be written over JMAP. Import is unchanged and still ignores `@type`, so a Card produced by an earlier version converts back exactly as before.
+- Fixed the JSContact export tagging every URI-valued resource object with a pre-RFC draft type name.
+
+  `MediaResource` (PHOTO, LOGO, SOUND), `CryptoResource` (KEY), `CalendarResource` (CALURI, FBURL), `LinkResource` (URL) and `DirectoryResource` (SOURCE) are now `Media`, `CryptoKey`, `Calendar`, `Link` and `Directory`, as RFC 9553 §2.6 registers them. A strict server rejects the draft spelling outright, so a contact carrying so much as a `URL` could not be written over JMAP. Import is unchanged and still ignores `@type`, so a Card produced by an earlier version converts back exactly as before.
 
 ## [0.2.0] - 2026-08-08
 

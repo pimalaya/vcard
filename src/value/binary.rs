@@ -8,7 +8,7 @@
 //! as `data:` URIs instead, decoded to
 //! [`VcardUri`](crate::value::uri::VcardUri). The form is told by the line's
 //! `VALUE` / `ENCODING` parameters; the payload is kept verbatim (base64 is not
-//! decoded to bytes). Pure data; escaping lives entirely on the syntax side.
+//! decoded to bytes).
 
 use alloc::borrow::Cow;
 

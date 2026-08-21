@@ -1,11 +1,10 @@
 //! # vCard
 //!
-//! The decoded card and the wire names that frame it.
+//! The decoded card: a version indicator and its properties, in source order.
 //!
-//! A [`Vcard`] is just a version indicator and an ordered list of properties;
-//! the property, value, parameter and version types each live in their own
-//! sibling module. Like the rest of the decoded model it has no dependency on
-//! [`crate::tree`]; rendering a `Vcard` back to bytes is provided by a
+//! The property, value, parameter and version types live in the sibling
+//! modules. Like the rest of the decoded model, [`Vcard`] has no dependency on
+//! [`crate::tree`]; rendering it back to bytes is a
 //! [`Display`](core::fmt::Display) impl that lives on the syntax side.
 
 use alloc::vec::Vec;

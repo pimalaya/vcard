@@ -4,21 +4,17 @@
 //!
 //! [`VcardValueNode`] is the syntactic peer of the decoded
 //! [`VcardValue`](crate::value::VcardValue): the bytes after a line's colon,
-//! understood as `;`-separated components of `,`-separated
+//! read as `;`-separated components of `,`-separated
 //! [`crate::tree::leaf::VcardValueLeaf`] values (raw bytes, so a foreign
-//! charset survives). Straight from parse the value is kept as one
-//! unsplit `raw` slice and only walked on demand; an edit or a model encode
-//! splits it into owned `components`, which then become the source of truth.
-//! Either way the splitting is generic (it counts and preserves separators so
-//! the value round-trips); what those components *mean* is the lens's business.
-//! The codec that unescapes components into decoded values ([`decode_at`],
-//! [`decode_scalar_at`]) and re-escapes edits back ([`set_at`]) lives on this
-//! type; the escaping rules it applies come from the sibling
-//! [`mode`](crate::tree::codec::mode) codec.
+//! charset survives). Straight from parse the value stays one unsplit slice
+//! walked on demand; an edit or a model encode splits it into owned components,
+//! which then become the source of truth. The splitting is generic, counting
+//! and preserving separators so the value round-trips; what the components
+//! *mean* is the lens's business.
 //!
-//! [`decode_at`]: VcardValueNode::decode_at
-//! [`decode_scalar_at`]: VcardValueNode::decode_scalar_at
-//! [`set_at`]: VcardValueNode::set_at
+//! The codec that unescapes components into decoded values and re-escapes edits
+//! back lives on this type, applying the rules of the sibling
+//! [`mode`](crate::tree::codec::mode) codec.
 
 use core::fmt;
 
@@ -40,8 +36,9 @@ use crate::tree::{
 /// From parse it is one unsplit `raw` slice, walked lazily, so a parse that
 /// never decodes and a byte-faithful reserialize split nothing. The first edit
 /// (or a model encode) splits it into owned `components`, which then take over.
-/// `escaper` records which version's escaping rules to apply, stamped from the
-/// card version after parsing.
+/// A write touches only the leaf or component it names, so everything else
+/// keeps its parsed bytes. `escaper` records which version's escaping rules to
+/// apply, stamped from the card version after parsing.
 #[derive(Clone, Debug, Default)]
 pub struct VcardValueNode<'a> {
     /// The unsplit value bytes, straight from parse and authoritative until an
@@ -178,9 +175,8 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
-    /// Set the `i`th component, escaping each value. Pads with empty components
-    /// when needed; every other component is left untouched, so a parsed card
-    /// keeps its bytes.
+    /// Set the `i`th component, escaping each value and padding with empty
+    /// components when needed.
     pub fn set_at<S: AsRef<str>>(&mut self, i: usize, values: &[S]) {
         self.materialize();
 
@@ -220,9 +216,8 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
-    /// Replace the `j`th value of the `i`th component in place, re-escaping
-    /// only that leaf; every sibling value keeps its parsed bytes. Pads with
-    /// empty values when `j` is past the end.
+    /// Replace the `j`th value of the `i`th component in place, re-escaping only
+    /// that leaf. Pads with empty values when `j` is past the end.
     pub fn set_value_at<S: AsRef<str>>(&mut self, i: usize, j: usize, value: S) {
         let escaper = self.escaper;
         let component = self.component_mut(i);
@@ -235,8 +230,7 @@ impl<'a> VcardValueNode<'a> {
     }
 
     /// Insert a value at position `j` of the `i`th component (clamped to the
-    /// end), escaping only the new leaf and leaving every sibling's bytes
-    /// untouched.
+    /// end), escaping only the new leaf.
     pub fn insert_value_at<S: AsRef<str>>(&mut self, i: usize, j: usize, value: S) {
         let escaper = self.escaper;
         let component = self.component_mut(i);
@@ -245,8 +239,7 @@ impl<'a> VcardValueNode<'a> {
         component.insert(at, encode_leaf(value, escaper));
     }
 
-    /// Append a value to the `i`th component, escaping only the new leaf and
-    /// leaving every sibling's bytes untouched.
+    /// Append a value to the `i`th component, escaping only the new leaf.
     pub fn push_value<S: AsRef<str>>(&mut self, i: usize, value: S) {
         let escaper = self.escaper;
         let component = self.component_mut(i);
@@ -254,9 +247,8 @@ impl<'a> VcardValueNode<'a> {
         component.push(encode_leaf(value, escaper));
     }
 
-    /// Remove the `j`th value of the `i`th component, splicing it out and
-    /// leaving every sibling's bytes untouched; a no-op when either index is
-    /// out of range.
+    /// Remove the `j`th value of the `i`th component, splicing it out; a no-op
+    /// when either index is out of range.
     pub fn remove_value_at(&mut self, i: usize, j: usize) {
         self.materialize();
 

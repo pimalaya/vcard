@@ -1,7 +1,7 @@
 //! # Property lenses
 //!
 //! The property lens contract, the per-property spec, and one hand-written
-//! module per RFC 6350 property.
+//! module per property the crate knows.
 //!
 //! [`VcardPropLens`](lens::VcardPropLens) ties a wire name to a decoded value
 //! type plus the `decode` projection and an edit cursor; each property
@@ -9,12 +9,11 @@
 //! [`VcardCst::prop`](crate::tree::cst::VcardCst::prop). Scalar, list and URI
 //! properties share the generic
 //! [`VcardValueCursor`](crate::tree::value::cursor::VcardValueCursor); the
-//! structured ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor that
-//! names their components. The per-property contract is
+//! structured ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor naming
+//! their components. The per-property contract is
 //! [`VcardPropSpec`](spec::VcardPropSpec), with the
 //! [`VcardPropCardinality`](cardinality::VcardPropCardinality) multiplicity
-//! axis; the name dispatch for whole-card decoding lives in
-//! [`crate::tree::codec::decode`].
+//! axis.
 
 pub mod adr;
 pub mod agent;

@@ -3,15 +3,15 @@
 
 //! # vcard-rs
 //!
-//! A single, version-agnostic vCard library: one decoded model and one
-//! byte-faithful syntax tree, reading and writing vCard 2.1 (versitcard), 3.0
-//! (RFC 2426) and 4.0 (RFC 6350) alike. The version is a decoded indicator,
-//! never a type parameter or a dialect: the syntax tree ignores it, and only
-//! the codec and the per-property spec branch on it. The crate is `no_std`
-//! (with `alloc`) and its core is dependency-free; every dependency sits
-//! behind an opt-in feature ([Cargo features](#cargo-features)).
+//! One version-agnostic vCard library: a decoded model and a byte-faithful
+//! syntax tree, reading and writing vCard 2.1 (versitcard), 3.0 (RFC 2426) and
+//! 4.0 (RFC 6350) alike. The version is a decoded indicator, never a type
+//! parameter: the tree ignores it, and only the codec and the per-property spec
+//! branch on it. The crate is `no_std` (with `alloc`), its core is
+//! dependency-free, and every dependency sits behind a
+//! [cargo feature](#cargo-features).
 //!
-//! This header is the architecture. The behaviour behind it is specified
+//! This header is the architecture; the behaviour behind it is specified
 //! capability by capability in the repository's cairn/spec folder.
 //!
 //! ## Example
@@ -38,17 +38,17 @@
 //! ## Postel's law
 //!
 //! Parsing is maximally liberal: any real card round-trips byte for byte,
-//! including vocabulary no version defines, and the model keeps that openness
-//! through an `Unknown` arm on every open enum. Strictness lives only on the
-//! way out, in two runtime steps: the builder refuses to construct a property
-//! the spec forbids, and [`validate`](tree::vcard::validate) checks a decoded
-//! card against its version's RFC contract.
+//! including vocabulary no version defines, and an `Unknown` arm on every open
+//! enum carries that openness into the model. Strictness lives on the way out:
+//! the builder refuses to construct a property the spec forbids, and
+//! [`validate`](tree::vcard::validate) checks a decoded card against its
+//! version's RFC contract.
 //!
 //! ## The two layers
 //!
 //! The decoded model ([`vcard`], [`version`], [`prop`], [`param`], [`value`])
-//! is pure data with no dependency on the syntax side, so it can be depended
-//! on alone. Names, parameter names and value types are closed enums
+//! is pure data, with no dependency on the syntax side, so it can be depended
+//! on alone. Property names, parameter names and value kinds are closed enums
 //! ([`VcardPropKind`](prop::VcardPropKind),
 //! [`VcardParamKind`](param::VcardParamKind),
 //! [`VcardValueKind`](value::VcardValueKind)) reaching their wire spelling
@@ -69,18 +69,18 @@
 //! three-way [`merge`](tree::merge::merge) reconciles two divergent copies on
 //! top of those same edits.
 //!
-//! A property *value* is raw bytes, so a foreign charset (a vCard 2.1
-//! `CHARSET`) survives; a name or parameter must be UTF-8, as every grammar
-//! guarantees. So [`to_bytes`](tree::cst::VcardCst::to_bytes) is the faithful
-//! serializer, and [`Display`](core::fmt::Display) is a convenience that is
-//! lossy only for a non-UTF-8 value.
+//! A property value is raw bytes, so a foreign charset (a vCard 2.1 `CHARSET`)
+//! survives; a name or parameter must be UTF-8, as every grammar guarantees.
+//! [`to_bytes`](tree::cst::VcardCst::to_bytes) is therefore the faithful
+//! serializer, and [`Display`](core::fmt::Display) a convenience that is lossy
+//! only for a non-UTF-8 value.
 //!
 //! ## The spec layer
 //!
 //! Each property carries a [`VcardPropSpec`](tree::prop::spec::VcardPropSpec)
-//! on its lens marker, declaring per version what it allows. One vtable
+//! on its lens marker, declaring per version what it allows, and one vtable
 //! dispatch bridges the open [`VcardPropKind`](prop::VcardPropKind) back to
-//! those static specs, so one source of truth has three readers: the decoder
+//! those static specs. That one source of truth has three readers: the decoder
 //! picks a value kind from it, [`validate`](tree::vcard::validate) checks
 //! conformance against it, and the builder rejects illegal construction with
 //! it. A card that passes earns a
@@ -94,26 +94,26 @@
 //! and a `CHARSET` are surfaced raw with their parameters kept, so nothing is
 //! silently transcoded. Only the value grammar (escapes and folding) is
 //! resolved, because that is parsing. Decoding is opt-in, one small `no_std`
-//! crate per feature (see [Cargo features](#cargo-features)):
+//! crate per feature:
 //! [`quoted_printable`](tree::value::cursor::VcardValueCursor::quoted_printable)
 //! and [`charset`](tree::value::cursor::VcardValueCursor::charset) on the value
-//! cursor, and [`decode_base64`](value::binary::VcardBinary::decode_base64) on
-//! the binary value.
+//! cursor, [`decode_base64`](value::binary::VcardBinary::decode_base64) on the
+//! binary value.
 //!
 //! ## Cargo features
 //!
-//! - `parser` (default): the byte-faithful [`tree`] and its codec. Everything
-//!   under [`tree`] is gated on it; the decoded model is always available.
-//! - `jcard` (opt-in): the RFC 7095 jCard codec on the decoded model
+//! - `parser` (default): the byte-faithful [`tree`] and its codec, via the
+//!   `memchr` crate. Everything under [`tree`] is gated on it; the decoded
+//!   model is always available.
+//! - `jcard`: the RFC 7095 jCard codec on the decoded model
 //!   ([`to_jcard`](vcard::Vcard::to_jcard) /
 //!   [`from_jcard`](vcard::Vcard::from_jcard)), via the `serde_json` crate
-//!   (`no_std`, alloc-only). Requires `parser` for the property specs.
-//! - `jscontact` (opt-in): the RFC 9555 conversion between the decoded model
-//!   and an RFC 9553 JSContact Card
-//!   ([`to_jscontact`](vcard::Vcard::to_jscontact) /
-//!   [`from_jscontact`](vcard::Vcard::from_jscontact)). Requires `jcard`,
-//!   whose syntax carries the vCardProps / vCardParams escape hatches, and
-//!   pulls no crate of its own on top of it.
+//!   (`no_std`, alloc-only). Implies `parser` for the property specs.
+//! - `jscontact`: the RFC 9555 conversion between the decoded model and an RFC
+//!   9553 JSContact Card ([`to_jscontact`](vcard::Vcard::to_jscontact) /
+//!   [`from_jscontact`](vcard::Vcard::from_jscontact)). Implies `jcard`, whose
+//!   syntax carries the vCardProps / vCardParams escape hatches, and pulls no
+//!   crate of its own.
 //! - `quoted-printable` (default): decode `QUOTED-PRINTABLE` value octets, via
 //!   the `quoted_printable` crate.
 //! - `base64` (default): decode inline `BASE64` binary values, via the `base64`

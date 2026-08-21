@@ -1,26 +1,26 @@
 //! # JSContact
 //!
-//! The RFC 9555 conversion: the decoded card as an RFC 9553 JSContact Card,
-//! and back.
+//! The RFC 9555 conversion: the decoded card as an RFC 9553 JSContact Card, and
+//! back.
 //!
-//! [`Vcard::to_jscontact`] writes the decoded model as the JSON Card object
-//! JMAP for Contacts (RFC 9610) exchanges; [`Vcard::from_jscontact`] reads
-//! one back, borrowing the JSON tree's strings. There is no JSContact model
-//! in this crate: the Card is a plain [`serde_json::Value`], and vCard stays
-//! the one decoded model.
+//! [`Vcard::to_jscontact`] writes the decoded model as the JSON Card object JMAP
+//! for Contacts (RFC 9610) exchanges; [`Vcard::from_jscontact`] reads one back,
+//! borrowing the JSON tree's strings. There is no JSContact model in this crate:
+//! the Card is a plain [`serde_json::Value`], and vCard stays the one decoded
+//! model.
 //!
-//! Both directions are lossless through the RFC 9555 escape hatches, and
-//! only a non-object root can fail the import. Exporting, a property with no
-//! JSContact counterpart (or one whose value cannot be represented, like a
-//! free-text birthday) is preserved whole in the Card's `vCardProps` member,
-//! encoded in jCard syntax by the sibling [`crate::jcard`] codec; a
-//! parameter left over after a property converts is preserved in the
-//! object's `vCardParams` member. Importing, the mirror hatch applies: a
-//! Card member (or nested piece) with no vCard counterpart becomes a
-//! `JSPROP` property holding its JSON, located by a `JSPTR` parameter, which
-//! the export grafts back onto the Card. A `PROP-ID` parameter carries each
-//! object's map key across conversions, which is what keeps JMAP patch
-//! identity stable; without one, keys are the 1-based source order.
+//! Both directions are lossless through the RFC 9555 escape hatches, and only a
+//! non-object root can fail the import. Exporting, a property with no JSContact
+//! counterpart (or whose value cannot be represented, like a free-text birthday)
+//! is preserved whole in the Card's `vCardProps` member, in jCard syntax through
+//! the sibling [`crate::jcard`] codec; a parameter left over after a property
+//! converts is preserved in the object's `vCardParams` member. Importing, the
+//! mirror hatch applies: a Card member (or nested piece) with no vCard
+//! counterpart becomes a `JSPROP` property holding its JSON, located by a
+//! `JSPTR` parameter that the export grafts back onto the Card. A `PROP-ID`
+//! parameter carries each object's map key across conversions, which is what
+//! keeps JMAP patch identity stable; without one, keys are the 1-based source
+//! order.
 //!
 //! Mapped properties: UID, PRODID, REV, KIND, FN and N (with SORT-AS),
 //! NICKNAME, ADR (all eighteen components, with LABEL, GEO, TZ), EMAIL, TEL,

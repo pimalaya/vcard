@@ -1,20 +1,20 @@
 //! # Codec
 //!
-//! The bytes-to-model bridge, in both directions and at both levels. It is the
-//! only part of [`crate::tree`] that consults the card version.
+//! The bytes-to-model bridge, in both directions and at both levels. The only
+//! part of [`crate::tree`] that consults the card version.
 //!
 //! [`decode`] projects a raw syntax tree onto the decoded model and [`encode`]
-//! projects it back; that is the structural level. Underneath, the value-string
-//! level: [`escape`] and [`unescape`] apply and resolve the RFC 6350 3.4 value
-//! escapes (keyed by the [`mode`] `VcardEscaper`). The structural encoders and
-//! decoders run every value leaf through those. Content transfer encodings
-//! (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are never resolved here: the
-//! core transforms no content, leaving that to the opt-in feature helpers.
+//! projects it back; that is the structural level. Underneath, at the
+//! value-string level, [`escape`] and [`unescape`] apply and resolve the RFC
+//! 6350 3.4 value escapes, keyed by the [`mode`] `VcardEscaper`, and every value
+//! leaf the structural codecs touch runs through them. Content transfer
+//! encodings (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are never resolved
+//! here: the core transforms no content, leaving that to the opt-in feature
+//! helpers.
 //!
-//! The per-value-type projection is the [`VcardCodec`] trait. One impl per
-//! value type lives under [`crate::tree::value`], mirroring the model's
-//! `value/`, so each value's codec is written exactly once; both the structural
-//! dispatch and the per-property lenses go through it.
+//! The per-value-type projection is the [`VcardCodec`] trait, implemented once
+//! per value type under [`crate::tree::value`], mirroring the model's `value/`;
+//! both the structural dispatch and the per-property lenses go through it.
 
 use crate::{
     tree::{codec::mode::VcardEscaper, value::node::VcardValueNode},

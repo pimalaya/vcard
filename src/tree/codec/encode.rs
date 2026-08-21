@@ -1,17 +1,18 @@
 //! # Encode (model to syntax)
 //!
-//! The write side of the structural bridge: project the decoded model onto a
-//! raw syntax tree. A value's [`VcardCodec`] impl encodes it into a
-//! [`VcardValueNode`], a [`VcardParam`] encodes into a [`VcardParamNode`], a
-//! [`VcardProp`] encodes into a [`VcardLine`] (its name taken verbatim from the
-//! property, its value delegated to the value codec), and a [`Vcard`] encodes
-//! into a whole [`VcardCst`]. The whole card is encoded for its version's
-//! [`VcardEscaper`], which the value codecs use to escape every leaf and to
-//! pick any version-specific value shape; byte-preserving edits are the
-//! cursors' job, not this module's. [`Display`](core::fmt::Display) for
-//! [`Vcard`] renders a decoded card straight to its serialized bytes through
-//! here. Value leaves are escaped by the sibling
-//! [`escape`](crate::tree::codec::escape) codec.
+//! The write side of the structural bridge: project the decoded model onto a raw
+//! syntax tree. A value's [`VcardCodec`] impl encodes it into a
+//! [`VcardValueNode`], a [`VcardParam`] into a [`VcardParamNode`], a
+//! [`VcardProp`] into a [`VcardLine`] (its name taken verbatim from the
+//! property, its value delegated to the value codec), and a [`Vcard`] into a
+//! whole [`VcardCst`].
+//!
+//! The card is encoded for its version's [`VcardEscaper`], which the value
+//! codecs use to escape every leaf (through the sibling
+//! [`escape`](crate::tree::codec::escape) codec) and to pick any
+//! version-specific value shape; byte-preserving edits are the cursors' job, not
+//! this module's. [`Display`](core::fmt::Display) for [`Vcard`] renders a
+//! decoded card straight to its serialized bytes through here.
 
 use core::fmt;
 

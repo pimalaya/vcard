@@ -9,10 +9,10 @@
 //! *known* parts of the (lossy) model against the per-property
 //! [`VcardPropSpec`](crate::tree::prop::spec::VcardPropSpec) for the card
 //! version (existence, value kind, parameters, cardinality) and leaves the
-//! unknown parts alone. A passing check yields a [`VcardValid`] marker: it is
-//! the only thing that can mint one, so holding a `VcardValid<Vcard>` is proof
-//! the check passed. The same per-property check backs the
-//! [`VcardPropBuilder`]'s strict construction.
+//! unknown parts alone. A passing check mints a [`VcardValid`] marker, the only
+//! way to obtain one, so holding a `VcardValid<Vcard>` is proof the check
+//! passed. The same per-property check backs the [`VcardPropBuilder`]'s strict
+//! construction.
 //!
 //! [`VcardPropBuilder`]: crate::tree::vcard::builder::VcardPropBuilder
 //!

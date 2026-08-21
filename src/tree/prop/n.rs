@@ -3,14 +3,11 @@
 //! The `N` (structured name) property lens and its bespoke edit cursor: the
 //! components of the name of the object the card represents (RFC 6350 6.2.2).
 //!
-//! `N` is the showcase of the structured-value path: unlike the scalar/list
-//! lenses that use the generic cursor, it pairs [`VcardN`] with a dedicated
-//! [`VcardNCursor`] that names the five components, so callers write
-//! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. The
-//! decode/encode projections use the lens defaults, which delegate to
-//! [`VcardN`]'s [`VcardCodec`] impl in [`crate::tree::value`]; only the cursor
-//! is bespoke. Edits are byte preserving: writing one component leaves the
-//! others, and every parameter, untouched.
+//! `N` is the showcase of the structured-value path: it pairs [`VcardN`] with a
+//! dedicated [`VcardNCursor`] naming the five components, so callers write
+//! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. Only the
+//! cursor is bespoke: decode and encode use the lens defaults, which delegate to
+//! [`VcardN`]'s [`VcardCodec`] impl in [`crate::tree::value`].
 
 use alloc::{borrow::Cow, vec::Vec};
 

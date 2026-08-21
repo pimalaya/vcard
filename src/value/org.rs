@@ -4,9 +4,7 @@
 //!
 //! `ORG` is a structured RFC 6350 6.6.4 value: a `;`-ordered sequence of
 //! organization units, from the top-level organization name down through
-//! divisions. This bespoke type holds them as an ordered list. Pure,
-//! always-unescaped data; framing and escaping live on the syntax side
-//! ([`crate::tree`]). The wire name lives on [`crate::prop::VcardProp::name`].
+//! divisions, which this bespoke type holds as an ordered list.
 
 use alloc::{borrow::Cow, vec::Vec};
 

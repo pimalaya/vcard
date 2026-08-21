@@ -1,16 +1,16 @@
 //! # Value cursor
 //!
-//! The generic in-place edit cursor used by every property lens but `N`.
+//! The generic in-place edit cursor, shared by every property lens without a
+//! bespoke one.
 //!
-//! A cursor borrows a content line mutably and lets you read and write its
-//! value through the codec: getters decode (unescape), setters encode (escape)
-//! and write through to the syntax node. Crucially, a setter only rewrites the
-//! component it touches, so every other leaf (and every parameter) of a parsed
-//! line stays byte for byte intact. [`VcardValueCursor`] exposes both
-//! convenience accessors for the common single-value and list shapes and raw
-//! component-level access for the structured kinds (`ADR`, `GENDER`, `ORG`,
-//! `CLIENTPIDMAP`); the bespoke
-//! [`VcardNCursor`](crate::tree::prop::n::VcardNCursor) names `N`'s components.
+//! A cursor borrows a content line mutably and reads and writes its value
+//! through the codec: getters decode (unescape), setters encode (escape) and
+//! write through to the syntax node. A setter only rewrites the component it
+//! touches, so every other leaf (and every parameter) of a parsed line stays
+//! byte for byte intact. [`VcardValueCursor`] offers convenience accessors for
+//! the common single-value and list shapes plus raw component-level access; the
+//! structured properties (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor
+//! naming their own components instead.
 //!
 //! Beside the UTF-8 text accessors it offers a raw byte hatch
 //! ([`bytes`](VcardValueCursor::bytes) /
@@ -119,8 +119,7 @@ impl<'a> VcardValueCursor<'_, 'a> {
     }
 
     /// Walk into the `i`th component to edit its `,`-separated values one at a
-    /// time, splicing a single leaf per edit and leaving the siblings' bytes
-    /// exactly as parsed.
+    /// time, splicing a single leaf per edit.
     pub fn list_at(&mut self, i: usize) -> VcardListCursor<'_, 'a> {
         VcardListCursor {
             node: &mut self.line.value,
@@ -142,9 +141,8 @@ impl<'a> VcardValueCursor<'_, 'a> {
 
 /// A cursor over one component's `,`-separated values, editing them per item.
 ///
-/// Every mutation touches a single leaf (or splices one in or out) and
-/// re-emits only the structural separators, so an untouched value keeps the
-/// exact bytes it was parsed with, escaping and all. Obtained from
+/// Every mutation touches a single leaf, so an untouched value keeps the exact
+/// bytes it was parsed with, escaping and all. Obtained from
 /// [`VcardValueCursor::list_at`] / [`list_mut`](VcardValueCursor::list_mut).
 pub struct VcardListCursor<'c, 'a> {
     node: &'c mut VcardValueNode<'a>,

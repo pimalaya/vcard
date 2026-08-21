@@ -5,8 +5,7 @@
 //! decoded shape; the markers are the type-level keys for
 //! [`VcardLine::param`](crate::tree::line::VcardLine::param). The raw
 //! [`VcardParamNode`](node::VcardParamNode) they read and write is defined
-//! alongside. The name dispatch for whole-line decoding lives in
-//! [`crate::tree::codec::decode`].
+//! alongside.
 
 pub mod altid;
 pub mod calscale;

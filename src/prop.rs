@@ -5,18 +5,14 @@
 //! A [`VcardProp`] is a [`VcardPropName`], a list of parameters, and a decoded
 //! value. The name is stored explicitly because many properties share one
 //! [`VcardValue`] kind: `FN` and `TITLE` both decode to text, so the value
-//! alone cannot say which property it is. A known name is held as the closed
+//! alone cannot say which property it is. A known name is the closed
 //! [`VcardPropKind`] identity (its wire spelling reached through `Deref` and
-//! `FromStr`); an unknown one keeps its verbatim bytes. The lens markers in
-//! [`crate::tree::prop`] carry the kind to match and build lines, and the
-//! decode registry parses a line name onto its value kind.
+//! `FromStr`); an unknown one keeps its verbatim bytes.
 //!
 //! Build a property directly from its public fields; strict, spec-checked
 //! construction lives in the syntax layer
-//! ([`VcardPropBuilder`](crate::tree::vcard::builder::VcardPropBuilder)).
-//!
-//! This module is pure model: it has no dependency on [`crate::tree`], so the
-//! decoded form can be used without the syntax layer.
+//! ([`VcardPropBuilder`](crate::tree::vcard::builder::VcardPropBuilder)), which
+//! this module does not depend on: pure model, no [`crate::tree`].
 
 use core::{error, fmt, ops, str};
 

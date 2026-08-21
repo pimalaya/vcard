@@ -5,12 +5,11 @@
 //! module each, mirroring the model's `value/`.
 //!
 //! [`VcardValueNode`](node::VcardValueNode) is the generic, byte-faithful value
-//! (`;`-separated components of `,`-separated leaves);
-//! [`VcardValueCursor`](cursor::VcardValueCursor) borrows a line and reads and
-//! writes that value through the codec, escaping on write and preserving every
-//! component it does not touch. What the components *mean* is the lens's
-//! business (see [`crate::tree::prop`]); the codec trait and its structural
-//! dispatch live in [`crate::tree::codec`].
+//! (`;`-separated components of `,`-separated leaves), and
+//! [`VcardValueCursor`](cursor::VcardValueCursor) reads and writes it through
+//! the codec, escaping on write and preserving every component it does not
+//! touch. What the components *mean* is the lens's business (see
+//! [`crate::tree::prop`]).
 
 pub mod cursor;
 pub mod node;

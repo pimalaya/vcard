@@ -6,31 +6,30 @@
 //! `["vcard", [...]]` array of `[name, {params}, type, value...]` property
 //! entries (RFC 7095 3). [`Vcard::to_jcard`] writes the decoded model as a
 //! [`serde_json::Value`]; [`Vcard::from_jcard`] reads one back, borrowing the
-//! JSON tree's strings. Import resolves each property's value kind through
-//! the same spec vtable as the wire decoder, so a jCard and the vCard it was
-//! written from decode to the same model.
+//! JSON tree's strings and resolving each value kind through the same spec
+//! vtable as the wire decoder, so a jCard and the vCard it was written from
+//! decode to the same model.
 //!
-//! The codec keeps the crate's Postel stance. On the way out it follows RFC
-//! 7095: names are lowercased, a group prefix moves to the `group` parameter
-//! (RFC 7095 3.3.1.2), the `VALUE` parameter moves to the type slot (RFC
-//! 7095 3.3.1.1), and date, time and UTC-offset values are re-spelled in the
-//! extended ISO 8601 format (RFC 7095 3.5). On the way in anything is
-//! accepted: unknown names, parameters and type slots survive verbatim,
-//! non-string scalars are coerced to text, and a type slot that names no
+//! The codec keeps the crate's Postel stance. Out, it follows RFC 7095: names
+//! are lowercased, a group prefix moves to the `group` parameter (3.3.1.2), the
+//! `VALUE` parameter moves to the type slot (3.3.1.1), and date, time and
+//! UTC-offset values are re-spelled in the extended ISO 8601 format (3.5). In,
+//! anything is accepted: unknown names, parameters and type slots survive
+//! verbatim, non-string scalars are coerced to text, and a type slot naming no
 //! known kind falls back to the property's version default.
 //!
 //! Two deliberate, lossless departures from the letter of the RFC. A card of
 //! any version is written, carrying its own version in the `version` entry,
-//! where RFC 7095 defines jCard for vCard 4.0 only. And an undecoded value
-//! is written structurally, mirroring its semicolon and comma components as
-//! a string, an array, or an array of arrays, rather than as the RFC's one
+//! where RFC 7095 defines jCard for vCard 4.0 only. And an undecoded value is
+//! written structurally, mirroring its semicolon and comma components as a
+//! string, an array, or an array of arrays, rather than as the RFC's one
 //! re-escaped string: the decoded model holds unescaped components, and
 //! re-escaping belongs to the wire codec.
 //!
-//! Round-tripping normalizes rather than preserves: parameter order is lost
-//! to the JSON object, a declared `VALUE` equal to the property's default is
-//! dropped, and names come back in their canonical spelling. Byte fidelity
-//! is the syntax tree's job; jCard is a projection of the decoded model.
+//! Round-tripping normalizes rather than preserves: parameter order is lost to
+//! the JSON object, a declared `VALUE` equal to the property's default is
+//! dropped, and names come back in their canonical spelling. Byte fidelity is
+//! the syntax tree's job; jCard is a projection of the decoded model.
 
 use core::{error, fmt};
 
