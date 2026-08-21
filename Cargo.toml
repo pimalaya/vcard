@@ -52,7 +52,7 @@ required-features = ["parser"]
 [dev-dependencies]
 calcard = { version = "0.3", default-features = false }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
-ical_vcard = { version = "0.4", default-features = false }
+ical_vcard = { version = "0.5", default-features = false }
 vcard_parser = { version = "0.2", default-features = false }
 vparser = { version = "1", default-features = false }
 
