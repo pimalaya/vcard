@@ -7,13 +7,16 @@
 //! the property lines between them, the `VERSION` line among them, made of the
 //! nodes in the sibling modules ([`line`](crate::tree::line),
 //! [`param`](crate::tree::param), [`value`](crate::tree::value),
-//! [`leaf`](crate::tree::leaf)). It knows nothing about what a property
-//! *means*. It is filled from bytes (`parse`) or from typed properties
-//! (`push`), exports its bytes byte-faithfully
-//! ([`to_bytes`](VcardCst::to_bytes), or the lossy-for-non-UTF-8
-//! [`Display`](core::fmt::Display)), and offers typed access by lens (`prop`,
-//! `prop_mut`, `remove`). The semantic projection ([`decode`](VcardCst::decode))
-//! and the codec live in the [`decode`](crate::tree::codec::decode) /
+//! [`leaf`](crate::tree::leaf)), each line keeping the
+//! [`wire`](crate::tree::wire) shape it arrived in.
+//!
+//! It knows nothing about what a property *means*. It is filled from bytes
+//! (`parse`) or from typed properties (`push`), exports its bytes
+//! byte-faithfully ([`to_bytes`](VcardCst::to_bytes), or the
+//! lossy-for-non-UTF-8 [`Display`](core::fmt::Display)), and offers typed
+//! access by lens (`prop`, `prop_mut`, `remove`). The semantic projection
+//! ([`decode`](VcardCst::decode)) and the codec live in the
+//! [`decode`](crate::tree::codec::decode) /
 //! [`encode`](crate::tree::codec::encode) siblings.
 //!
 //! # Example
@@ -41,9 +44,10 @@
 //! assert_eq!(&*card.properties[0].name, "FN");
 //! ```
 
-use core::fmt;
+use core::{fmt, str};
 
 use alloc::{
+    borrow::Cow,
     string::{String, ToString},
     vec,
     vec::Vec,
@@ -75,6 +79,9 @@ pub struct VcardCst<'a> {
     pub props: Vec<VcardLine<'a>>,
     /// The END line, absent exactly when [`begin`](Self::begin) is.
     pub end: Option<VcardLine<'a>>,
+    /// The blank lines after `END`, kept so a file ending in one round-trips.
+    /// Only ever set when nothing but whitespace follows the card.
+    pub trailing: Cow<'a, str>,
 }
 
 impl<'a> VcardCst<'a> {
@@ -85,29 +92,28 @@ impl<'a> VcardCst<'a> {
             begin: Some(VcardLine::text("BEGIN", "VCARD")),
             props: vec![VcardLine::text("VERSION", &*VcardVersion::V4_0)],
             end: Some(VcardLine::text("END", "VCARD")),
+            trailing: Cow::Borrowed(""),
         }
     }
 
     /// Parse the first card from raw text, borrowing it for the Cst lifetime.
     /// `VERSION` is an ordinary property wherever it appears, or nowhere: the
     /// parser is as liberal about its position as real cards are. Anything
-    /// after `END` is ignored; use [`parse_many`](Self::parse_many) for a file.
+    /// after `END` is ignored, except trailing blank lines, which are kept: use
+    /// [`parse_many`](Self::parse_many) for a file.
     ///
     /// A bare RFC 2425 record with no `BEGIN:VCARD` is also accepted: every
     /// line becomes a property, [`begin`](Self::begin) / [`end`](Self::end)
     /// stay `None`, and it round-trips without a synthesised envelope. Only
     /// here, since without the envelope `parse_many` has no record boundary.
     pub fn parse<T: AsRef<[u8]> + ?Sized>(input: &'a T) -> Result<Self, VcardParseError> {
-        // NOTE: Trim leading blank-line bytes before the bare-vs-wrapped
-        // decision, so it does not hinge on stray leading whitespace:
-        // serialization normalises that away, so a classification that depended
-        // on it would make the round-trip non-idempotent (a bare record whose
-        // first line then reads as BEGIN would reparse as a wrapped card).
-        let input = trim_leading_eol(input.as_ref());
+        let input = input.as_ref();
         let (first, _rest) = VcardLine::take(input)?;
 
         if first.name.get().eq_ignore_ascii_case("BEGIN") {
-            Self::take_card(input).map(|(card, _rest)| card)
+            let (mut card, rest) = Self::take_card(input)?;
+            card.take_trailing(rest);
+            Ok(card)
         } else {
             Self::parse_bare(input)
         }
@@ -118,12 +124,12 @@ impl<'a> VcardCst<'a> {
     /// record happens to carry one, else the default.
     fn parse_bare(input: &'a [u8]) -> Result<Self, VcardParseError> {
         let mut props: Vec<VcardLine<'a>> = Vec::new();
-        let mut rest = trim_leading_eol(input);
+        let mut rest = input;
 
-        while !rest.is_empty() {
+        while !is_blank(rest) {
             let (line, tail) = VcardLine::take(rest)?;
             props.push(line);
-            rest = trim_leading_eol(tail);
+            rest = tail;
         }
 
         let escaper = props
@@ -136,16 +142,24 @@ impl<'a> VcardCst<'a> {
             line.value.escaper = escaper;
         }
 
-        Ok(Self {
+        let mut card = Self {
             begin: None,
             props,
             end: None,
-        })
+            trailing: Cow::Borrowed(""),
+        };
+        card.take_trailing(rest);
+
+        Ok(card)
     }
 
     /// Parse every card in the input, lazily, one item per card (or the parse
-    /// error that stopped iteration). Blank lines between cards are skipped.
-    /// For multi-card `.vcf` files and CardDAV address books.
+    /// error that stopped iteration). For multi-card `.vcf` files and CardDAV
+    /// address books.
+    ///
+    /// Blank lines between cards belong to the card that follows them, and
+    /// blank lines after the last one to that card, so concatenating what this
+    /// yields reproduces the file byte for byte.
     ///
     /// ```rust
     /// use vcard::tree::cst::VcardCst;
@@ -163,14 +177,13 @@ impl<'a> VcardCst<'a> {
         let mut rest = input.as_ref();
 
         core::iter::from_fn(move || {
-            rest = trim_leading_eol(rest);
-            if rest.is_empty() {
+            if is_blank(rest) {
                 return None;
             }
 
             match Self::take_card(rest) {
-                Ok((card, tail)) => {
-                    rest = tail;
+                Ok((mut card, tail)) => {
+                    rest = card.take_trailing(tail);
                     Some(Ok(card))
                 }
                 Err(error) => {
@@ -181,6 +194,17 @@ impl<'a> VcardCst<'a> {
                 }
             }
         })
+    }
+
+    /// Keep `rest` as this card's trailing blank lines when nothing but
+    /// whitespace follows, and report what is left to parse.
+    fn take_trailing(&mut self, rest: &'a [u8]) -> &'a [u8] {
+        if !is_blank(rest) {
+            return rest;
+        }
+
+        self.trailing = Cow::Borrowed(str::from_utf8(rest).unwrap_or(""));
+        b""
     }
 
     /// Take one card off the front of `input`, returning it and the unconsumed
@@ -198,7 +222,7 @@ impl<'a> VcardCst<'a> {
         let mut depth = 0usize;
 
         loop {
-            if rest.is_empty() {
+            if is_blank(rest) {
                 return Err(VcardParseError::MissingEnd(
                     String::from_utf8_lossy(input).into_owned(),
                 ));
@@ -236,6 +260,7 @@ impl<'a> VcardCst<'a> {
                         begin: Some(begin),
                         props,
                         end: Some(line),
+                        trailing: Cow::Borrowed(""),
                     },
                     rest,
                 ));
@@ -349,6 +374,7 @@ impl<'a> VcardCst<'a> {
             begin: self.begin.map(VcardLine::into_static),
             props: self.props.into_iter().map(VcardLine::into_static).collect(),
             end: self.end.map(VcardLine::into_static),
+            trailing: Cow::Owned(self.trailing.into_owned()),
         }
     }
 
@@ -367,22 +393,15 @@ impl<'a> VcardCst<'a> {
         if let Some(end) = &self.end {
             end.write_bytes(&mut out);
         }
+        out.extend_from_slice(self.trailing.as_bytes());
 
         out
     }
 }
 
-/// Skip leading blank-line bytes (`\r` / `\n`) between cards.
-fn trim_leading_eol(mut bytes: &[u8]) -> &[u8] {
-    while let Some((first, rest)) = bytes.split_first() {
-        if matches!(first, b'\r' | b'\n') {
-            bytes = rest;
-        } else {
-            break;
-        }
-    }
-
-    bytes
+/// Whether nothing but blank-line bytes (`\r` / `\n`) are left.
+fn is_blank(bytes: &[u8]) -> bool {
+    bytes.iter().all(|byte| matches!(byte, b'\r' | b'\n'))
 }
 
 impl fmt::Display for VcardCst<'_> {
@@ -399,13 +418,18 @@ impl fmt::Display for VcardCst<'_> {
             write!(f, "{end}")?;
         }
 
-        Ok(())
+        f.write_str(&self.trailing)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
+    use alloc::{
+        borrow::Cow,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
 
     use crate::prop::VcardPropKind;
     use crate::version::VcardVersion;
@@ -541,7 +565,7 @@ mod tests {
     #[test]
     fn parses_many_cards_from_one_input() {
         let a = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n";
-        let b = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:B\r\nEND:VCARD\r\n";
+        let b = "\r\nBEGIN:VCARD\r\nVERSION:4.0\r\nFN:B\r\nEND:VCARD\r\n";
         // NOTE: Two cards separated by a blank line, which the parser skips.
         let input = concat!(
             "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n",
@@ -555,7 +579,28 @@ mod tests {
 
         assert_eq!(cards.len(), 2);
         assert_eq!(cards[0].to_string(), a);
+        // NOTE: the blank line between the two belongs to the card following
+        // it, so concatenating the cards reproduces the file.
         assert_eq!(cards[1].to_string(), b);
+    }
+
+    #[test]
+    fn a_file_of_cards_comes_back_whole() {
+        // NOTE: The blank line between the cards belongs to the one following
+        // it and the two after the last card to that card, so what the reader
+        // yields concatenates back to the file.
+        let file = concat!(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n",
+            "\r\n",
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:B\r\nEND:VCARD\r\n",
+            "\r\n\r\n",
+        );
+
+        let whole: String = VcardCst::parse_many(file)
+            .map(|card| card.unwrap().to_string())
+            .collect();
+
+        assert_eq!(whole, file);
     }
 
     #[test]
@@ -807,15 +852,10 @@ mod tests {
         let folded = "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long\r\n  note\r\nEND:VCARD\r\n";
         let card = VcardCst::parse(folded).unwrap();
 
-        // NOTE: the folded value is unfolded on parse, and serialized unfolded.
-        assert_eq!(
-            card.to_string(),
-            "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a long note\r\nEND:VCARD\r\n",
-        );
-        // NOTE: re-parsing the output is then byte-stable (a fixpoint).
-        let output = card.to_string();
-        let reparsed = VcardCst::parse(&output).unwrap();
-        assert_eq!(reparsed.to_string(), output);
+        // NOTE: the value is unfolded for every layer above the parser...
+        assert_eq!(card.props[1].raw_value_str(), "a long note");
+        // NOTE: ...and folded back where it was on the way out.
+        assert_eq!(card.to_string(), folded);
     }
 
     #[test]
@@ -826,11 +866,8 @@ mod tests {
         let card = VcardCst::parse(input).unwrap();
 
         assert_eq!(card.decode().properties.len(), 1);
-        // NOTE: the blank line is dropped; the missing final break is
-        // preserved.
-        assert_eq!(
-            card.to_string(),
-            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John\r\nEND:VCARD",
-        );
+        // NOTE: the blank line stays where it was, and the missing final break
+        // stays missing.
+        assert_eq!(card.to_string(), input);
     }
 }

@@ -4,7 +4,8 @@
 //! bridges to and from the decoded model.
 //!
 //! The hub is [`cst::VcardCst`], a tree of generic nodes ([`line`](mod@line),
-//! [`param`], [`value`], [`leaf`]) round-tripping the wire bytes exactly. On top
+//! [`param`], [`value`], [`leaf`]) round-tripping the wire bytes exactly, each
+//! line keeping the [`wire`] shape it arrived in. On top
 //! of it sit the per-name lens markers in [`prop`] / [`param`], each carrying
 //! its lens contract (and, for a property, its `VcardPropSpec`), the in-place
 //! edit cursor in [`value`], the [`codec`] projecting between tree and decoded
@@ -24,3 +25,4 @@ pub mod param;
 pub mod prop;
 pub mod value;
 pub mod vcard;
+pub mod wire;

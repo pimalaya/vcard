@@ -18,7 +18,7 @@ vCard parser, validator, editor and builder library for Rust
 
 - **All vCard versions**: parse and write 2.1, 3.0 and 4.0 through one version-agnostic model.
 - **Byte-faithful editing**: change one parameter or value and every other byte of the card comes back unchanged, line endings included.
-- **Forgiving parser**: accept any real card, even a malformed one, and round-trip it unchanged.
+- **Forgiving parser**: accept any real card, even a malformed one, and round-trip it unchanged, its folds and blank lines included.
 - **Strict building and validation**: construct cards checked against the standard, with an escape hatch to step outside it.
 - **Three-way merge**: reconcile two divergent edits of a card against their common base, every action and conflict reported.
 - **Small and portable**: no_std compatible, with an allocation-only core that pulls in no dependencies.

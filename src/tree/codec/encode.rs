@@ -28,6 +28,7 @@ use crate::{
         line::VcardLine,
         param::node::VcardParamNode,
         value::node::VcardValueNode,
+        wire::VcardWire,
     },
     vcard::Vcard,
 };
@@ -64,6 +65,7 @@ impl VcardProp<'_> {
             params: self.params.iter().map(VcardParam::encode).collect(),
             value: self.value.encode(escaper),
             eol: VcardLeaf::from("\r\n".to_string()),
+            wire: VcardWire::default(),
         }
     }
 }

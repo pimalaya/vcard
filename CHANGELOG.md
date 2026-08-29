@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added `tree::wire::VcardWire`, the wire layout of a content line, and a `wire` field on `VcardLine` carrying it.
+
+  It records what the tokeniser resolves against the line's logical bytes: its folds, the blank lines before it, its QUOTED-PRINTABLE soft breaks, and a dangling `=`. An edit that changes a line's length drops the layout, so the line goes out unfolded rather than folded in the wrong places.
+
+- Added `VcardCst::trailing`, the blank lines a file ends on, so concatenating what `parse_many` yields reproduces the file byte for byte.
+
+### Changed
+
+- Changed the parser to put back what it unfolds, so a parsed card now serializes back byte for byte, its folds, its blank lines and its QUOTED-PRINTABLE soft breaks included.
+
+  A card exported by Apple, iOS or Google folds heavily, so an untouched round trip used to rewrite every folded line of it. Every layer above the parser still sees one logical line, and every one of the 146 corpus fixtures now comes back identical.
+
 ### Fixed
 
 - Fixed the three-way merge losing a value edit past the first `;` or `,` of a non-structured value, silently.

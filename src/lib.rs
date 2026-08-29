@@ -37,13 +37,14 @@
 //!
 //! ## Postel's law
 //!
-//! Parsing is maximally liberal: any real card round-trips byte for byte,
-//! including vocabulary no version defines, and an `Unknown` arm on every open
-//! enum carries that openness into the model. Strictness lives on the way out:
-//! the builder refuses to construct a property the spec forbids, and
-//! [`validate`](tree::vcard::validate) checks a decoded card against its
-//! version's RFC contract.
+//! Parsing is maximally liberal: any real card round-trips byte for byte, its
+//! folds, its blank lines and its QUOTED-PRINTABLE soft breaks included, and an
+//! `Unknown` arm on every open enum carries vocabulary no version defines into
+//! the model.
 //!
+//! Strictness lives on the way out: the builder refuses to construct a property
+//! the spec forbids, and [`validate`](tree::vcard::validate) checks a decoded
+//! card against its version's RFC contract.
 //! ## The two layers
 //!
 //! The decoded model ([`vcard`], [`version`], [`prop`], [`param`], [`value`])
@@ -63,11 +64,17 @@
 //! [`parse`](tree::cst::VcardCst::parse) reads one card (or a bare RFC 2425
 //! record), [`parse_many`](tree::cst::VcardCst::parse_many) iterates a file,
 //! and [`decode`](tree::codec::decode) / [`encode`](tree::codec::encode)
-//! project between tree and model. Per-property lens markers
+//! project between tree and model.
+//!
+//! A line is logical, its folding resolved for every layer above and recorded
+//! on its [`wire`](tree::wire) shape, so output puts it back where it was and
+//! an edit that moves the bytes drops it.
+//!
+//! Per-property lens markers
 //! ([`VcardPropLens`](tree::prop::lens::VcardPropLens)) edit one line through
 //! byte-preserving [`cursor`](tree::value::cursor::VcardValueCursor)s, and the
 //! three-way [`merge`](tree::merge::merge) reconciles two divergent copies on
-//! top of those same edits.
+//! those same edits.
 //!
 //! A property value is raw bytes, so a foreign charset (a vCard 2.1 `CHARSET`)
 //! survives; a name or parameter must be UTF-8, as every grammar guarantees.
@@ -93,8 +100,8 @@
 //! The core transforms no content: a `QUOTED-PRINTABLE` or `BASE64` encoding
 //! and a `CHARSET` are surfaced raw with their parameters kept, so nothing is
 //! silently transcoded. Only the value grammar (escapes and folding) is
-//! resolved, because that is parsing. Decoding is opt-in, one small `no_std`
-//! crate per feature:
+//! resolved, and put back from the line's wire shape on output. Decoding is
+//! opt-in, one small `no_std` crate per feature:
 //! [`quoted_printable`](tree::value::cursor::VcardValueCursor::quoted_printable)
 //! and [`charset`](tree::value::cursor::VcardValueCursor::charset) on the value
 //! cursor, [`decode_base64`](value::binary::VcardBinary::decode_base64) on the

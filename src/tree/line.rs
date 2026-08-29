@@ -4,15 +4,15 @@
 //!
 //! [`VcardLine`] is the syntactic unit a property occupies. It owns the line
 //! tokeniser ([`take`](VcardLine::take), which splits one logical line off the
-//! remaining input, unfolding RFC 6350 3.2 continuations) and the head splitter
-//! separating the name from its parameters, but stays generic: what the name
-//! means and how the value decodes belong to the lens markers and the
-//! [`codec`](crate::tree::codec).
+//! remaining input) and the head splitter separating the name from its
+//! parameters, but stays generic: what the name means and how the value decodes
+//! belong to the lens markers and the [`codec`](crate::tree::codec).
 //!
-//! Folding and stray blank lines are normalised away on parse rather than
-//! preserved: a folded line unfolds to its logical content, blank lines are
-//! dropped, and the final line needs no trailing break. A clean, unfolded card
-//! still round-trips byte for byte.
+//! Folding, stray blank lines and QUOTED-PRINTABLE soft breaks are resolved on
+//! parse, so every layer above sees one logical line, and recorded on the
+//! line's [`wire`](VcardLine::wire) shape, so serialization puts them back. A
+//! card therefore round-trips byte for byte however it was laid out. The final
+//! line needs no trailing break.
 
 use core::{fmt, str};
 
@@ -24,6 +24,7 @@ use crate::tree::{
     leaf::{VcardLeaf, VcardValueLeaf},
     param::{lens::VcardParamLens, node::VcardParamNode},
     value::node::VcardValueNode,
+    wire::VcardWire,
 };
 
 /// One raw content line: a name, parameters, a value and the line ending.
@@ -31,8 +32,9 @@ use crate::tree::{
 /// This is a *logical* line, not a physical one: [`take`](Self::take) unfolds
 /// RFC 6350 3.2 folded continuations and QUOTED-PRINTABLE soft line breaks, so
 /// a `VcardLine` never holds an internal line break, only its terminating
-/// [`eol`](Self::eol). It is also the syntactic unit for the `BEGIN` /
-/// `VERSION` / `END` envelope lines, not only decoded properties.
+/// [`eol`](Self::eol). What it unfolded is kept on [`wire`](Self::wire), which
+/// is what puts the folds back on output. It is also the syntactic unit for the
+/// `BEGIN` / `VERSION` / `END` envelope lines, not only decoded properties.
 #[derive(Clone, Debug)]
 pub struct VcardLine<'a> {
     /// The property name leaf, with any group prefix.
@@ -43,6 +45,10 @@ pub struct VcardLine<'a> {
     pub value: VcardValueNode<'a>,
     /// The line ending (`\r\n` or `\n`).
     pub eol: VcardLeaf<'a>,
+    /// How the line was laid out on the wire: its folds, the blank lines before
+    /// it, its soft breaks. Empty for a built line, and dropped on output once
+    /// an edit changes the line's length (see [`VcardWire`]).
+    pub wire: VcardWire<'a>,
 }
 
 impl<'a> VcardLine<'a> {
@@ -57,15 +63,21 @@ impl<'a> VcardLine<'a> {
                 VcardEscaper::Modern,
             ),
             eol: VcardLeaf(Cow::Borrowed("\r\n")),
+            wire: VcardWire::default(),
         }
     }
 
     /// Tokenise the logical line at the start of `rest`, unfolding any folded
     /// continuation lines, and return it with the remaining input. RFC 6350 3.2
     /// folds a long line by inserting a CRLF and a single leading space or tab;
-    /// unfolding drops them. A line with no folds borrows the source; a folded
-    /// line is rebuilt owned, since its bytes are no longer contiguous.
+    /// unfolding drops them into the line's wire shape. A line with no folds
+    /// borrows the source; a folded line is rebuilt owned, since its bytes are
+    /// no longer contiguous.
     pub fn take(rest: &'a [u8]) -> Result<(Self, &'a [u8]), VcardParseError> {
+        // NOTE: Everything this tokeniser resolves is recorded here, so
+        // serialization can put it back.
+        let mut wire = VcardWire::default();
+
         // NOTE: skip blank lines: real-world exports sometimes emit them.
         let mut head = rest;
         let (first, eol, mut tail) = loop {
@@ -80,11 +92,21 @@ impl<'a> VcardLine<'a> {
             break (content, eol, next);
         };
 
+        if head.len() < rest.len() {
+            wire.skipped(0, ascii(&rest[..rest.len() - head.len()]));
+        }
+
         // NOTE: A line that begins with folding whitespace but has no line to
         // continue (a dangling continuation, e.g. left after a dropped blank
         // line) would fold into the previous line on reparse; strip the leading
-        // whitespace so it stays its own line and serialization round-trips.
+        // whitespace so it stays its own line, and record it so it still
+        // round-trips.
+        let indented = first;
         let first = strip_leading_wsp(first);
+
+        if first.len() < indented.len() {
+            wire.skipped(0, ascii(&indented[..indented.len() - first.len()]));
+        }
 
         // NOTE: QUOTED-PRINTABLE soft line breaks: a line whose head declares
         // ENCODING=QUOTED-PRINTABLE and whose value ends with `=` continues on
@@ -92,29 +114,43 @@ impl<'a> VcardLine<'a> {
         // card that uses the encoding, not just 2.1.
         if first.ends_with(b"=") && head_is_quoted_printable(first) {
             let mut logical = Vec::from(&first[..first.len() - 1]);
+            wire.soft(logical.len(), is_crlf(eol));
+
             let mut last_eol;
             loop {
                 let (continuation, eol, next) = physical_line(tail);
                 last_eol = eol;
                 tail = next;
                 match continuation.strip_suffix(b"=") {
-                    Some(head) => logical.extend_from_slice(head),
+                    Some(head) => {
+                        push_content(&mut logical, &mut wire, head);
+                        if tail.is_empty() {
+                            // NOTE: The last continuation ends with a
+                            // soft-break marker and nothing follows: the `=` is
+                            // on the wire, the break after it is the line's own
+                            // ending.
+                            wire.skipped(logical.len(), "=");
+                            break;
+                        }
+                        wire.soft(logical.len(), is_crlf(eol));
+                    }
                     None => {
-                        logical.extend_from_slice(continuation);
+                        push_content(&mut logical, &mut wire, continuation);
                         break;
                     }
                 }
-                if tail.is_empty() {
-                    break;
-                }
             }
-            let mut line = Self::parse(strip_leading_wsp(&logical), b"")?.into_static();
+
+            let mut line = Self::parse(&logical, b"")?.into_static();
             line.eol = eol_leaf(last_eol);
+            line.wire.prepend(wire.into_static());
             return Ok((line, tail));
         }
 
         if !starts_with_wsp(tail) {
-            return Ok((Self::parse(first, eol)?, tail));
+            let mut line = Self::parse(first, eol)?;
+            line.wire.prepend(wire);
+            return Ok((line, tail));
         }
 
         let mut logical = Vec::from(first);
@@ -122,18 +158,15 @@ impl<'a> VcardLine<'a> {
 
         while starts_with_wsp(tail) {
             let (continuation, eol, next) = physical_line(&tail[1..]);
-            logical.extend_from_slice(continuation);
+            wire.fold(logical.len(), is_crlf(last_eol), tail[0]);
+            push_content(&mut logical, &mut wire, continuation);
             last_eol = eol;
             tail = next;
         }
 
-        // NOTE: the assembled line is stripped again, not just its first
-        // physical line: a whitespace-only line followed by a continuation
-        // carrying more than the one fold marker would otherwise leave the
-        // leftover whitespace in front of the name, and the line would fold
-        // into its predecessor on reparse.
-        let mut line = Self::parse(strip_leading_wsp(&logical), b"")?.into_static();
+        let mut line = Self::parse(&logical, b"")?.into_static();
         line.eol = eol_leaf(last_eol);
+        line.wire.prepend(wire.into_static());
 
         Ok((line, tail))
     }
@@ -149,6 +182,7 @@ impl<'a> VcardLine<'a> {
                 .collect(),
             value: self.value.into_static(),
             eol: self.eol.into_static(),
+            wire: self.wire.into_static(),
         }
     }
 
@@ -163,8 +197,24 @@ impl<'a> VcardLine<'a> {
         String::from_utf8_lossy(self.value.first_value_bytes())
     }
 
-    /// Serialize the whole line to bytes, exactly as parsed.
+    /// Serialize the whole line to bytes, exactly as parsed: its logical
+    /// content, laid back out in the wire shape it arrived in.
     pub(crate) fn write_bytes(&self, out: &mut Vec<u8>) {
+        if self.wire.is_empty() {
+            self.write_logical(out);
+        } else {
+            let mut logical = Vec::new();
+            self.write_logical(&mut logical);
+            self.wire.write_bytes(&logical, out);
+        }
+
+        out.extend_from_slice(self.eol.get().as_bytes());
+    }
+
+    /// Serialize the logical line (its name, parameters and value), with no
+    /// line ending and no wire shape. This is the byte string the wire offsets
+    /// index.
+    fn write_logical(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(self.name.get().as_bytes());
 
         for param in &self.params {
@@ -174,7 +224,6 @@ impl<'a> VcardLine<'a> {
 
         out.push(b':');
         self.value.write_bytes(out);
-        out.extend_from_slice(self.eol.get().as_bytes());
     }
 
     /// The first parameter of type `P`, decoded.
@@ -206,36 +255,74 @@ impl<'a> VcardLine<'a> {
         let (name, params) = split_head(head);
 
         let mut value = &content[colon + 1..];
+        let mut wire = VcardWire::default();
 
         // NOTE: A trailing `=` on a QUOTED-PRINTABLE value is always a dangling
         // soft-break marker, since real content encodes `=` as `=3D`. Left in,
-        // it would re-trigger the join on reparse and swallow the next line.
-        // Base64 padding is safe: `ENCODING=BASE64` is not quoted-printable.
+        // it would re-trigger the join on reparse and swallow the next line, so
+        // the logical line drops it and the wire shape keeps it. Base64 padding
+        // is safe: `ENCODING=BASE64` is not quoted-printable.
         if head_is_quoted_printable(content) {
+            let full = value.len();
             while value.last() == Some(&b'=') {
                 value = &value[..value.len() - 1];
             }
+            if value.len() < full {
+                let end = colon + 1 + value.len();
+                wire.skipped(end, ascii(&content[end..colon + 1 + full]));
+            }
         }
+
+        wire.seal(colon + 1 + value.len());
 
         Ok(VcardLine {
             name: VcardLeaf::from(name),
             params,
             value: VcardValueNode::parse(value),
             eol: VcardLeaf::from(str::from_utf8(eol).unwrap_or("")),
+            wire,
         })
     }
 }
 
 impl fmt::Display for VcardLine<'_> {
+    /// The line as text, wire shape included, lossily for a non-UTF-8 value.
+    /// `VcardLine::write_bytes` is the byte-faithful path.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name.get())?;
+        if self.wire.is_empty() {
+            f.write_str(self.name.get())?;
 
-        for param in &self.params {
-            write!(f, ";{param}")?;
+            for param in &self.params {
+                write!(f, ";{param}")?;
+            }
+
+            return write!(f, ":{}{}", self.value, self.eol.get());
         }
 
-        write!(f, ":{}{}", self.value, self.eol.get())
+        let mut bytes = Vec::new();
+        self.write_bytes(&mut bytes);
+        f.write_str(&String::from_utf8_lossy(&bytes))
     }
+}
+
+/// Append a continuation's content to the logical line being assembled, and
+/// record what could not go in it.
+///
+/// A logical line still empty at this point came from a whitespace-only
+/// physical line, so a leading whitespace on the continuation is a wire
+/// artifact of a line with nothing to continue rather than part of the name.
+fn push_content<'a>(logical: &mut Vec<u8>, wire: &mut VcardWire<'a>, content: &'a [u8]) {
+    let kept = if logical.is_empty() {
+        strip_leading_wsp(content)
+    } else {
+        content
+    };
+
+    if kept.len() < content.len() {
+        wire.skipped(logical.len(), ascii(&content[..content.len() - kept.len()]));
+    }
+
+    logical.extend_from_slice(kept);
 }
 
 /// Split a head into its name and its `;`-separated parameters.
@@ -350,6 +437,18 @@ fn eol_leaf(bytes: &[u8]) -> VcardLeaf<'static> {
     VcardLeaf::from(String::from_utf8_lossy(bytes).into_owned())
 }
 
+/// Whether a line ending is a `\r\n` rather than a bare `\n`.
+fn is_crlf(eol: &[u8]) -> bool {
+    eol.starts_with(b"\r")
+}
+
+/// Bytes the tokeniser resolved away, as text. Every one of them is a line
+/// break, a space, a tab or an `=`, so the conversion never fails; a lone `""`
+/// on the impossible path keeps this total rather than panicking.
+fn ascii(bytes: &[u8]) -> &str {
+    str::from_utf8(bytes).unwrap_or("")
+}
+
 /// A lossy owned string of raw bytes, for error diagnostics.
 fn lossy(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
@@ -359,7 +458,7 @@ fn lossy(bytes: &[u8]) -> String {
 mod tests {
     use alloc::string::ToString;
 
-    use crate::tree::line::VcardLine;
+    use crate::tree::{line::VcardLine, value::node::VcardValueNode};
 
     #[test]
     fn takes_one_line_and_leaves_the_rest() {
@@ -416,9 +515,40 @@ mod tests {
     }
 
     #[test]
-    fn serializes_an_unfolded_line() {
+    fn serializes_a_folded_line_back_folded() {
         let (line, _) = VcardLine::take(b"NOTE:foo\r\n bar\r\n").unwrap();
-        assert_eq!(line.to_string(), "NOTE:foobar\r\n");
+        assert_eq!(line.raw_value_str(), "foobar");
+        assert_eq!(line.to_string(), "NOTE:foo\r\n bar\r\n");
+    }
+
+    #[test]
+    fn keeps_the_folding_whitespace_and_the_break_it_arrived_with() {
+        let (line, _) = VcardLine::take(b"NOTE:foo\n\tbar\r\n").unwrap();
+        assert_eq!(line.to_string(), "NOTE:foo\n\tbar\r\n");
+    }
+
+    #[test]
+    fn serializes_a_skipped_blank_line_back() {
+        let (line, _) = VcardLine::take(b"\r\n\r\nFN:John\r\n").unwrap();
+        assert_eq!(line.to_string(), "\r\n\r\nFN:John\r\n");
+    }
+
+    #[test]
+    fn drops_the_fold_points_once_the_value_is_edited() {
+        // NOTE: The old offsets index bytes that are no longer there, so the
+        // edited line goes out unfolded rather than folded in the wrong places.
+        let (mut line, _) = VcardLine::take(b"NOTE:foo\r\n bar\r\n").unwrap();
+        line.value = VcardValueNode::parse(b"something else entirely");
+        assert_eq!(line.to_string(), "NOTE:something else entirely\r\n");
+    }
+
+    #[test]
+    fn keeps_the_fold_points_when_an_edit_keeps_the_length() {
+        // NOTE: Same length, so every offset still indexes what it did: the
+        // line is folded exactly where it was.
+        let (mut line, _) = VcardLine::take(b"NOTE:foo\r\n bar\r\n").unwrap();
+        line.value = VcardValueNode::parse(b"BARFOO");
+        assert_eq!(line.to_string(), "NOTE:BAR\r\n FOO\r\n");
     }
 
     #[test]
@@ -430,7 +560,7 @@ mod tests {
         let (line, _) = VcardLine::take(b"   \r\n  A:b\r\n").unwrap();
 
         assert_eq!(line.name.get(), "A");
-        assert_eq!(line.to_string(), "A:b\r\n");
+        assert_eq!(line.to_string(), "   \r\n  A:b\r\n");
     }
 
     #[test]
@@ -460,12 +590,12 @@ mod tests {
     fn joins_a_quoted_printable_soft_broken_line() {
         // NOTE: Two soft breaks: the first continuation itself ends with `=`
         // (the Some arm), the second does not (the None arm).
-        let (line, _) =
-            VcardLine::take(b"NOTE;ENCODING=QUOTED-PRINTABLE:caf=\r\n=C3=\r\n=A9\r\nEND:VCARD\r\n")
-                .unwrap();
+        let raw = b"NOTE;ENCODING=QUOTED-PRINTABLE:caf=\r\n=C3=\r\n=A9\r\n";
+        let (line, _) = VcardLine::take(raw).unwrap();
         assert_eq!(line.name.get(), "NOTE");
         assert_eq!(line.raw_value_str(), "caf=C3=A9");
         assert_eq!(line.raw_value(), b"caf=C3=A9");
+        assert_eq!(line.to_string(), str::from_utf8(raw).unwrap());
     }
 
     #[test]
@@ -502,8 +632,10 @@ mod tests {
         // NOTE: The final continuation ends with `=` and nothing follows, so
         // the join loop exits via the empty-tail guard rather than a non-`=`
         // line.
-        let (line, rest) = VcardLine::take(b"NOTE;ENCODING=QUOTED-PRINTABLE:a=\r\nb=\r\n").unwrap();
+        let raw = b"NOTE;ENCODING=QUOTED-PRINTABLE:a=\r\nb=\r\n";
+        let (line, rest) = VcardLine::take(raw).unwrap();
         assert_eq!(line.raw_value_str(), "ab");
         assert_eq!(rest, b"");
+        assert_eq!(line.to_string(), str::from_utf8(raw).unwrap());
     }
 }

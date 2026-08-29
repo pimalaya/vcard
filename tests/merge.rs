@@ -967,12 +967,15 @@ const ADD_POOL: [(&str, Shape, &[&str]); 6] = [
     ("ORG", Shape::Structured, &["Acme", "Widgets"]),
 ];
 
-/// Lines no edit ever targets, carrying a redundant escape, a fold and a
-/// quoted parameter, so the byte-preservation law has something to bite on.
+/// Lines no edit ever targets, carrying a redundant escape, a fold, a blank
+/// line, a QUOTED-PRINTABLE soft break and a quoted parameter, so the
+/// byte-preservation law has the whole wire vocabulary to bite on.
 const NOISE: &str = concat!(
     "X-NOISE:a\\;b\\,c\\\\d\r\n",
     "X-FOLD:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\n",
     " bbbbbbbbbbbbbbbbbbbb\r\n",
+    "\r\n",
+    "X-SOFT;ENCODING=QUOTED-PRINTABLE:caf=\r\n=C3=\r\n=A9\r\n",
     "x-lower;Q=\"a;b\":kept\r\n",
 );
 
@@ -2348,23 +2351,18 @@ fn a_property_added_after_an_unterminated_line_stays_its_own_line() {
 }
 
 #[test]
-fn a_folded_line_is_normalised_once_and_then_survives_a_merge() {
-    // NOTE: the parser resolves folding and does not restore it (see
-    // cairn/spec/parsing.md, Line normalisation), so a folded card is
-    // rewritten unfolded the first time it is parsed. What the merge owes is
-    // that this happens once: an untouched line of an already-normalised card
-    // keeps its bytes through a merge.
+fn a_folded_line_keeps_its_folds_through_a_parse_and_a_merge() {
+    // NOTE: the parser restores the folding it resolved (see
+    // cairn/spec/parsing.md, Line normalisation), so a folded card comes back
+    // as itself, and the line the merge does not touch keeps those bytes.
     let folded =
         "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:aaaaaaaaaa\r\n bbbbbbbbbb\r\nFN:a\r\nEND:VCARD\r\n";
-    let unfolded = VcardCst::parse(folded).expect("a folded card").to_string();
+    let parsed = VcardCst::parse(folded).expect("a folded card").to_string();
 
-    assert_eq!(
-        unfolded,
-        "BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:aaaaaaaaaabbbbbbbbbb\r\nFN:a\r\nEND:VCARD\r\n",
-    );
+    assert_eq!(parsed, folded);
 
-    let right = unfolded.replace("FN:a", "FN:b");
-    let (merged, conflicts) = merge_text(&unfolded, &unfolded, &right);
+    let right = folded.replace("FN:a", "FN:b");
+    let (merged, conflicts) = merge_text(folded, folded, &right);
 
     assert_eq!(merged, right);
     assert_eq!(conflicts, 0);
