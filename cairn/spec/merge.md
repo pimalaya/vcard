@@ -6,7 +6,7 @@ status: current
 
 # Three-way merge
 
-`tree::merge::merge` reconciles two divergent copies of a card against their common base, building on the byte-preserving edit layer (see [editing](./editing.md)) so an untouched property keeps its bytes through a merge, bar the line ending a line gains when it stops being last.
+`tree::merge::VcardMerge` reconciles two divergent copies of a card against their common base, building on the byte-preserving edit layer (see [editing](./editing.md)) so an untouched property keeps its bytes through a merge, bar the line ending a line gains when it stops being last.
 
 ### Requirement: Per-side action lists against a common base
 
@@ -24,9 +24,24 @@ The replay SHALL run in two phases: every edit of a value, a component or a para
 - WHEN they are merged
 - THEN every edit lands on the property it names and nothing is reported
 
-### Requirement: Instance matching is PID, then equality, then position
+### Requirement: The matching ladder
 
-A property instance SHALL be matched across the three copies by its `PID` parameter and equality together first, then by `PID` alone (the RFC 6350 section 7 synchronisation identity), then by identical serialized bytes, then by equality alone, then by position, so a card that carries synchronisation identifiers merges by identity rather than by order, two instances sharing one `PID` do not break the pair that needs no change, and among interchangeable instances the one that needs no rewrite is chosen.
+A property instance SHALL be matched across the three copies down one ladder, per name, and the rungs SHALL be consulted in this order:
+
+1. The `PID` synchronisation identity (RFC 6350 section 7), with equality first, so two instances sharing one `PID` do not break the pair that needs no change, then `PID` alone.
+2. The natural identity of a property that may occur more than once and whose value names a thing outside the card.
+3. Identical serialized bytes, then equality alone, so among instances that decode alike the one that needs no rewrite is chosen.
+4. Position.
+
+A property whose value names a thing outside the card SHALL be identified by that value, the whole of it and as written: `EMAIL` by its address, `TEL` by its number, `IMPP`, `URL`, `SOURCE`, `FBURL`, `CALURI`, `CALADRURI`, `PHOTO`, `LOGO`, `SOUND`, `KEY` and `SOCIALPROFILE` by their URI, `MEMBER` and `RELATED` by the entity theirs names. Every other property SHALL carry no identity, since a property that may occur only once is already named by its name, and a property whose value is the datum would turn every edit into a replacement. A grouped name carries none either, the group being part of what tells the instance apart already.
+
+`PID` SHALL stay above the natural identity. `PID` is metadata, so it survives a value change and a rename stays a rename, which an identity that is the value cannot do.
+
+An identity SHALL tell an instance from its same-named siblings or it is not one: where two of them carry the same value, both fall back to their positions, and a sibling still alone with its value keeps its own. An instance carrying an identity SHALL NOT be matched with one carrying none, since the two are told apart differently and a position on one side does not answer for an identity on the other.
+
+The identity SHALL be reported with the action, so a caller is told which member of a group is contested.
+
+Where the identity is the value, changing the value changes the identity, so an edited address is one instance leaving and another arriving rather than a rename. Two sides that each replaced one therefore leave two instances, since neither renamed the base one and the name may repeat.
 
 #### Scenario: Reordered instances
 - GIVEN two copies whose `TEL` instances carry `PID` and appear in different orders
@@ -43,9 +58,53 @@ A property instance SHALL be matched across the three copies by its `PID` parame
 - WHEN they are merged
 - THEN the copy the other two carry byte for byte survives
 
+#### Scenario: A side that only reordered and replaced an address
+- GIVEN a base holding two `EMAIL` instances, an untouched copy, and one that reordered them and replaced one address
+- WHEN they are merged
+- THEN the merged card is that copy, byte for byte, and nothing is reported
+
+#### Scenario: An edit against a replacement
+- GIVEN a copy that replaced Ada's `EMAIL` with Bob's and a copy that set a parameter on Ada's
+- WHEN they are merged
+- THEN Ada's parameter is never written onto Bob's line
+
+#### Scenario: One address on two instances
+- GIVEN a card carrying one `EMAIL` address twice, edited once
+- WHEN it is merged with itself against the original
+- THEN the edit lands, and nothing is reported
+
+#### Scenario: A rename under a PID
+- GIVEN a base `EMAIL;PID=1`, a copy adding a parameter and a copy changing the address
+- WHEN they are merged
+- THEN the card carries one `EMAIL`, with the new address and the new parameter
+
+### Requirement: Matching normalises, writing is exact
+
+An identity SHALL be compared normalised and written back exactly. The comparison lowercases, so a URI scheme (RFC 3986 section 3.1) and a mail host meet whichever case they were written in. What goes back on the wire is the bytes the side that wrote them wrote, never a normalised form the merge chose.
+
+The two halves are one rule. Comparing raw bytes misses a match that is there; writing the normalised form loses the byte fidelity the whole crate is for.
+
+A case difference in a value is still a change, since only matching normalises: a side that rewrote the case of a scheme rewrote the value, and that change lands like any other.
+
+#### Scenario: One address in two cases
+- GIVEN a base `IMPP:XMPP:ada@x.test`, a copy adding a parameter and a copy that lowercased the scheme
+- WHEN they are merged
+- THEN the card carries one `IMPP`, holding both parameters, spelled as the side that rewrote it spelled it
+
+### Requirement: The base card is never mutated
+
+The merge SHALL leave the base card untouched, and every position it carries SHALL be counted in that card. That is what makes the ladder's last rung safe: an ordinal read off the base names the same instance whenever it is resolved, however the merged card has moved under it.
+
+The merged card is a clone of the left one and every edit lands on that clone, so nothing the merge does can renumber what a base ordinal names. A merge that mutated the base, or that numbered an action in the merged card, would need the ordinal translation ical-rs carries, which vcard-rs deliberately does not.
+
+#### Scenario: An ordinal read off the base
+- GIVEN a base carrying several same-named properties and a copy that removed one of them and edited another
+- WHEN they are merged
+- THEN the edit lands on the property its base ordinal names
+
 ### Requirement: Conflicts are reported, never silently resolved away
 
-A divergent change to the same field on both sides SHALL be surfaced as a `VcardMergeConflict` in the `VcardMergeReport`, with the left action winning, except that an update beats a removal, at every granularity the merge diffs at: the whole property, one parameter, and one item of a list parameter alike.
+A divergent change to the same field on both sides SHALL be surfaced as a `VcardMergeConflict` in the `VcardMergeReport`, with the preferred side's action winning, the left one unless the caller says otherwise, except that an update beats a removal, at every granularity the merge diffs at: the whole property, one parameter, and one item of a list parameter alike.
 
 A parameter an update restores over a removal is appended to the merged line, since the removal took its position with it and parameter order carries no meaning.
 
@@ -58,6 +117,36 @@ A parameter an update restores over a removal is appended to the merged line, si
 - GIVEN a base `TEL;PREF=1`, one copy dropping `PREF` and the other rewriting it to `PREF=2`
 - WHEN they are merged in either order
 - THEN the merged card carries `PREF=2` and one conflict is reported
+
+### Requirement: The winning side is chosen, not implied
+
+A caller SHALL be able to say which side's value the merged card carries when both sides changed one field to different things, independently of which side supplies the baseline bytes. Where the caller says nothing, the left side wins, which is what a merge has always done.
+
+The two are different questions. Which side is the baseline decides whose folding, whose parameter casing and whose property order survive untouched, and is answered by whichever copy the caller would rather not churn. Which side wins a collision is a statement about two people disagreeing, and is answered by what the caller knows about them. Deciding the second by the first makes a byte-fidelity choice settle a data-loss one.
+
+The preference SHALL decide only the case where both sides wrote a value. An update still beats a removal whichever side it came from and whatever the preference, a field one side alone touched is still taken from that side, an untouched line still comes out byte for byte, and the report still names both actions and the same fields whichever way the preference falls.
+
+A parameter or a property the preferred side's action beats SHALL be replaced rather than joined, so a name a version allows at most once is never written twice.
+
+#### Scenario: The right side is preferred
+- GIVEN two copies setting a different `FN`, and a caller preferring the right side
+- WHEN they are merged
+- THEN the merged card carries the right side's `FN` and the collision is reported as it always was
+
+#### Scenario: The left preference stated is the preference left unsaid
+- GIVEN any two copies and a caller stating the left side
+- WHEN they are merged
+- THEN the merged bytes and the report are what saying nothing gives
+
+#### Scenario: The preference does not reach an uncontested field
+- GIVEN a field only the left copy changed, and a caller preferring the right side
+- WHEN they are merged
+- THEN the left copy's change survives and nothing is reported for it
+
+#### Scenario: An update beats a removal under either preference
+- GIVEN one copy removing a property and the other changing it
+- WHEN they are merged under either preference, in either order
+- THEN the changed property survives and the collision is reported
 
 ### Requirement: Every change either lands or is reported
 
@@ -72,7 +161,9 @@ The field granularities are the ones the merge diffs at: the whole property, the
 
 ### Requirement: The merge obeys its algebraic laws
 
-`merge(base, x, x)` SHALL yield `x` byte for byte and report nothing, `merge(base, x, base)` SHALL yield `x` byte for byte, `merge(base, base, y)` SHALL yield `y`, and `merge(base, base, base)` SHALL yield the base. The merged card SHALL parse again to a byte-stable fixpoint. Swapping the two sides SHALL report the same collided fields, and as many conflicts, though the merged bytes differ, since the left action wins. Re-merging the merged card against the base and either side SHALL change nothing.
+`merge(base, x, x)` SHALL yield `x` byte for byte and report nothing, `merge(base, x, base)` SHALL yield `x` byte for byte, `merge(base, base, y)` SHALL yield `y`, and `merge(base, base, base)` SHALL yield the base. The merged card SHALL parse again to a byte-stable fixpoint. Swapping the two sides SHALL report the same collided fields, and as many conflicts, though the merged bytes differ, since the preferred side's action wins. Re-merging the merged card against the base and either side SHALL change nothing.
+
+Every law here SHALL hold under either preference: none of them is a statement about who wins.
 
 #### Scenario: An untouched side
 - GIVEN a base card and one copy that changed nothing
@@ -81,14 +172,19 @@ The field granularities are the ones the merge diffs at: the whole property, the
 
 ### Requirement: Values are compared on the raw node
 
-The merge SHALL decide whether two copies hold the same value by comparing their raw value nodes component by component, over every component of the value, never through the decoded projection, which reads only a value's first `;`-component.
+The merge SHALL decide whether two copies hold the same value by comparing their raw value nodes component by component, over every component of the value, never through the decoded projection, which reads only a value's first `;`-component. An identity read off a value SHALL be read from the same raw node, for the same reason.
 
 Two components agree when they decode to the same list of items, so a difference in escaping is a difference. An absent component and an all-empty one agree, so a trailing empty component is not a change.
 
 #### Scenario: A photo payload past the first semicolon
 - GIVEN a base card carrying `PHOTO:data:image/png;base64,AAAA` and a copy carrying a different payload
 - WHEN they are merged
-- THEN the change is reported and lands, and two divergent payloads collide
+- THEN the change is reported and lands, as one photo leaving and another arriving
+
+#### Scenario: A title past the first semicolon
+- GIVEN a base `TITLE:boss;of;nothing` and two copies rewriting what follows the second `;`
+- WHEN they are merged
+- THEN the divergence is reported
 
 ### Requirement: A change both sides made is never a conflict
 

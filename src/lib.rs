@@ -73,8 +73,8 @@
 //! Per-property lens markers
 //! ([`VcardPropLens`](tree::prop::lens::VcardPropLens)) edit one line through
 //! byte-preserving [`cursor`](tree::value::cursor::VcardValueCursor)s, and the
-//! three-way [`merge`](tree::merge::merge) reconciles two divergent copies on
-//! those same edits.
+//! three-way [`VcardMerge`](tree::merge::VcardMerge) reconciles two divergent
+//! copies on those same edits.
 //!
 //! A property value is raw bytes, so a foreign charset (a vCard 2.1 `CHARSET`)
 //! survives; a name or parameter must be UTF-8, as every grammar guarantees.

@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added the `identity` field on `VcardPropPath`, naming which member of a group of same-named properties an action addresses.
+
+- Added `tree::merge::VcardMerge`, a struct carrying the three cards and a collision preference, with a `merge` method replacing the free `merge` function.
+
+  The free function stays as a deprecated shim over it, keeping the left preference, so an existing caller keeps building. It is due for removal once its callers, tCard and neverest among them, build the struct instead.
+
+- Added `tree::merge::VcardMergeSide` and the `prefer` field on `VcardMerge`.
+
+  It says which side's value the merged card carries where both sides changed one field to different things, apart from `left`, which now answers only whose untouched bytes survive. `Left` is the default and the behaviour every merge had before. The preference decides that case and no other: an update still beats a removal whichever side it came from, a field one side alone touched is still taken from that side, and the report names the same actions and the same fields whichever way it falls.
+
 - Added `tree::wire::VcardWire`, the wire layout of a content line, and a `wire` field on `VcardLine` carrying it.
 
   It records what the tokeniser resolves against the line's logical bytes: its folds, the blank lines before it, its QUOTED-PRINTABLE soft breaks, and a dangling `=`. An edit that changes a line's length drops the layout, so the line goes out unfolded rather than folded in the wrong places.
@@ -15,6 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `VcardCst::trailing`, the blank lines a file ends on, so concatenating what `parse_many` yields reproduces the file byte for byte.
 
 ### Changed
+
+- Changed the three-way merge to match a property instance by its own identity where vCard gives it one, between the `PID` rung and the equality rung.
+
+  A property that may occur more than once and whose value names a thing outside the card is now addressed by that whole value: `EMAIL` by its address, `TEL` by its number, `IMPP`, `URL`, `SOURCE`, `FBURL`, `CALURI`, `CALADRURI`, `PHOTO`, `LOGO`, `SOUND`, `KEY` and `SOCIALPROFILE` by their URI, `MEMBER` and `RELATED` by the entity theirs names. An instance carrying an identity is never matched with one carrying none, so a side that reordered or replaced one no longer writes another instance's edit onto it. Changing such a value is therefore one instance leaving and another arriving rather than a rename; a card carrying `PID` keeps the rename, `PID` sitting above.
+
+  An identity is compared lowercased, so a URI scheme (RFC 3986 section 3.1) and a mail host meet whichever case they were written in. Only the comparison normalises: a line goes back out with the bytes the side that wrote it wrote.
 
 - Changed the parser to put back what it unfolds, so a parsed card now serializes back byte for byte, its folds, its blank lines and its QUOTED-PRINTABLE soft breaks included.
 

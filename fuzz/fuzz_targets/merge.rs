@@ -15,7 +15,27 @@
 use std::collections::BTreeMap;
 
 use libfuzzer_sys::fuzz_target;
-use vcard::tree::{cst::VcardCst, line::VcardLine, merge::merge};
+use vcard::tree::{
+    cst::VcardCst,
+    line::VcardLine,
+    merge::{VcardMerge, VcardMergeReport, VcardMergeSide},
+};
+
+/// Merge three cards with the left side winning collisions, the shape every
+/// law below is stated at.
+fn merge<'a>(
+    base: &'a VcardCst<'a>,
+    left: &'a VcardCst<'a>,
+    right: &'a VcardCst<'a>,
+) -> VcardMergeReport<'a> {
+    VcardMerge {
+        base,
+        left,
+        right,
+        prefer: VcardMergeSide::Left,
+    }
+    .merge()
+}
 
 /// Whether a card carries two interchangeable instances of one property: the
 /// same name and the same content, differing at most in their line ending.

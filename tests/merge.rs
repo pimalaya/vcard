@@ -35,13 +35,18 @@
 //!
 //! ## What is deliberately excluded
 //!
-//! Instance matching by value equality and by position (the second and third
-//! passes of the merge's matching) is out of the generator's reach by
-//! construction: every generated card either has unique property names or
-//! carries a distinct `PID` on every instance, so the reference can match by
-//! identity without reimplementing the matching. `PID` matching gets its own
-//! law in [`pid_matching_survives_a_reorder`], and equality matching stays
-//! covered by the unit tests in the merge module itself.
+//! Instance matching by value equality and by position (the lower rungs of
+//! the merge's ladder) is out of the generator's reach by construction: every
+//! generated card either has unique property names or carries a distinct
+//! `PID` on every instance, so the reference can match by identity without
+//! reimplementing the matching. `PID` matching gets its own law in
+//! [`pid_matching_survives_a_reorder`], and equality matching stays covered by
+//! the unit tests in the merge module itself.
+//!
+//! No edit rewrites the value of a property whose value is its own identity,
+//! since that is a rename rather than an edit: the instance leaves and another
+//! arrives. The reference keys a card by identity and cannot model that, so
+//! the natural identity rung has its own tests in the merge module.
 //!
 //! List values are generated with distinct items only, because the merge diffs
 //! list items as a multiset but replays them as a set; the duplicate-item test
@@ -69,12 +74,42 @@ use vcard::{
         cst::VcardCst,
         leaf::VcardLeaf,
         line::VcardLine,
-        merge::{VcardMergeAction, VcardMergeReport, merge},
+        merge::{VcardMerge, VcardMergeAction, VcardMergeReport, VcardMergeSide},
         param::node::VcardParamNode,
         value::node::VcardValueNode,
     },
     value::VcardValueKind,
 };
+
+/// Both preferences, so every law that does not read the reference is stated
+/// under each of them.
+const PREFERENCES: [VcardMergeSide; 2] = [VcardMergeSide::Left, VcardMergeSide::Right];
+
+/// Merge three cards with the left side winning collisions, the default and
+/// the shape every law below is stated at.
+fn merge<'a>(
+    base: &'a VcardCst<'a>,
+    left: &'a VcardCst<'a>,
+    right: &'a VcardCst<'a>,
+) -> VcardMergeReport<'a> {
+    merge_preferring(base, left, right, VcardMergeSide::Left)
+}
+
+/// The same, with the winning side stated.
+fn merge_preferring<'a>(
+    base: &'a VcardCst<'a>,
+    left: &'a VcardCst<'a>,
+    right: &'a VcardCst<'a>,
+    prefer: VcardMergeSide,
+) -> VcardMergeReport<'a> {
+    VcardMerge {
+        base,
+        left,
+        right,
+        prefer,
+    }
+    .merge()
+}
 
 /// How the merge diffs a property's value, read off its decoded value kind.
 /// It decides the field granularity every law below is stated at.
@@ -120,12 +155,31 @@ struct Prop {
 
 impl Prop {
     /// The instance identity the laws and the reference match on: the property
-    /// name, qualified by the `PID` parameter when the card carries one.
+    /// name, qualified by the `PID` parameter where the card carries one and
+    /// by the property's natural identity otherwise, in that order, which is
+    /// the merge's own ladder.
     fn id(&self) -> String {
-        match self.param("PID") {
-            Some(values) => format!("{}#{}", self.name, values.join(",")),
+        if let Some(values) = self.param("PID") {
+            return format!("{}#{}", self.name, values.join(","));
+        }
+
+        match self.identity() {
+            Some(held) => format!("{}#{held}", self.name),
             None => self.name.clone(),
         }
+    }
+
+    /// The value that tells the instance from its same-named siblings, where
+    /// vCard gives it one, mirroring the merge's own table. Lowercased,
+    /// since matching normalises and writing is exact.
+    fn identity(&self) -> Option<String> {
+        if !IDENTIFIED.contains(&self.name.as_str()) {
+            return None;
+        }
+
+        let joined: Vec<String> = self.comps.iter().map(|values| values.join(",")).collect();
+
+        Some(joined.join(";").to_lowercase())
     }
 
     /// The values of the first parameter carrying `key`.
@@ -133,6 +187,27 @@ impl Prop {
         self.params.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 }
+
+/// The property names whose value names a thing outside the card, so the
+/// merge tells two instances apart by it. Mirrors `identity_of` in the merge
+/// module, which an integration test cannot reach.
+const IDENTIFIED: [&str; 15] = [
+    "CALADRURI",
+    "CALURI",
+    "EMAIL",
+    "FBURL",
+    "IMPP",
+    "KEY",
+    "LOGO",
+    "MEMBER",
+    "PHOTO",
+    "RELATED",
+    "SOCIALPROFILE",
+    "SOUND",
+    "SOURCE",
+    "TEL",
+    "URL",
+];
 
 /// A field of one property instance: the granularity at which the merge
 /// diffs, the laws reconcile, and conflicts are reported.
@@ -1087,6 +1162,16 @@ fn apply_edits(base: &[Prop], edits: &[Edit], pid: bool) -> Vec<Prop> {
         let Some(target) = edit.prop() else { continue };
         let target = target % editable;
 
+        // NOTE: rewriting the value of a property whose value is its identity
+        // is a rename, and a rename is one instance leaving and another
+        // arriving. The reference keys a card by identity and cannot model
+        // that, so the ladder has its own tests instead.
+        if matches!(edit, Edit::Value { .. } | Edit::Clear { .. })
+            && IDENTIFIED.contains(&props[target].name.as_str())
+        {
+            continue;
+        }
+
         match *edit {
             Edit::Value { comp, word, .. } => {
                 let text = WORDS[word % WORDS.len()].to_string();
@@ -1288,12 +1373,17 @@ fn counts(items: &[String]) -> BTreeMap<String, usize> {
 
 /// Parse the three cards, merge them, and run every law that does not need
 /// instance identity. Returns the merged card's text and the conflict keys.
-fn check_laws(base: &str, left: &str, right: &str) -> Result<(String, usize), String> {
+fn check_laws(
+    base: &str,
+    left: &str,
+    right: &str,
+    prefer: VcardMergeSide,
+) -> Result<(String, usize), String> {
     let base_cst = VcardCst::parse(base).map_err(|e| format!("parse base: {e}"))?;
     let left_cst = VcardCst::parse(left).map_err(|e| format!("parse left: {e}"))?;
     let right_cst = VcardCst::parse(right).map_err(|e| format!("parse right: {e}"))?;
 
-    let report = merge(&base_cst, &left_cst, &right_cst);
+    let report = merge_preferring(&base_cst, &left_cst, &right_cst, prefer);
     let merged = report.merged.to_string();
 
     // The merged card always parses again, unless the right side removed
@@ -1341,7 +1431,7 @@ fn check_laws(base: &str, left: &str, right: &str) -> Result<(String, usize), St
     }
 
     // The identity laws, on the cards as they are.
-    let twin = merge(&base_cst, &left_cst, &left_cst);
+    let twin = merge_preferring(&base_cst, &left_cst, &left_cst, prefer);
     if twin.merged.to_bytes() != left_cst.to_bytes() || !twin.conflicts.is_empty() {
         return Err(format!(
             "two identical edits disagreed: {:?}",
@@ -1349,7 +1439,7 @@ fn check_laws(base: &str, left: &str, right: &str) -> Result<(String, usize), St
         ));
     }
 
-    let untouched = merge(&base_cst, &left_cst, &base_cst);
+    let untouched = merge_preferring(&base_cst, &left_cst, &base_cst, prefer);
     if untouched.merged.to_bytes() != left_cst.to_bytes() || !untouched.conflicts.is_empty() {
         return Err(format!(
             "an untouched right side contributed something: {:?}",
@@ -1378,9 +1468,9 @@ fn check_laws(base: &str, left: &str, right: &str) -> Result<(String, usize), St
     }
 
     // Conflict symmetry: swapping the sides reports the same collided fields,
-    // and as many pairs. The merged bytes legitimately differ, since the left
-    // action wins.
-    let swapped = merge(&base_cst, &right_cst, &left_cst);
+    // and as many pairs. The merged bytes legitimately differ, since the
+    // preferred side's action wins.
+    let swapped = merge_preferring(&base_cst, &right_cst, &left_cst, prefer);
     let (forward, backward) = (
         conflict_keys(&report, &base_model),
         conflict_keys(&swapped, &base_model),
@@ -1401,7 +1491,7 @@ fn check_laws(base: &str, left: &str, right: &str) -> Result<(String, usize), St
 
     // Idempotence: replaying the right side onto the merged card changes
     // nothing.
-    let again = merge(&base_cst, &reparsed, &right_cst);
+    let again = merge_preferring(&base_cst, &reparsed, &right_cst, prefer);
     if canon(&model_of(&again.merged)) != canon(&model_of(&reparsed)) {
         return Err(format!(
             "merging the merged card again thrashed:\n{}\n{}",
@@ -1589,7 +1679,10 @@ proptest! {
     #[test]
     fn the_merge_laws_hold(case in arb_case()) {
         let (base, left, right) = case.cards();
-        check_laws(&base, &left, &right).map_err(TestCaseError::fail)?;
+
+        for prefer in PREFERENCES {
+            check_laws(&base, &left, &right, prefer).map_err(TestCaseError::fail)?;
+        }
     }
 
     /// Every change either lands or is reported, and the merged content and
@@ -1598,6 +1691,30 @@ proptest! {
     fn every_change_lands_or_is_reported(case in arb_case()) {
         let (base, left, right) = case.cards();
         check_case(&base, &left, &right).map_err(TestCaseError::fail)?;
+    }
+
+    /// The preference decides whose value a collision leaves behind, and
+    /// nothing else: each side's actions and the collided fields are what
+    /// they were.
+    #[test]
+    fn the_preference_changes_no_report(case in arb_case()) {
+        let (base, left, right) = case.cards();
+
+        let base_cst = VcardCst::parse(&base).map_err(|e| TestCaseError::fail(e.to_string()))?;
+        let left_cst = VcardCst::parse(&left).map_err(|e| TestCaseError::fail(e.to_string()))?;
+        let right_cst = VcardCst::parse(&right).map_err(|e| TestCaseError::fail(e.to_string()))?;
+
+        let base_model = model_of(&base_cst);
+        let kept = merge_preferring(&base_cst, &left_cst, &right_cst, VcardMergeSide::Left);
+        let taken = merge_preferring(&base_cst, &left_cst, &right_cst, VcardMergeSide::Right);
+
+        prop_assert_eq!(
+            conflict_keys(&kept, &base_model),
+            conflict_keys(&taken, &base_model),
+        );
+        prop_assert_eq!(kept.conflicts.len(), taken.conflicts.len());
+        prop_assert_eq!(&kept.left, &taken.left);
+        prop_assert_eq!(&kept.right, &taken.right);
     }
 }
 
@@ -1685,7 +1802,8 @@ fn apply_cst_edit(cst: &mut VcardCst<'static>, edit: &Edit, editable: &[usize]) 
 
 /// The line indices of a fixture an edit may target: a real property whose
 /// name occurs exactly once, so instance identity is unambiguous without a
-/// `PID`, and which is not part of an embedded card.
+/// `PID`, whose value is not its own identity, and which is not part of an
+/// embedded card.
 fn editable_lines(cst: &VcardCst<'_>) -> Vec<usize> {
     let names: Vec<String> = cst
         .props
@@ -1698,6 +1816,7 @@ fn editable_lines(cst: &VcardCst<'_>) -> Vec<usize> {
         .enumerate()
         .filter(|(_, name)| {
             !matches!(name.as_str(), "VERSION" | "BEGIN" | "END" | "AGENT")
+                && !IDENTIFIED.contains(&name.as_str())
                 && names.iter().filter(|other| other == name).count() == 1
         })
         .map(|(i, _)| i)
@@ -1804,7 +1923,7 @@ fn the_laws_hold_over_the_whole_corpus() {
 
             total += 1;
 
-            match check_laws(&base_text, &left_text, &right_text) {
+            match check_laws(&base_text, &left_text, &right_text, VcardMergeSide::Left) {
                 Ok((_, conflicts)) => {
                     if conflicts > 0 {
                         conflicting += 1;
@@ -1982,10 +2101,12 @@ fn duplicate_list_items_are_diffed_as_a_multiset_and_replayed_as_a_set() {
 fn a_change_past_a_semicolon_of_a_uri_value_is_reported() {
     // A `data:` URI always carries a `;` before its base64 payload, and a URI
     // value does not escape it, so the value node splits into two components
-    // while the decoded `VcardUri` reads only the first one. `diff_pair`
-    // short-circuits on decoded equality, so a change confined to the payload
-    // produces no action at all: it neither lands nor is reported, which is
-    // silent loss of a whole photo.
+    // while the decoded `VcardUri` reads only the first one. Both the value
+    // comparison and the identity read the raw node instead, which is what
+    // keeps a change confined to the payload from being no action at all.
+    //
+    // A `PHOTO` is its URI, so the new payload is a new photo: the base one
+    // leaves and this one arrives.
     let base = card("PHOTO:data:image/png;base64,AAAA\r\n");
     let right = card("PHOTO:data:image/png;base64,BBBB\r\n");
 
@@ -1995,21 +2116,38 @@ fn a_change_past_a_semicolon_of_a_uri_value_is_reported() {
 
     let report = merge(&base_cst, &left_cst, &right_cst);
 
-    assert_eq!(report.right.len(), 1, "the change was not even diffed");
+    assert_eq!(report.right.len(), 2, "the change was not even diffed");
     assert_eq!(report.merged.to_string(), right, "the change did not land");
 }
 
 #[test]
-fn divergent_changes_past_a_semicolon_of_a_uri_value_conflict() {
-    // The same blind spot on both sides: two copies replace the photo payload
-    // with different images, and the merge reports no disagreement at all.
+fn divergent_changes_past_a_semicolon_of_a_value_conflict() {
+    // The same blind spot on a property whose value is not its identity, so
+    // the two copies edited one instance rather than replacing it: they
+    // disagree, and the disagreement is reported.
+    let base = card("TITLE:boss;of;nothing\r\n");
+    let left = card("TITLE:boss;of;everything\r\n");
+    let right = card("TITLE:boss;of;something\r\n");
+
+    let (_, conflicts) = merge_text(&base, &left, &right);
+
+    assert_eq!(conflicts, 1, "two divergent titles were not reported");
+}
+
+#[test]
+fn two_sides_replacing_one_photo_keep_both() {
+    // A `PHOTO` is its URI, so neither side renamed the base photo: each
+    // dropped it and added one of its own, and a card may carry several. Both
+    // survive rather than one being contested away.
     let base = card("PHOTO:data:image/png;base64,AAAA\r\n");
     let left = card("PHOTO:data:image/png;base64,BBBB\r\n");
     let right = card("PHOTO:data:image/png;base64,CCCC\r\n");
 
-    let (_, conflicts) = merge_text(&base, &left, &right);
+    let (merged, conflicts) = merge_text(&base, &left, &right);
 
-    assert_eq!(conflicts, 1, "two divergent photos were not reported");
+    assert!(merged.contains("BBBB"), "got: {merged}");
+    assert!(merged.contains("CCCC"), "got: {merged}");
+    assert_eq!(conflicts, 0);
 }
 
 /// One side of a matching case: the order it lists the three `PID`-tagged
@@ -2150,14 +2288,14 @@ fn a_removal_does_not_renumber_what_follows_it() {
     // or added, removals are then applied on descending indices, and each
     // addition recomputes where it goes. So a line removed near the top does
     // not shift the line an edit further down addresses.
-    let base = card("NOTE:drop\r\nFN:a\r\nTEL:+1\r\nNICKNAME:x\r\n");
-    let right = card("FN:b\r\nTEL:+2\r\nNICKNAME:x,y\r\nEMAIL:e@x.test\r\n");
+    let base = card("NOTE:drop\r\nFN:a\r\nTITLE:dev\r\nNICKNAME:x\r\n");
+    let right = card("FN:b\r\nTITLE:boss\r\nNICKNAME:x,y\r\nROLE:lead\r\n");
 
     let (merged, conflicts) = merge_text(&base, &base, &right);
 
     assert_eq!(
         merged,
-        card("FN:b\r\nTEL:+2\r\nNICKNAME:x,y\r\nEMAIL:e@x.test\r\n"),
+        card("FN:b\r\nTITLE:boss\r\nNICKNAME:x,y\r\nROLE:lead\r\n"),
     );
     assert_eq!(conflicts, 0);
 }
