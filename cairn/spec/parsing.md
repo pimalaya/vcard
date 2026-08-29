@@ -43,10 +43,17 @@ The parser SHALL resolve, and not restore, exactly these wire artifacts: line fo
 
 A dangling QUOTED-PRINTABLE soft-break marker (a trailing `=` on a value whose line declares `ENCODING=QUOTED-PRINTABLE`) is stripped, however it got there, since leaving it in would re-trigger soft-break joining on reparse and swallow the next line.
 
+The leading whitespace is stripped from the assembled logical line, not only from its first physical line, so a whitespace-only line whose continuation carries more than the one fold marker does not leave the leftover in front of the name.
+
 #### Scenario: A dangling continuation
 - GIVEN a line beginning with folding whitespace that follows a dropped blank line
 - WHEN the card is parsed and serialized
 - THEN the leading whitespace is stripped so the line stays its own line and the output reparses unchanged
+
+#### Scenario: A continuation of a whitespace-only line
+- GIVEN the input `"   \r\n  A:b\r\n"`
+- WHEN it is parsed
+- THEN the line is named `A`, not `" A"`, and the output reparses unchanged
 
 ### Requirement: Liberal input
 
@@ -78,3 +85,25 @@ Recursion on untrusted input is a denial-of-service risk, which is why nesting i
 - GIVEN a 2.1 card whose `AGENT` value is itself an escaped card carrying its own `AGENT`
 - WHEN `VcardCst::agent` is called
 - THEN the outer `AGENT` is re-parsed and the inner one is left as raw text
+
+### Requirement: A quoted parameter value is opaque
+
+The line splitter SHALL treat a double-quoted parameter value as opaque, per RFC 6350 section 3.3: neither the `:` separating the head from the value nor the `;` separating one parameter from the next is recognised inside one.
+
+A head carrying an unbalanced quote SHALL still parse: with no `:` outside quotes the splitter falls back to the first `:` anywhere, so a malformed line yields a line rather than an error.
+
+#### Scenario: The RFC 6350 section 6.3.1 address
+- GIVEN a line reading `ADR;GEO="geo:12.3457,78.910";TYPE=work:;;123 Main Street;...`
+- WHEN it is parsed
+- THEN it carries two parameters, `GEO` holding the whole quoted URI, and the address components are not shifted
+
+### Requirement: A written value never ends its own line
+
+Serializing a value SHALL escape a line break in every version, so a value carrying one stays one content line and the card parses back.
+
+vCard 2.1 defines no line-break escape, so its writer emits `\n` and its reader still resolves `\;` alone: the two halves are deliberately not inverses, since the only alternative spelling of a line break in 2.1 is a card that does not parse.
+
+#### Scenario: A note holding a line break in a 2.1 card
+- GIVEN a 2.1 card whose `NOTE` value is set to text carrying a line break
+- WHEN the card is serialized and parsed again
+- THEN it parses, and the value is one line

@@ -1,8 +1,6 @@
 ---
-cairn: change
-id: jscontact-rfc-object-types
-status: landed
-created: 2026-08-09
+cairn: delta
+change: jscontact-rfc-object-types
 ---
 
 # Delta

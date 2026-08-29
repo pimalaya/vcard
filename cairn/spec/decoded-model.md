@@ -38,10 +38,17 @@ Parsing a name is case-insensitive. `VcardPropKind::ALL` enumerates every known 
 
 `VcardPropName` holds either a known `VcardPropKind` or a verbatim unknown name. An unrecognised or missing card version normalises to `VcardVersion::V4_0` in the decoded model, while byte-faithful round-tripping stays on the syntax tree.
 
+A text value keeps its whole first component, unescaped: a comma must be escaped inside a text value, so an unescaped one is content rather than a separator and never truncates the value.
+
 #### Scenario: A vendor extension
 - GIVEN a card carrying an `X-VENDOR-THING` property with an `X-FLAG` parameter
 - WHEN it is decoded and re-encoded
 - THEN both the property and the parameter come back with their original spelling and values
+
+#### Scenario: An unescaped comma in a note
+- GIVEN a card carrying `NOTE:hello, world`
+- WHEN it is decoded
+- THEN the text reads `hello, world` rather than stopping at the comma
 
 ### Requirement: Structured values get bespoke types
 

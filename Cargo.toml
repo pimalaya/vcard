@@ -53,6 +53,7 @@ required-features = ["parser"]
 calcard = { version = "0.3", default-features = false }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 ical_vcard = { version = "0.5", default-features = false }
+proptest = { version = "1", default-features = false, features = ["bit-set", "std"] }
 vcard_parser = { version = "0.2", default-features = false }
 vparser = { version = "1", default-features = false }
 

@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed the three-way merge losing a value edit past the first `;` or `,` of a non-structured value, silently.
+
+  The merge decided whether two copies held the same value by comparing their *decoded* values, and that projection reads a value's first `;`-component alone, truncated again at its first unescaped `,`. Two divergent inline photos (`PHOTO:data:image/png;base64,...`), or two notes differing after a comma, produced no action at all: the change neither landed nor appeared in the report, so a caller resolving on an empty conflict report discarded one of them with nobody asked. Values now compare on the raw value node, component by component.
+
+- Fixed a text value being truncated at an unescaped comma when decoded, so `NOTE:hello, world` no longer reads as `hello`.
+
+- Fixed the line parser splitting a double-quoted parameter value that carries a `:` or a `;`, which RFC 6350 §3.3 allows and its own §6.3.1 `ADR` example uses.
+
+  The head was cut at the first colon anywhere and parameters split on every semicolon, so that example parsed to one `GEO` parameter holding `"geo`, no `LABEL`, and an address shifted by one component. Both scans are now quote aware, falling back to the quote-blind scan when an unbalanced quote leaves no colon outside quotes, so a malformed line still parses.
+
+- Fixed the merge reporting a card as disagreeing with itself when a property carries two parameters of one name, such as the `TEL;TYPE=work;TYPE=home` ordinary in vCard 2.1 and 3.0.
+
+- Fixed the merge reporting a conflict for two sides adding one `TYPE` or `PID` set in two orders, which RFC 6350 §5.6 gives no order.
+
+- Fixed the rule that an update beats a removal applying to a whole property only, so the outcome of a divergent parameter edit depended on which copy was passed as `left`. It now holds at parameter and list-parameter-item granularity too, and the number of reported conflicts no longer depends on the order of the two sides.
+
+- Fixed a right-side list-item edit landing on a value the left side had replaced, producing a merged value neither side wrote and reporting nothing.
+
+- Fixed an addition after a line a source file left unterminated being glued into that line's value, which destroyed the addition and could leave the merged card unparseable. Every line of the merged card but its last now carries a line ending.
+
+- Fixed the merge treating a `BEGIN` or `END` line as an ordinary property, so a bare record's `END:VCARD` was replayed into a wrapped card and truncated it, and fixed an addition to a card carrying a vCard 2.1 `AGENT` landing inside the embedded card rather than beside the property it belongs to.
+
+- Fixed a value replayed between cards of different versions carrying its escaping with it, so a 4.0 `NOTE:a\,c` arrived in a 2.1 card as a literal backslash. It is now re-encoded for the merged card's escaping mode, and two cards of different versions compare their values on the raw bytes, since they share no decoding: `URL:http\://x` at two versions is one value, not a change.
+
+- Fixed a line break written into a vCard 2.1 value being emitted raw, which ended the content line and left a card that no longer parsed. vCard 2.1 has no line-break escape, so the writer now emits `\n`; the reader still resolves `\;` alone, as before.
+
+- Fixed the merge replaying a list-parameter item as its decoded text, so a `TYPE=a\nb` landed as a real line break in the middle of the line's head and the merged card no longer parsed. The item is now written as the right card spelled it.
+
+- Fixed the merge losing a line nobody touched when a card carries two instances of one property name under one `PID`: the untouched instance was paired with the edited one and deleted. Instance matching now pairs on `PID` and equality together before either alone.
+
+- Fixed the merge dropping two copies of a repeated list item when both sides dropped one, so `NICKNAME:a,a` trimmed to `NICKNAME:a` on both sides merged to an empty value.
+
+- Fixed the merge removing an interchangeable duplicate the other copies carried byte for byte, keeping instead a copy spelled differently. Instance matching now prefers identical bytes over decoded equality.
+
+- Fixed the parser keeping the leftover whitespace of a continuation that follows a whitespace-only line, which named a property `" A"` instead of `A` and left a card that did not reparse to itself.
+
 ## [0.2.1] - 2026-08-21
 
 ### Fixed

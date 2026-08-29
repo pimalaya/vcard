@@ -44,19 +44,27 @@ fn escape_modern(bytes: &[u8]) -> Cow<'_, [u8]> {
     Cow::Owned(out)
 }
 
-/// Apply the vCard 2.1 value escape: only `;` is escaped (`\;`).
+/// Apply the vCard 2.1 value escapes `\;` and `\n`.
+///
+/// vCard 2.1 defines only the semicolon escape, so this half is deliberately
+/// not the inverse of the reader: a line break has no 2.1 spelling, and
+/// emitted raw it would end the content line and cut the value in two, so it
+/// is written `\n`, which a 2.1 reader (this crate's included) then reads as a
+/// literal backslash. A value the wire cannot hold is the one thing worse than
+/// a value it holds imprecisely.
 fn escape_v21(bytes: &[u8]) -> Cow<'_, [u8]> {
-    if !bytes.contains(&b';') {
+    if !bytes.iter().any(|b| matches!(b, b';' | b'\n')) {
         return Cow::Borrowed(bytes);
     }
 
     let mut out = Vec::with_capacity(bytes.len() + 2);
 
     for &b in bytes {
-        if b == b';' {
-            out.push(b'\\');
+        match b {
+            b';' => out.extend_from_slice(br"\;"),
+            b'\n' => out.extend_from_slice(br"\n"),
+            other => out.push(other),
         }
-        out.push(b);
     }
 
     Cow::Owned(out)
@@ -82,6 +90,24 @@ mod tests {
         assert_eq!(
             escape_with(b"a,b;c", VcardEscaper::V2_1).as_ref(),
             br"a,b\;c".as_slice(),
+        );
+    }
+
+    /// A line break is never written raw, whatever the version: it would end
+    /// the content line and cut the value in two, leaving a card that does not
+    /// parse back.
+    #[test]
+    fn a_line_break_is_escaped_in_every_version() {
+        assert_eq!(
+            escape_with(b"a\nb", VcardEscaper::Modern).as_ref(),
+            br"a\nb".as_slice(),
+        );
+        // NOTE: vCard 2.1 has no line-break escape, so this half is not the
+        // reader's inverse: `\n` is the only spelling that keeps the line
+        // whole, and 2.1 reads it back as a literal backslash.
+        assert_eq!(
+            escape_with(b"a\nb", VcardEscaper::V2_1).as_ref(),
+            br"a\nb".as_slice(),
         );
     }
 

@@ -18,5 +18,12 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "merge"
+path = "fuzz_targets/merge.rs"
+test = false
+doc = false
+bench = false
+
 # Detach from the parent package so `cargo fuzz` builds this crate standalone.
 [workspace]

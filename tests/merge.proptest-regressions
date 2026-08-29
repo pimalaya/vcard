@@ -1,0 +1,19 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 04ab4b436f0b6e12c10d983fce606c3a4cc58eb13fb66a25d8134489ae12bdad # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [Value { prop: 0, comp: 0, word: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Value { prop: 0, comp: 0, word: 0 }, AddProp { seed: 0 }] }
+cc 204a8bdf5218bc8c26f0f09d5b1d731f96de31bd228da8427974927225da5922 # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [DropProp { prop: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Param { prop: 5, key: 0, word: 0 }, Value { prop: 0, comp: 0, word: 0 }] }
+cc 31ec0cbba799626fa03291b43c30cb186cd65e11690abd12a72e07dfe8fd8132 # shrinks to case = Case { pid: false, seed: [1, 0, 0, 0], left: [Value { prop: 0, comp: 0, word: 0 }, Value { prop: 1, comp: 0, word: 0 }], right: [Value { prop: 0, comp: 0, word: 0 }, Clear { prop: 0, comp: 0 }] }
+cc 34b932850dcefa73f33bf2b2e32a69a0a13f320925ff9ef4253c524be3162136 # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [DropParam { prop: 0, key: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [DropParam { prop: 0, key: 0 }, Param { prop: 0, key: 0, word: 0 }] }
+cc 56a2e92834c0777bc14886d438ac6ca892334fe28d9894cfcf1fa768930256ac # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [Value { prop: 0, comp: 0, word: 0 }, Value { prop: 1, comp: 1, word: 0 }], right: [Value { prop: 6, comp: 1, word: 1 }, Clear { prop: 0, comp: 0 }] }
+cc 662844b20f722ae2055578440de650dedfbcd5b7119602069a6c4046425e9ba6 # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [Param { prop: 1, key: 0, word: 1 }, Param { prop: 1, key: 0, word: 0 }], right: [Param { prop: 1, key: 0, word: 0 }, Param { prop: 1, key: 0, word: 1 }] }
+cc 842632642f201c9514ceaebc036b075fe722ebec150b35eed9f40a172e043337 # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [Value { prop: 0, comp: 0, word: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Value { prop: 0, comp: 0, word: 0 }, Clear { prop: 2, comp: 0 }] }
+cc 91de73575aee7675d65278dc266884234ae6f064ba9b0d4594c2488d8091ce9f # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [Value { prop: 0, comp: 0, word: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Value { prop: 0, comp: 0, word: 0 }, AddProp { seed: 0 }] }
+cc a63bce4be58f54eac42b2fd46aaf9437a4e862210b2757e108b0ddb99ea134f7 # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [DropParam { prop: 0, key: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Param { prop: 0, key: 0, word: 0 }, Value { prop: 0, comp: 0, word: 0 }] }
+cc acc1f5f125c2e8100f5f4c813c1977e2515871aa1fb397789badb6fae222f76b # shrinks to case = Case { pid: true, seed: [0, 0, 0, 0], left: [Value { prop: 0, comp: 0, word: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Value { prop: 0, comp: 0, word: 0 }, DropProp { prop: 0 }] }
+cc c15414225e24bc220de1f3d1bbd18c61b4bab1f0f9bb9f3f027ac346255254d6 # shrinks to left = Side { order: [0, 1, 2], edits: [None, None, Some(0)], removed: None }, right = Side { order: [0, 1, 2], edits: [None, None, Some(1)], removed: None }
+cc ea30f995db872226e58bfa55caa64c6f50907af08ef27339a45a88efe58b3132 # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [DropProp { prop: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Value { prop: 0, comp: 0, word: 1 }, Value { prop: 1, comp: 0, word: 0 }] }
+cc f84acfc6988e06143fda53a5fa0b8a230ebde32e7b3985461e4696a28f52f6f3 # shrinks to case = Case { pid: false, seed: [0, 0, 0, 0], left: [Value { prop: 0, comp: 0, word: 0 }, Value { prop: 0, comp: 0, word: 0 }], right: [Clear { prop: 2, comp: 0 }, Value { prop: 0, comp: 0, word: 0 }] }

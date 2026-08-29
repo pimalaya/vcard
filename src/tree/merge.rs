@@ -13,18 +13,31 @@
 //!
 //! Property instances of the same name are matched across cards by `PID` first
 //! (the RFC 6350 section 7 synchronisation identity), then by equality, then by
-//! position. Changes are diffed at the finest granularity the value shape
-//! allows: whole property, whole value, one component of a structured value, one
-//! item of a list value, one parameter, one item of a list parameter. List items
-//! merge as a set (both sides' additions and removals all apply), so they never
-//! conflict.
+//! position. Two values compare on their raw nodes, component by component,
+//! never through the decoded model, which reads a non-structured value's first
+//! `;`-component alone; across versions they compare on the bytes, since two
+//! cards escaping values differently share no decoding. Changes are diffed at
+//! the finest granularity the value shape allows: whole property, whole value,
+//! one component of a structured value, one item of a list value, one
+//! parameter, one item of a list parameter. List items merge as a set (both
+//! sides' additions and removals all apply), so they never conflict, and the
+//! items of a `TYPE` or `PID` parameter compare as one too, since RFC 6350
+//! gives them no order.
 //!
 //! Divergent changes to the same field are conflicts ([`VcardMergeConflict`]):
 //! the left action wins in the merged card, except when a removal meets an
-//! update, where the update wins (data survives over silent loss). Every
-//! conflict is reported either way, so a caller can resolve differently. The
-//! merged card keeps the left card's `VERSION`; a version change is not
-//! reconciled.
+//! update, where the update wins at every granularity (data survives over
+//! silent loss). A change both sides made is no conflict at all. Every conflict
+//! is reported either way, so a caller can resolve differently.
+//!
+//! The merged card keeps the left card's `VERSION`; a version change is not
+//! reconciled, but a value replayed from a card of another version is
+//! re-encoded for the merged card's escaping mode, so it arrives meaning what
+//! it meant. A `BEGIN` or `END` line is envelope rather than property, so it
+//! is never diffed or replayed, and an addition lands among the outer card's
+//! lines rather than inside a card embedded in a vCard 2.1 `AGENT`. Every line
+//! of the merged card but its last carries a line ending, so the card a caller
+//! serializes reads back as itself.
 
 use core::mem;
 
@@ -38,12 +51,13 @@ use crate::{
     param::VcardParam,
     prop::{VcardProp, VcardPropKind},
     tree::{
-        codec::unescape::unescape,
+        codec::{mode::VcardEscaper, unescape::unescape},
         cst::VcardCst,
         leaf::VcardLeaf,
         line::VcardLine,
         param::node::VcardParamNode,
         prop::{cardinality::VcardPropCardinality, spec::prop_spec},
+        value::node::VcardValueNode,
     },
     value::{VcardValue, VcardValueKind},
     version::VcardVersion,
@@ -63,13 +77,15 @@ pub fn merge<'a>(
     let left_insts = instances(left);
     let right_insts = instances(right);
 
-    let left_matching = matching(&base_insts, &left_insts);
-    let right_matching = matching(&base_insts, &right_insts);
+    let left_matching = matching(base, &base_insts, left, &left_insts);
+    let right_matching = matching(base, &base_insts, right, &right_insts);
 
     let left_ops = diff(base, left, &base_insts, &left_insts, &left_matching);
     let right_ops = diff(base, right, &base_insts, &right_insts, &right_matching);
 
     let mut merger = Merger {
+        escaper: VcardEscaper::for_version(left.version()),
+        left,
         right,
         left_insts: &left_insts,
         right_insts: &right_insts,
@@ -277,11 +293,12 @@ enum Slot {
 
 impl Slot {
     /// Whether a left action on this slot collides with a right action on
-    /// `right`. Right item edits never collide: they replay onto whatever the
-    /// merged field holds, presence-guarded.
+    /// `right`. Two item edits never collide: they merge as a set. An item
+    /// edit does collide with a whole-value change on the other side, either
+    /// way round, since one of the two values has to go.
     fn collides_with(&self, right: &Slot) -> bool {
         match (self, right) {
-            (Self::Value, Self::Value | Self::Component(_)) => true,
+            (Self::Value, Self::Value | Self::Component(_) | Self::Items) => true,
             (Self::Component(_) | Self::Items, Self::Value) => true,
             (Self::Component(left), Self::Component(right)) => left == right,
             (Self::Param(left) | Self::ParamItems(left), Self::Param(right)) => left == right,
@@ -303,14 +320,16 @@ struct Instance<'a> {
 }
 
 /// Decode every property line of a card into a matchable instance, skipping
-/// the `VERSION` indicator.
+/// the indicator and envelope lines, which are not properties: `VERSION`, and
+/// the `BEGIN` / `END` pair an embedded card or a bare RFC 2425 record may
+/// carry among the lines.
 fn instances<'a>(cst: &'a VcardCst<'a>) -> Vec<Instance<'a>> {
     let version = cst.version();
     let mut insts: Vec<Instance<'a>> = Vec::new();
 
     for (line, node) in cst.props.iter().enumerate() {
         let name = node.name.get();
-        if name.eq_ignore_ascii_case("VERSION") {
+        if is_envelope(name) {
             continue;
         }
 
@@ -328,6 +347,48 @@ fn instances<'a>(cst: &'a VcardCst<'a>) -> Vec<Instance<'a>> {
     insts
 }
 
+/// Whether a line names the card's structure rather than a property: the
+/// `VERSION` indicator, or one half of a `BEGIN` / `END` pair.
+///
+/// A vCard 2.1 `AGENT` embeds a whole `BEGIN:VCARD`..`END:VCARD` that the
+/// parser keeps verbatim among the outer card's properties, and a bare RFC
+/// 2425 record has no envelope, so a `BEGIN` or `END` line in one is an
+/// ordinary line of the body. Neither is a property, so neither is diffed,
+/// matched, moved or replayed: replaying an `END` would close the merged card
+/// early and drop everything after it.
+fn is_envelope(name: &str) -> bool {
+    name.eq_ignore_ascii_case("VERSION")
+        || name.eq_ignore_ascii_case("BEGIN")
+        || name.eq_ignore_ascii_case("END")
+}
+
+/// Which lines of a card belong to an embedded card rather than to the card
+/// itself, `BEGIN` and `END` included.
+///
+/// An embedded card's lines are diffed like any other property, since a change
+/// inside an agent is still a change, but an addition is never *placed* among
+/// them: it belongs to the card that owns the property name it repeats.
+fn embedded(props: &[VcardLine<'_>]) -> Vec<bool> {
+    let mut out = Vec::with_capacity(props.len());
+    let mut depth = 0usize;
+
+    for line in props {
+        let name = line.name.get();
+
+        if name.eq_ignore_ascii_case("BEGIN") {
+            depth += 1;
+            out.push(true);
+        } else if name.eq_ignore_ascii_case("END") {
+            depth = depth.saturating_sub(1);
+            out.push(true);
+        } else {
+            out.push(depth > 0);
+        }
+    }
+
+    out
+}
+
 /// The instance pairing between the base card and one side.
 struct Matching {
     /// The matched (base, side) instance index pairs.
@@ -338,10 +399,16 @@ struct Matching {
     removed: Vec<usize>,
 }
 
-/// Pair the base instances with one side's, per name: by `PID` first (the RFC
-/// 6350 section 7 synchronisation identity), then by equality, then by
+/// Pair the base instances with one side's, per name: by `PID` and equality
+/// together first, then by `PID` alone (the RFC 6350 section 7 synchronisation
+/// identity), then by identical bytes, then by equality alone, then by
 /// position. Leftovers are additions (side) and removals (base).
-fn matching(base: &[Instance<'_>], side: &[Instance<'_>]) -> Matching {
+fn matching<'a>(
+    base_cst: &VcardCst<'a>,
+    base: &[Instance<'a>],
+    side_cst: &VcardCst<'a>,
+    side: &[Instance<'a>],
+) -> Matching {
     let mut keys: Vec<&str> = Vec::new();
     for inst in base.iter().chain(side) {
         if !keys.contains(&inst.key.as_str()) {
@@ -357,11 +424,26 @@ fn matching(base: &[Instance<'_>], side: &[Instance<'_>]) -> Matching {
         let mut base_free: Vec<usize> = indices_of(base, key);
         let mut side_free: Vec<usize> = indices_of(side, key);
 
+        // NOTE: a card may carry two instances of one name under one `PID`,
+        // and pairing them in source order would then break an identical pair
+        // and rewrite two lines nobody touched. Identity and equality
+        // together come first, so an unchanged instance stays unchanged.
+        pair_by(&mut base_free, &mut side_free, &mut pairs, |b, s| {
+            pids_overlap(&base[b].prop, &side[s].prop)
+                && prop_eq(base_cst, &base[b], side_cst, &side[s])
+        });
         pair_by(&mut base_free, &mut side_free, &mut pairs, |b, s| {
             pids_overlap(&base[b].prop, &side[s].prop)
         });
+        // NOTE: among instances that decode alike, the one written the same
+        // way comes first, so a card carrying an interchangeable duplicate
+        // loses the copy nobody else spells that way rather than a copy all
+        // three copies carry byte for byte.
         pair_by(&mut base_free, &mut side_free, &mut pairs, |b, s| {
-            base[b].prop == side[s].prop
+            line_eq(base_cst, &base[b], side_cst, &side[s])
+        });
+        pair_by(&mut base_free, &mut side_free, &mut pairs, |b, s| {
+            prop_eq(base_cst, &base[b], side_cst, &side[s])
         });
 
         while !base_free.is_empty() && !side_free.is_empty() {
@@ -490,12 +572,20 @@ fn diff_pair<'a>(
 
     diff_params(&b.prop.params, &s.prop.params, &at, out);
 
-    if b.prop.value == s.prop.value {
+    let old_node = &base.props[b.line].value;
+    let new_node = &side.props[s.line].value;
+
+    if value_eq(old_node, new_node) {
         return;
     }
 
     match (&b.prop.value, &s.prop.value) {
-        (VcardValue::TextList(old), VcardValue::TextList(new)) => {
+        // NOTE: a list value decodes its first component only, so it diffs
+        // item by item only while the rest of the node agrees; otherwise the
+        // whole value changed.
+        (VcardValue::TextList(old), VcardValue::TextList(new))
+            if components_eq(old_node, new_node, 1) =>
+        {
             let (added, removed) = list_diff(&old.0, &new.0);
             for item in removed {
                 out.push(VcardMergeAction::ValueItemRemoved {
@@ -511,8 +601,6 @@ fn diff_pair<'a>(
             }
         }
         (old, new) if old.kind() == new.kind() && is_component_structured(old.kind()) => {
-            let old_node = &base.props[b.line].value;
-            let new_node = &side.props[s.line].value;
             let count = old_node.component_count().max(new_node.component_count());
 
             for component in 0..count {
@@ -561,6 +649,65 @@ fn component_eq(old: &[Cow<'_, str>], new: &[Cow<'_, str>]) -> bool {
             .all(|(old, new)| old.as_ref() == new.as_ref());
 
     eq || (old.iter().all(|value| value.is_empty()) && new.iter().all(|value| value.is_empty()))
+}
+
+/// Whether two instances serialize to the same bytes, line ending included.
+fn line_eq<'a>(
+    a_cst: &VcardCst<'a>,
+    a: &Instance<'a>,
+    b_cst: &VcardCst<'a>,
+    b: &Instance<'a>,
+) -> bool {
+    let (mut left, mut right) = (Vec::new(), Vec::new());
+
+    a_cst.props[a.line].write_bytes(&mut left);
+    b_cst.props[b.line].write_bytes(&mut right);
+
+    left == right
+}
+
+/// Whether two instances hold the same property: the same decoded name and
+/// parameters, and the same value on the raw node.
+fn prop_eq<'a>(
+    a_cst: &VcardCst<'a>,
+    a: &Instance<'a>,
+    b_cst: &VcardCst<'a>,
+    b: &Instance<'a>,
+) -> bool {
+    a.prop.name == b.prop.name
+        && a.prop.params == b.prop.params
+        && value_eq(&a_cst.props[a.line].value, &b_cst.props[b.line].value)
+}
+
+/// Whether two raw value nodes hold the same value.
+///
+/// The comparison runs on the node rather than on the decoded value, which
+/// reads only a value's first `;`-component and would make a change past it
+/// invisible: two `data:` URIs differing in their payload alone decode alike.
+fn value_eq(old: &VcardValueNode<'_>, new: &VcardValueNode<'_>) -> bool {
+    components_eq(old, new, 0)
+}
+
+/// Whether two raw value nodes agree on every component from `from` onwards.
+fn components_eq(old: &VcardValueNode<'_>, new: &VcardValueNode<'_>, from: usize) -> bool {
+    // NOTE: two cards of different versions escape values by different rules,
+    // so they share no decoding to compare through: `http\://x` reads as
+    // itself in 2.1 and as `http://x` later. Only identical bytes are then
+    // certainly the same value.
+    if old.escaper != new.escaper {
+        return raw_value(old) == raw_value(new);
+    }
+
+    let count = old.component_count().max(new.component_count());
+
+    (from..count).all(|i| component_eq(&old.decode_at(i), &new.decode_at(i)))
+}
+
+/// A value node's raw bytes, as it would serialize.
+fn raw_value(node: &VcardValueNode<'_>) -> Vec<u8> {
+    let mut out = Vec::new();
+    node.write_bytes(&mut out);
+    out
 }
 
 /// Diff two matched properties' parameter lists, keyed by parameter name. A
@@ -638,6 +785,70 @@ fn diff_params<'a>(
     }
 }
 
+/// Whether two actions are the same change, so a side that already made it
+/// needs no replay and reports no disagreement.
+///
+/// Equality is exact but for a list parameter, whose items compare as a set:
+/// RFC 6350 section 5.6 gives `TYPE` no ordering, and `PID` none either.
+fn same_change(left: &VcardMergeAction<'_>, right: &VcardMergeAction<'_>) -> bool {
+    use VcardMergeAction::{ParamAdded, ParamChanged, ParamRemoved};
+
+    match (left, right) {
+        (
+            ParamAdded {
+                at: left_at,
+                param: left,
+            },
+            ParamAdded {
+                at: right_at,
+                param: right,
+            },
+        )
+        | (
+            ParamRemoved {
+                at: left_at,
+                param: left,
+            },
+            ParamRemoved {
+                at: right_at,
+                param: right,
+            },
+        ) => left_at == right_at && param_eq(left, right),
+
+        (
+            ParamChanged {
+                at: left_at,
+                old: left_old,
+                new: left_new,
+            },
+            ParamChanged {
+                at: right_at,
+                old: right_old,
+                new: right_new,
+            },
+        ) => left_at == right_at && param_eq(left_old, right_old) && param_eq(left_new, right_new),
+
+        (left, right) => left == right,
+    }
+}
+
+/// Whether two parameters carry the same value, a list parameter's items
+/// compared as an unordered set.
+fn param_eq(left: &VcardParam<'_>, right: &VcardParam<'_>) -> bool {
+    match (left, right) {
+        (VcardParam::Type(left), VcardParam::Type(right))
+        | (VcardParam::Pid(left), VcardParam::Pid(right)) => sorted(left) == sorted(right),
+        (left, right) => left == right,
+    }
+}
+
+/// A list parameter's items in a stable order, for comparing them as a set.
+fn sorted<'v>(values: &'v [Cow<'_, str>]) -> Vec<&'v str> {
+    let mut items: Vec<&str> = values.iter().map(Cow::as_ref).collect();
+    items.sort_unstable();
+    items
+}
+
 /// The dispatch key of a parameter: the canonical spelling of a known kind,
 /// or the uppercased name of an unknown one.
 fn param_key(param: &VcardParam<'_>) -> String {
@@ -679,6 +890,8 @@ fn list_diff<'a>(
 /// deferred structural changes (index-stable edits happen in place; removals
 /// and additions are deferred to [`finish`](Self::finish)).
 struct Merger<'o, 'a> {
+    escaper: VcardEscaper,
+    left: &'a VcardCst<'a>,
     right: &'a VcardCst<'a>,
     left_insts: &'o [Instance<'a>],
     right_insts: &'o [Instance<'a>],
@@ -710,8 +923,8 @@ impl<'a> Merger<'_, 'a> {
         if self.left_matching.removed.contains(&b) {
             if !self.readded.contains(&b) {
                 self.readded.push(b);
-                self.additions
-                    .push(self.right.props[self.right_insts[r].line].clone());
+                let line = self.right_line(self.right_insts[r].line);
+                self.additions.push(line);
                 self.record(self.left_removed_action(b), action);
             }
             return;
@@ -721,22 +934,31 @@ impl<'a> Merger<'_, 'a> {
 
         match action {
             VcardMergeAction::ValueChanged { .. } => {
-                if let Some(colliding) = self.colliding(b, &Slot::Value) {
-                    if colliding != action {
-                        self.record(colliding.clone(), action);
-                    }
+                // NOTE: the action's decoded payload cannot tell two values
+                // apart past their first `;`-component, so the two sides are
+                // compared on their nodes: same value, nothing to replay.
+                let left_value = &self.left.props[line].value;
+                let right_value = &self.right.props[self.right_insts[r].line].value;
+
+                if value_eq(left_value, right_value) {
                     return;
                 }
 
-                let value = self.right.props[self.right_insts[r].line].value.clone();
-                self.merged.props[line].value = value;
+                if let Some(colliding) = self.colliding(b, &Slot::Value) {
+                    self.record(colliding.clone(), action);
+                    return;
+                }
+
+                self.merged.props[line].value = transcode(right_value, self.escaper);
             }
 
             VcardMergeAction::ValueComponentChanged { component, new, .. } => {
+                if self.already_made(b, action) {
+                    return;
+                }
+
                 if let Some(colliding) = self.colliding(b, &Slot::Component(*component)) {
-                    if colliding != action {
-                        self.record(colliding.clone(), action);
-                    }
+                    self.record(colliding.clone(), action);
                     return;
                 }
 
@@ -744,6 +966,11 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ValueItemAdded { item, .. } => {
+                if let Some(colliding) = self.colliding(b, &Slot::Items) {
+                    self.record(colliding.clone(), action);
+                    return;
+                }
+
                 let value = &mut self.merged.props[line].value;
                 let present = value
                     .decode_at(0)
@@ -756,6 +983,18 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ValueItemRemoved { item, .. } => {
+                // NOTE: a removal is not idempotent when the list holds the
+                // item twice, so a side that already dropped it must not drop
+                // a second copy neither side wrote off.
+                if self.already_made(b, action) {
+                    return;
+                }
+
+                if let Some(colliding) = self.colliding(b, &Slot::Items) {
+                    self.record(colliding.clone(), action);
+                    return;
+                }
+
                 let value = &mut self.merged.props[line].value;
                 let position = value
                     .decode_at(0)
@@ -768,11 +1007,20 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ParamAdded { param, .. } => {
-                if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(param))) {
-                    if colliding != action {
-                        self.record(colliding.clone(), action);
-                    }
+                if self.already_made(b, action) {
                     return;
+                }
+
+                // NOTE: an update beats a removal here as it does at property
+                // granularity, so the addition still lands when all the left
+                // side did was remove the parameter.
+                if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(param))) {
+                    let removed = matches!(colliding, VcardMergeAction::ParamRemoved { .. });
+                    self.record(colliding.clone(), action);
+
+                    if !removed {
+                        return;
+                    }
                 }
 
                 if let Some(node) = self.right_param_node(r, param) {
@@ -781,10 +1029,12 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ParamRemoved { param, .. } => {
+                if self.already_made(b, action) {
+                    return;
+                }
+
                 if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(param))) {
-                    if colliding != action {
-                        self.record(colliding.clone(), action);
-                    }
+                    self.record(colliding.clone(), action);
                     return;
                 }
 
@@ -799,11 +1049,19 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ParamChanged { old, new, .. } => {
-                if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(new))) {
-                    if colliding != action {
-                        self.record(colliding.clone(), action);
-                    }
+                if self.already_made(b, action) {
                     return;
+                }
+
+                let mut restore = false;
+
+                if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(new))) {
+                    restore = matches!(colliding, VcardMergeAction::ParamRemoved { .. });
+                    self.record(colliding.clone(), action);
+
+                    if !restore {
+                        return;
+                    }
                 }
 
                 let position = self.merged.props[line]
@@ -811,14 +1069,26 @@ impl<'a> Merger<'_, 'a> {
                     .iter()
                     .position(|node| node.decode() == *old);
 
-                if let (Some(i), Some(node)) = (position, self.right_param_node(r, new)) {
-                    self.merged.props[line].params[i] = node.clone();
+                if let Some(node) = self.right_param_node(r, new) {
+                    match (position, restore) {
+                        (Some(i), _) => self.merged.props[line].params[i] = node.clone(),
+                        // NOTE: the left side removed the parameter this
+                        // update rewrote, so the update brings it back.
+                        (None, true) => self.merged.props[line].params.push(node.clone()),
+                        (None, false) => {}
+                    }
                 }
             }
 
             VcardMergeAction::ParamItemAdded { param, item, .. } => {
+                // NOTE: a parameter value is read through the value unescaper
+                // and written back verbatim, so the item has to land as the
+                // right card spelled it: written decoded, a `\n` would become
+                // a real line break and cut the line in two.
+                let leaf = self.right_param_item(r, param, item);
+
                 let Some(node) = param_node_mut(&mut self.merged.props[line], param) else {
-                    self.param_gone_conflict(b, param, action);
+                    self.restore_param(b, r, param, action);
                     return;
                 };
 
@@ -827,14 +1097,22 @@ impl<'a> Merger<'_, 'a> {
                     .iter()
                     .any(|value| unescape(value.get()) == item.as_ref());
 
-                if !present {
-                    node.values.push(VcardLeaf::from(item.to_string()));
+                if let Some(leaf) = leaf
+                    && !present
+                {
+                    node.values.push(leaf);
                 }
             }
 
             VcardMergeAction::ParamItemRemoved { param, item, .. } => {
+                // NOTE: as above, a parameter may hold one item twice, and
+                // `TYPE=work,,` is exactly that.
+                if self.already_made(b, action) {
+                    return;
+                }
+
                 let Some(node) = param_node_mut(&mut self.merged.props[line], param) else {
-                    self.param_gone_conflict(b, param, action);
+                    self.restore_param(b, r, param, action);
                     return;
                 };
 
@@ -875,7 +1153,7 @@ impl<'a> Merger<'_, 'a> {
 
     /// Replay a right-side property addition.
     fn apply_added(&mut self, s: usize, action: &VcardMergeAction<'a>) {
-        let VcardMergeAction::PropAdded { prop, .. } = action else {
+        let VcardMergeAction::PropAdded { .. } = action else {
             return;
         };
         let inst = &self.right_insts[s];
@@ -883,7 +1161,7 @@ impl<'a> Merger<'_, 'a> {
         // NOTE: the left side added the same property: one copy is enough.
         let both_added = self.left_matching.added.iter().any(|&l| {
             let left = &self.left_insts[l];
-            left.key == inst.key && left.prop == *prop
+            left.key == inst.key && prop_eq(self.left, left, self.right, inst)
         });
         if both_added {
             return;
@@ -902,13 +1180,13 @@ impl<'a> Merger<'_, 'a> {
             }
         }
 
-        self.additions.push(self.right.props[inst.line].clone());
+        self.additions.push(self.right_line(inst.line));
     }
 
     /// Run the deferred structural changes and return the merged card with
     /// the recorded conflicts. Removals go first (on stable indices), then
     /// each addition lands after the last line sharing its name, or at the
-    /// end.
+    /// end, and every line but the last is terminated.
     fn finish(mut self) -> (VcardCst<'a>, Vec<VcardMergeConflict<'a>>) {
         self.removals.sort_unstable();
         self.removals.dedup();
@@ -917,17 +1195,29 @@ impl<'a> Merger<'_, 'a> {
         }
 
         for line in mem::take(&mut self.additions) {
+            // NOTE: only the outer card's lines count here: an embedded card
+            // carries its own properties, and with an agent present the last
+            // line of a given name is usually the agent's, which is where an
+            // addition to the outer card used to land.
+            let embedded = embedded(&self.merged.props);
+
             let after = self
                 .merged
                 .props
                 .iter()
-                .rposition(|prop| prop.name.get().eq_ignore_ascii_case(line.name.get()));
+                .enumerate()
+                .filter(|(i, _)| !embedded[*i])
+                .rev()
+                .find(|(_, prop)| prop.name.get().eq_ignore_ascii_case(line.name.get()))
+                .map(|(i, _)| i);
 
             match after {
                 Some(i) => self.merged.props.insert(i + 1, line),
                 None => self.merged.props.push(line),
             }
         }
+
+        terminate_lines(&mut self.merged);
 
         (self.merged, self.conflicts)
     }
@@ -951,6 +1241,13 @@ impl<'a> Merger<'_, 'a> {
         })
     }
 
+    /// Whether the left side already made the very same change, so the merged
+    /// card holds it and the right action needs neither a replay nor a report.
+    fn already_made(&self, b: usize, action: &VcardMergeAction<'a>) -> bool {
+        self.left_ops_on(b)
+            .any(|(_, left)| same_change(left, action))
+    }
+
     /// The left-side action whose slot collides with a right action's slot on
     /// the same base instance, if any.
     fn colliding(&self, b: usize, right: &Slot) -> Option<&VcardMergeAction<'a>> {
@@ -968,6 +1265,30 @@ impl<'a> Merger<'_, 'a> {
             .expect("a left removal action")
     }
 
+    /// One line of the right card, ready to land in the merged one: its value
+    /// re-encoded for the merged card's escaping mode when the two differ.
+    fn right_line(&self, line: usize) -> VcardLine<'a> {
+        let mut line = self.right.props[line].clone();
+        line.value = transcode(&line.value, self.escaper);
+        line
+    }
+
+    /// The right card's raw leaf for one decoded item of a list parameter.
+    ///
+    /// The item was decoded from that very node, so the leaf is there; without
+    /// it there is no wire form to write, and the decoded text is not one: a
+    /// parameter value is unescaped on the way in and copied verbatim on the
+    /// way out, so writing it back decoded can put a line break in the head.
+    fn right_param_item(&self, r: usize, param: &str, item: &str) -> Option<VcardLeaf<'a>> {
+        self.right.props[self.right_insts[r].line]
+            .params
+            .iter()
+            .filter(|node| node.name.get().eq_ignore_ascii_case(param))
+            .flat_map(|node| node.values.iter())
+            .find(|value| unescape(value.get()) == item)
+            .cloned()
+    }
+
     /// The right card's raw node of a decoded parameter, for byte-faithful
     /// replay.
     fn right_param_node(&self, r: usize, param: &VcardParam<'_>) -> Option<&'a VcardParamNode<'a>> {
@@ -977,10 +1298,11 @@ impl<'a> Merger<'_, 'a> {
             .find(|node| node.decode() == *param)
     }
 
-    /// Record the conflict of a right item edit whose parameter the left side
-    /// removed or replaced; without a left culprit (nothing to restore onto),
-    /// the edit is silently dropped.
-    fn param_gone_conflict(&mut self, b: usize, param: &str, action: &VcardMergeAction<'a>) {
+    /// Replay a right item edit whose parameter the left side removed: the
+    /// update beats the removal, so the right side's whole parameter comes
+    /// back and the collision is reported. Without a left culprit there is
+    /// nothing to restore over, and the edit is dropped.
+    fn restore_param(&mut self, b: usize, r: usize, param: &str, action: &VcardMergeAction<'a>) {
         let key = param.to_ascii_uppercase();
         let culprit = self
             .left_ops_on(b)
@@ -992,9 +1314,22 @@ impl<'a> Merger<'_, 'a> {
             })
             .map(|(_, action)| action.clone());
 
-        if let Some(culprit) = culprit {
-            self.record(culprit, action);
+        let Some(culprit) = culprit else {
+            return;
+        };
+
+        let node = self.right.props[self.right_insts[r].line]
+            .params
+            .iter()
+            .find(|node| node.name.get().eq_ignore_ascii_case(param))
+            .cloned();
+
+        if let Some(node) = node {
+            let line = self.left_line(b);
+            self.merged.props[line].params.push(node);
         }
+
+        self.record(culprit, action);
     }
 
     /// Record one conflict pair.
@@ -1003,6 +1338,52 @@ impl<'a> Merger<'_, 'a> {
             left,
             right: right.clone(),
         });
+    }
+}
+
+/// Re-encode a value node for `escaper`, so a value replayed from a card of
+/// another version arrives with the escaping its new card reads.
+///
+/// vCard 2.1 escapes only `;`, while the later versions also escape a
+/// backslash, a comma and a newline, so copying the bytes across would change
+/// what the value means. A node already written for `escaper` is cloned
+/// unchanged, which is every merge of one version's cards.
+fn transcode<'a>(node: &VcardValueNode<'a>, escaper: VcardEscaper) -> VcardValueNode<'a> {
+    if node.escaper == escaper {
+        return node.clone();
+    }
+
+    let mut out = VcardValueNode::from_components(Vec::new(), escaper);
+
+    for i in 0..node.component_count() {
+        out.set_at(i, &node.decode_at(i));
+    }
+
+    out
+}
+
+/// Give every line of a card but its last a line ending.
+///
+/// A card read without a trailing break leaves its final line with an empty
+/// ending, which is right only while that line stays last: a line serializes
+/// as its name, parameters, value and ending with nothing in between, so
+/// anything written after an unterminated line would land inside its value.
+fn terminate_lines(cst: &mut VcardCst<'_>) {
+    let mut lines: Vec<&mut VcardLine<'_>> = cst
+        .begin
+        .iter_mut()
+        .chain(cst.props.iter_mut())
+        .chain(cst.end.iter_mut())
+        .collect();
+
+    let Some((_, rest)) = lines.split_last_mut() else {
+        return;
+    };
+
+    for line in rest {
+        if line.eol.get().is_empty() {
+            line.eol = VcardLeaf::from("\r\n");
+        }
     }
 }
 

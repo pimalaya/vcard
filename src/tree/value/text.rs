@@ -1,6 +1,8 @@
 //! # Text value codec (RFC 6350 4.1)
 //!
-//! [`VcardCodec`] for a single text value and a comma-separated text list.
+//! [`VcardCodec`] for a single text value and a comma-separated text list. A
+//! single text value keeps its whole component, commas included, since a comma
+//! separates items only in a list.
 
 use alloc::vec;
 
@@ -18,7 +20,10 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardText<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardText(node.decode_scalar_at(0))
+        // NOTE: a comma must be escaped inside a text value, so an unescaped
+        // one is content rather than a separator; cutting the value there
+        // would drop everything after it.
+        VcardText(node.decode_joined_at(0))
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
