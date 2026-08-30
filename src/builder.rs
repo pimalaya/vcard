@@ -4,8 +4,8 @@
 //!
 //! [`VcardBuilder`] assembles a card in one fluent chain: `new(version)` fixes
 //! the version once, then `prop::<L>()` opens a property segment keyed by a
-//! lens marker, `param` decorates it, and `value` closes it and returns to the
-//! card level.
+//! property marker, `param` decorates it, and `value` closes it and returns to
+//! the card level.
 //!
 //! Since `value` yields the card builder and `prop` consumes it, the phases are
 //! enforced by the type system: a `param` before any `prop`, or a `build` with
@@ -17,13 +17,14 @@
 //! [`build_unchecked`](VcardBuilder::build_unchecked) skips the check.
 //!
 //! [`VcardPropBuilder`] is the single-property piece underneath, the write-side
-//! counterpart of the lenses: keyed by the same zero-sized markers, it carries
-//! the card version, accumulates parameters, and emits an open [`VcardProp`].
+//! counterpart of the read lenses: keyed by the same zero-sized markers, it
+//! carries the card version, accumulates parameters, and emits an open
+//! [`VcardProp`].
 //!
 //! Its name is pinned by the marker's [`VcardPropSpec`], and
 //! [`build`](VcardPropBuilder::build) runs the shared per-property check
-//! ([`validate_prop`](crate::validator)), so the value kind and every
-//! known parameter must be allowed for the version.
+//! ([`validate_prop`](crate::validator)), so the value kind and every known
+//! parameter must be allowed for the version.
 //!
 //! Unknown, extension parameters pass. To emit something the spec forbids,
 //! construct the open [`VcardProp`] by hand. The version is a value the

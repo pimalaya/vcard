@@ -105,7 +105,37 @@ impl Vcard<'_> {
     }
 }
 
+/// The conversion reads and writes the decoded model alone, so it holds in a
+/// build carrying no parser.
 #[cfg(test)]
+mod model_tests {
+    use alloc::{borrow::Cow, vec};
+
+    use crate::{
+        prop::VcardProp, value::VcardValue, value::text::VcardText, vcard::Vcard,
+        version::VcardVersion,
+    };
+
+    #[test]
+    fn round_trips_a_hand_built_card() {
+        let card = Vcard {
+            version: VcardVersion::V4_0,
+            properties: vec![VcardProp {
+                name: "FN".into(),
+                params: vec![],
+                value: VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
+            }],
+        };
+
+        let jscontact = card.to_jscontact();
+        assert_eq!(jscontact["name"]["full"], "John Doe");
+
+        let back = Vcard::from_jscontact(&jscontact).expect("a Card object");
+        assert_eq!(&*back.properties[0].name, "FN");
+    }
+}
+
+#[cfg(all(test, feature = "parser"))]
 mod tests {
     use alloc::{borrow::Cow, vec, vec::Vec};
 

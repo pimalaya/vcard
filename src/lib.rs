@@ -24,8 +24,8 @@
 //! into the model.
 //!
 //! Strictness lives on the way out: the builder refuses to construct a
-//! property the spec forbids, and [`validate`](validator) checks a
-//! decoded card against its version's RFC contract.
+//! property the spec forbids, and [`validate`](validator) checks a decoded
+//! card against its version's RFC contract.
 //!
 //! ## The two layers
 //!
@@ -76,8 +76,8 @@
 //! with the model and needs no parser.
 //!
 //! That one source of truth has three readers: the decoder picks a value kind
-//! from it, [`validate`](validator) checks conformance against it,
-//! and the builder rejects illegal construction with it.
+//! from it, [`validate`](validator) checks conformance against it, and the
+//! builder rejects illegal construction with it.
 //!
 //! A card that passes earns a [`VcardValid`] proof. Validity is a runtime
 //! predicate rather than a second type, since a conformant card may still
@@ -113,18 +113,19 @@
 //! ## Cargo features
 //!
 //! `parser` (default) brings the byte-faithful [`tree`] and its codec, via the
-//! `memchr` crate. Everything under [`tree`] is gated on it; the decoded model
-//! is always available.
+//! `memchr` crate. Everything under [`tree`] is gated on it. The decoded model
+//! is always available, and so are the spec layer above it, the [`builder`],
+//! the [`validator`] and both JSON representations: none of them reads bytes.
 //!
 //! Three content decoders are default too, one small crate each:
 //! `quoted-printable` decodes `QUOTED-PRINTABLE` value octets, `base64`
 //! decodes inline `BASE64` binary values, and `encoding` transcodes a foreign
 //! `CHARSET` to text through `encoding_rs` (the WHATWG Encoding Standard).
 //!
-//! `jcard` adds the RFC 7095 JSON representation, via the `serde_json` crate,
-//! and implies `parser` for the property specs. `jscontact` adds the RFC 9555
-//! conversion to the RFC 9553 Card, implies `jcard`, whose syntax carries the
-//! escape hatch, and pulls no crate of its own.
+//! `jcard` adds the RFC 7095 JSON representation, via the `serde_json` crate.
+//! `jscontact` adds the RFC 9555 conversion to the RFC 9553 Card, implies
+//! `jcard`, whose syntax carries the escape hatch, and pulls no crate of its
+//! own.
 //!
 //! [`VcardPropKind`]: prop::VcardPropKind
 //! [`VcardParamKind`]: param::VcardParamKind

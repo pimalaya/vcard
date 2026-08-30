@@ -16,7 +16,7 @@ Validity and lossiness are orthogonal. A conformant card may still carry `X-` or
 
 ### Requirement: One spec per property, three readers
 
-Each property SHALL carry a `VcardPropSpec` on its lens marker declaring the versions it lives in, its `VcardPropCardinality`, the value kinds and parameters it may take per version, and the value kind in force given a declared `VALUE`.
+Each property SHALL carry a `VcardPropSpec` on its marker declaring the versions it lives in, its `VcardPropCardinality`, the value kinds and parameters it may take per version, and the value kind in force given a declared `VALUE`.
 
 A single vtable dispatch bridges the open `VcardPropKind` back to those static impls. The decoder consults it to pick a value kind, validation consults it to check conformance, and the builder consults it to reject illegal construction.
 

@@ -54,7 +54,7 @@ Import stays liberal and ignores `@type` entirely, so a Card written with a draf
 
 ### Requirement: RFC 9554 is modeled first-class, not escaped
 
-The RFC 9554 properties (`CREATED`, `GRAMGENDER`, `LANGUAGE`, `PRONOUNS`, `SOCIALPROFILE`), its parameters, and the RFC 9555 `JSPROP` property and `JSPTR` parameter SHALL each have a lens marker and spec, so the JSContact conversion maps them directly instead of dropping them into the escape hatch.
+The RFC 9554 properties (`CREATED`, `GRAMGENDER`, `LANGUAGE`, `PRONOUNS`, `SOCIALPROFILE`), its parameters, and the RFC 9555 `JSPROP` property and `JSPTR` parameter SHALL each have a marker and spec, so the JSContact conversion maps them directly instead of dropping them into the escape hatch.
 
 #### Scenario: A pronouns property
 - GIVEN a 4.0 card carrying `PRONOUNS`

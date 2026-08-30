@@ -25,6 +25,7 @@
 //! byte tree:
 //!
 //! ```rust
+//! # #[cfg(feature = "parser")] {
 //! use vcard::tree::cst::VcardCst;
 //!
 //! let raw = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n";
@@ -36,6 +37,7 @@
 //! // The proof converts back into a byte tree for free.
 //! let out = VcardCst::from(valid);
 //! assert!(out.to_string().contains("FN:John Doe"));
+//! # }
 //! ```
 
 use core::{error, fmt, ops::Deref};
@@ -317,7 +319,6 @@ mod tests {
     use crate::{
         param::{VcardParam, VcardParamKind},
         prop::{VcardProp, VcardPropKind, cardinality::VcardPropCardinality},
-        tree::cst::VcardCst,
         validator::{VcardValid, VcardValidateError},
         value::{VcardValue, VcardValueKind, n::VcardN, text::VcardText, uri::VcardUri},
         vcard::Vcard,
@@ -552,7 +553,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_proof_derefs_unwraps_and_converts() {
+    fn valid_proof_derefs_and_unwraps() {
         let vcard = card(
             VcardVersion::V4_0,
             vec![prop(
@@ -565,10 +566,29 @@ mod tests {
         let valid = VcardValid::try_from(vcard.clone()).expect("a conformant card");
         assert_eq!(valid.version, VcardVersion::V4_0);
 
-        let cst = VcardCst::from(valid);
-        assert!(cst.to_string().contains("FN:John"));
-
         let inner = vcard.validate().unwrap().into_inner();
         assert_eq!(inner.version, VcardVersion::V4_0);
+    }
+
+    /// The proof converts back into a byte tree, which only a build carrying
+    /// the syntax layer can do.
+    #[cfg(feature = "parser")]
+    #[test]
+    fn valid_proof_converts_into_a_byte_tree() {
+        use crate::tree::cst::VcardCst;
+
+        let vcard = card(
+            VcardVersion::V4_0,
+            vec![prop(
+                "FN",
+                vec![],
+                VcardValue::Text(VcardText(Cow::Borrowed("John"))),
+            )],
+        );
+
+        let valid = VcardValid::try_from(vcard).expect("a conformant card");
+        let cst = VcardCst::from(valid);
+
+        assert!(cst.to_string().contains("FN:John"));
     }
 }

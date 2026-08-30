@@ -6,9 +6,9 @@ status: current
 
 # Editing
 
-Reading and writing one property of a parsed card without disturbing the rest of it. The moving parts are the per-property lens markers in `tree::prop`, the per-parameter markers in `tree::param`, and the cursors in `tree::value::cursor`.
+Reading and writing one property of a parsed card without disturbing the rest of it. The moving parts are the per-property lens impls in `tree::prop`, the per-parameter markers in `tree::param`, and the cursors in `tree::value::cursor`.
 
-A lens marker is a zero-sized type-level key spelled exactly as its wire token (`FN`, `ADR`, `SORT_AS`), used as `card.prop::<FN>()`. It ties that token to a decoded value type, an edit cursor and the `decode` projection, and carries the property's spec (see [conformance](./conformance.md)).
+A marker is a zero-sized type-level key spelled exactly as its wire token (`FN`, `ADR`, `SORT_AS`), used as `card.prop::<FN>()`. It is defined in `prop::<name>` with the spec it carries (see [conformance](./conformance.md)); the lens tying that token to a decoded value type, an edit cursor and the `decode` projection is implemented on it here.
 
 ### Requirement: Edits are byte-preserving
 

@@ -2,36 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-30
+
 ### Removed
 
-- Removed the collision preference: the `prefer` field on `VcardMerge` and the `VcardMergeSide` enum. The left side is git's `ours` and always wins; the right side is `theirs`.
+- Removed the free `tree::merge::merge` function, replaced by `VcardMerge::merge`.
 
-  The split was argued as two separately answered questions, the baseline being about bytes and the winner about policy, but no caller ever answered them differently: tCard and neverest both passed `Left`, and nothing in the ecosystem passed `Right`.
-
-  Git already names the arrangement and everybody reads it the same way, so it is the convention rather than a switch with one setting.
-
-  Hard-coding it also retires a mechanism that had quietly become unreachable: a parameter or an addition could only replace the one it beat while the right side was able to win, so the merged card now simply keeps the left side's and reports the collision.
-
-  An update still beats a removal whichever side it came from, which was never the caller's to invert, and a caller wanting the other value still has both actions in the report.
+  A caller now names its three cards rather than positioning them: `VcardMerge { base, left, right }.merge()`.
 
 ### Added
 
 - Added the `identity` field on `VcardPropPath`, naming which member of a group of same-named properties an action addresses.
 
-- Added `tree::merge::VcardMerge`, a struct carrying the three cards, with a `merge` method replacing the free `merge` function.
+- Added `tree::merge::VcardMerge`, a struct carrying the three cards, with a `merge` method.
 
-  The free function stays as a deprecated shim over it, keeping the left preference, so an existing caller keeps building. It is due for removal once its callers, tCard and neverest among them, build the struct instead.
-
-- Added `tree::merge::VcardMergeSide` and the `prefer` field on `VcardMerge`.
-
-  It says which side's value the merged card carries where both sides changed one field to different things, apart from `left`, which now answers only whose untouched bytes survive. `Left` is the default and the behaviour every merge had before.
-
-  The preference decides that case and no other: an update still beats a removal whichever side it came from, a field one side alone touched is still taken from that side, and the report names the same actions and the same fields whichever way it falls.
+  The left side is git's `ours` and the right side is git's `theirs`: the left supplies the baseline bytes and keeps its value where both sides wrote one into a single field, and every collision is reported either way. An update still beats a removal whichever side it came from.
 
 - Added `tree::wire::VcardWire`, the wire layout of a content line, and a `wire` field on `VcardLine` carrying it.
 
@@ -123,7 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   A property may write one parameter name more than once, `TEL;TYPE=work;TYPE=voice` being the RFC 2426 section 4 example, and the field an action occupied was keyed on the parameter name alone.
 
-  A side rewriting the first `TYPE` and a side rewriting the second therefore contested one field: the preferred side won it, and the other side's edit never reached the merged card.
+  A side rewriting the first `TYPE` and a side rewriting the second therefore contested one field: the left side won it, and the right side's edit never reached the merged card.
 
   Each occurrence is now a field of its own, addressed by its name and by its position among the property's parameters of that name, so both edits land and neither is reported.
 
@@ -137,20 +126,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   A value whose decoding does not say what its node says is now reported as the node's raw components (`VcardValue::Unknown`), so the report says what the merged card carries.
 
-- A URI value was truncated at its first `;`, and escaped on the way back out.
+- Fixed a URI value being truncated at its first `;`, and escaped on the way back out.
 
   RFC 6350 section 4.2 gives a URI no structure and no escaping, but the codec read it as a structured value and kept only the first `;`-component, so `PHOTO:data:image/png;base64,AAAA` decoded to `data:image/png` and the payload was gone.
 
   Encoding then escaped the semicolon it had just used as a separator, so a value that did survive decoding did not survive its own round trip. A URI is now read whole and written back exactly as it is held, which is also what makes an inline data URI comparable between two sides of a merge.
 
-
-- A phone number or an email address edited differently on both sides was kept twice instead of being reported as a collision.
+- Fixed a phone number or an email address edited differently on both sides being kept twice instead of being reported as a collision.
 
   A property that may repeat and whose value names a thing outside the card is identified by that value, so the matching cannot see such a property change: it reads the edit as the old instance leaving and a new one arriving.
 
   Two arrivals then merged as a set, which is right for two additions and wrong for one instance edited two ways, and the card came back holding both numbers with nothing recorded against them.
 
-  Two arrivals standing over one departure both sides agreed on are now a collision, resolved for the preferred side like any other, while two arrivals over nothing are still two additions and still merge as a set.
+  Two arrivals standing over one departure both sides agreed on are now a collision, resolved for the left side like any other, while two arrivals over nothing are still two additions and still merge as a set.
 
 - Fixed the three-way merge losing a value edit past the first `;` or `,` of a non-structured value, silently.
 
@@ -288,7 +276,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   `Vcard::to_jscontact` and `from_jscontact` convert to and from an RFC 9553 Card, infallibly aside from a non-object import root. Unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams`, and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.2.1..HEAD
+[unreleased]: https://github.com/pimalaya/vcard/compare/v0.3.0..HEAD
+[0.3.0]: https://github.com/pimalaya/vcard/compare/v0.2.1..v0.3.0
 [0.2.1]: https://github.com/pimalaya/vcard/compare/v0.2.0..v0.2.1
 [0.2.0]: https://github.com/pimalaya/vcard/compare/v0.1.0..v0.2.0
 [0.1.0]: https://github.com/pimalaya/vcard/compare/root..v0.1.0
