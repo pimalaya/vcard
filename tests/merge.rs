@@ -1,20 +1,24 @@
 #![cfg(feature = "parser")]
-//! # Three-way merge: algebraic laws, completeness, and a differential
-//! reference
+//! # Three-way merge
+//!
+//! Algebraic laws, completeness, and a differential reference.
 //!
 //! Property-based and differential coverage of
 //! [`vcard::tree::merge::merge`](vcard::tree::merge::merge), the
-//! byte-preserving three-way merge. Three layers, all driven by the same
-//! generator and the same plain-data model of a card, run over both generated
-//! cards and the corpus fixtures. The libFuzzer twin lives in
-//! fuzz/fuzz_targets/merge.rs.
+//! byte-preserving three-way merge.
 //!
-//! The **laws** are the algebraic identities a three-way merge owes its caller:
-//! an untouched side contributes nothing, two identical edits are not a
-//! disagreement, neither the collided fields nor their number depends on which
-//! side is called left, the merged card reparses to a fixpoint, a line all
-//! three copies carry keeps its bytes (bar the line ending a line gains when
-//! it stops being last), and re-merging the merged card changes nothing.
+//! Three layers, all driven by the same generator and the same plain-data
+//! model of a card, run over both generated cards and the corpus fixtures. The
+//! libFuzzer twin lives in fuzz/fuzz_targets/merge.rs.
+//!
+//! The **laws** are the algebraic identities a three-way merge owes its
+//! caller: an untouched side contributes nothing, two identical edits are not
+//! a disagreement, and neither the collided fields nor their number depends on
+//! which side is called left.
+//!
+//! The merged card also reparses to a fixpoint, a line all three copies carry
+//! keeps its bytes (bar the line ending a line gains when it stops being
+//! last), and re-merging the merged card changes nothing.
 //!
 //! The **completeness law** is the one that catches silent loss: every change
 //! either lands in the merged card or is named in the report's conflicts, and
@@ -24,9 +28,10 @@
 //! The **differential** compares the real merge against [`reference_merge`], a
 //! deliberately naive second implementation that models a card as plain field
 //! maps, diffs each side against the base with set operations, and reconciles
-//! by the rules the merge module documents. It knows nothing about byte
-//! preservation and keeps no ordering, so the two are compared on normalised
-//! content ([`canon`]) and on conflict keys.
+//! by the rules the merge module documents.
+//!
+//! It knows nothing about byte preservation and keeps no ordering, so the two
+//! are compared on normalised content ([`canon`]) and on conflict keys.
 //!
 //! `PROPTEST_CASES` raises the case count and `MERGE_CORPUS_ROUNDS` the number
 //! of edit pairs each fixture is merged against, so the same tests run as a
@@ -35,13 +40,13 @@
 //!
 //! ## What is deliberately excluded
 //!
-//! Instance matching by value equality and by position (the lower rungs of
-//! the merge's ladder) is out of the generator's reach by construction: every
-//! generated card either has unique property names or carries a distinct
-//! `PID` on every instance, so the reference can match by identity without
-//! reimplementing the matching. `PID` matching gets its own law in
-//! [`pid_matching_survives_a_reorder`], and equality matching stays covered by
-//! the unit tests in the merge module itself.
+//! Instance matching by value equality and by position (the lower rungs of the
+//! merge's ladder) is out of the generator's reach by construction: every
+//! generated card either has unique property names or carries a distinct `PID`
+//! on every instance, so the reference can match by identity.
+//!
+//! `PID` matching gets its own law in [`pid_matching_survives_a_reorder`], and
+//! equality matching stays covered by the unit tests in the merge module.
 //!
 //! No edit rewrites the value of a property whose value is its own identity,
 //! since that is a rename rather than an edit: the instance leaves and another
@@ -271,7 +276,7 @@ fn model_of(cst: &VcardCst<'_>) -> Vec<Prop> {
             Shape::Scalar => vec![vec![whole_value(&line.value)]],
             Shape::List => vec![
                 line.value
-                    .decode_at(0)
+                    .decode_component_list(0)
                     .iter()
                     .map(|v| v.to_string())
                     .collect(),
@@ -279,7 +284,7 @@ fn model_of(cst: &VcardCst<'_>) -> Vec<Prop> {
             Shape::Structured => (0..line.value.component_count())
                 .map(|i| {
                     line.value
-                        .decode_at(i)
+                        .decode_component_list(i)
                         .iter()
                         .map(|v| v.to_string())
                         .collect()
@@ -312,7 +317,7 @@ fn whole_value(node: &VcardValueNode<'_>) -> String {
 
     let mut comps: Vec<String> = (0..node.component_count())
         .map(|i| {
-            let values = node.decode_at(i);
+            let values = node.decode_component_list(i);
             match values.iter().all(|value| value.is_empty()) {
                 true => String::new(),
                 false => values
@@ -618,16 +623,9 @@ fn reported(keys: &BTreeSet<Key>, id: &str, name: &str, field: &Field) -> bool {
 
 /// The completeness law: every change either lands or is reported.
 ///
-/// For every field of every instance the merged card either holds what one
-/// side made it (and that side changed it), or what the base held (and neither
-/// side changed it). A side's change that did not land must be named in the
-/// report's conflicts, and nothing may appear that neither side wrote.
-///
-/// Set-valued fields (list values, list parameters present on all three) are
-/// stated differently: they carry both sides' additions and removals, so the
-/// law is an equality against [`set_reconcile`] rather than a choice of side.
-///
-/// Returns the first violation, or `Ok(())`.
+/// The merged card holds what one side made a field and that side changed it,
+/// or what the base held and neither did. Set-valued fields instead carry both
+/// sides' additions and removals, an equality against [`set_reconcile`].
 fn check_completeness(
     base: &[Prop],
     left: &[Prop],
@@ -822,13 +820,9 @@ struct Reference {
 
 /// A deliberately naive three-way merge over the plain model.
 ///
-/// Instances are matched by identity, each side is diffed against the base
-/// field by field as plain set and value comparisons, and the two diffs are
-/// reconciled by the rules the merge module documents: the left action wins,
-/// except that an update beats a removal, set-valued fields carry both sides'
-/// additions and removals, and two divergent additions of an at-most-once
-/// property collide. It makes no attempt at byte preservation, ordering or
-/// clever matching.
+/// Instances are matched by identity and each side diffed against the base
+/// field by field, then reconciled by the rules the merge module documents:
+/// left wins, an update beats a removal, set fields carry both sides'.
 fn reference_merge(base: &[Prop], left: &[Prop], right: &[Prop]) -> Reference {
     let (Some(b), Some(l), Some(r)) = (index(base), index(left), index(right)) else {
         return Reference {
@@ -1686,7 +1680,7 @@ fn apply_cst_edit(cst: &mut VcardCst<'static>, edit: &Edit, editable: &[usize]) 
             let text = WORDS[word % WORDS.len()];
             let line = &mut cst.props[target];
             let count = line.value.component_count().max(1);
-            line.value.set_at(comp % count, &[text]);
+            line.value.set_component(comp % count, &[text]);
         }
         Edit::Clear { comp, .. } => {
             let line = &mut cst.props[target];
@@ -1695,13 +1689,14 @@ fn apply_cst_edit(cst: &mut VcardCst<'static>, edit: &Edit, editable: &[usize]) 
             if line.value.value_count(i) > 1 {
                 line.value.remove_value_at(i, 0);
             } else {
-                line.value.set_at(i, &[""]);
+                line.value.set_component(i, &[""]);
             }
         }
         Edit::Param { key, word, .. } => {
             let key = PARAM_KEYS[key % PARAM_KEYS.len()];
             let text = WORDS[word % WORDS.len()];
             let line = &mut cst.props[target];
+            let escaper = line.value.escaper;
 
             match line
                 .params
@@ -1712,6 +1707,7 @@ fn apply_cst_edit(cst: &mut VcardCst<'static>, edit: &Edit, editable: &[usize]) 
                 None => line.params.push(VcardParamNode {
                     name: VcardLeaf::from(key),
                     values: vec![VcardLeaf::from(text)],
+                    escaper,
                 }),
             }
         }
@@ -2352,12 +2348,12 @@ fn two_instances_under_one_pid_pair_by_equality_first() {
 
 #[test]
 fn a_replayed_parameter_item_keeps_its_wire_form() {
-    // A parameter value is unescaped on the way in and copied verbatim on the
-    // way out, so an item replayed as its decoded text turns a `\n` into a
-    // real line break and cuts the line in two, leaving a card that does not
-    // parse. Found by the fuzz target.
+    // An item replayed as its decoded text turns the RFC 6868 `^n` into a real
+    // line break and cuts the line in two, leaving a card that does not parse,
+    // so the raw leaf is what lands. The backslash beside it is literal in a
+    // parameter and has to come back untouched. Found by the fuzz target.
     let base = card("TEL;TYPE=work:+1\r\n");
-    let right = card("TEL;TYPE=work,a\\nb:+1\r\n");
+    let right = card("TEL;TYPE=work,a\\nb^nc:+1\r\n");
 
     let (merged, conflicts) = merge_text(&base, &base, &right);
     let reparsed = VcardCst::parse(&merged).expect("a merged card");
@@ -2559,10 +2555,11 @@ fn an_end_line_replayed_as_a_property_does_not_close_the_card() {
 #[test]
 fn two_sides_adding_one_type_set_in_two_orders_agree() {
     // RFC 6350 section 5.6 gives `TYPE` a comma-separated list of type values
-    // with no ordering, and the merge agrees with that as long as the base
-    // carries the parameter: it then diffs the items and a reorder is a no-op.
-    // When the base does not, both sides' additions are whole parameters,
-    // compared in order, so adding one set in two orders is a disagreement.
+    // with no ordering, so neither arrangement says anything the other does
+    // not. Where the base already carries the parameter the merge diffs the
+    // items and a reorder is a no-op; where it does not, both sides' additions
+    // are whole parameters, and those compare as sets rather than as
+    // sequences. It is the one exception to agreement being byte equality.
     let base = card("TEL:+1\r\n");
     let left = card("TEL;TYPE=work,cell:+1\r\n");
     let right = card("TEL;TYPE=cell,work:+1\r\n");
@@ -2574,4 +2571,37 @@ fn two_sides_adding_one_type_set_in_two_orders_agree() {
 
     assert_eq!(existing, 0);
     assert_eq!(added, 0, "an order-only difference was a disagreement");
+}
+
+#[test]
+fn spelling_a_value_two_ways_is_no_agreement() {
+    // `\N` and `\n` both unescape to a line break (RFC 6350 section 3.4), so
+    // the two sides' actions decoded equal and the right side's edit was taken
+    // for the left side's own: it was skipped as already made and the
+    // difference between the two spellings was never said out loud.
+    let base = card("FN:Ada\r\n");
+    let left = card("FN:Ada\\nLovelace\r\n");
+    let right = card("FN:Ada\\NLovelace\r\n");
+
+    let (merged, conflicts) = merge_text(&base, &left, &right);
+
+    assert_eq!(conflicts, 1, "a spelling-only difference went unreported");
+
+    // NOTE: the left side is the one being merged into, so it keeps its own
+    // spelling and the merged card is its bytes, untouched.
+    assert_eq!(merged, left);
+}
+
+#[test]
+fn sees_a_parameter_edit_past_the_value_its_decode_reads() {
+    // A single-valued parameter decodes its first value alone, so comparing
+    // the decoded parameters hides an edit to anything after it: the change is
+    // never reported and the right side's edit is silently dropped.
+    let base = card("ADR;LABEL=Ada,Lovelace:;;;;;;\r\n");
+    let right = card("ADR;LABEL=Ada,Byron:;;;;;;\r\n");
+
+    let (merged, conflicts) = merge_text(&base, &base, &right);
+
+    assert_eq!(merged, right);
+    assert_eq!(conflicts, 0);
 }

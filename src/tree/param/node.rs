@@ -11,7 +11,7 @@ use core::fmt;
 
 use alloc::vec::Vec;
 
-use crate::tree::leaf::VcardLeaf;
+use crate::tree::{codec::mode::VcardEscaper, leaf::VcardLeaf};
 
 /// One raw parameter: a name and its `,`-separated raw values (empty when the
 /// parameter has no `=` list). The syntactic peer of the decoded
@@ -22,6 +22,9 @@ pub struct VcardParamNode<'a> {
     pub name: VcardLeaf<'a>,
     /// The raw value leaves.
     pub values: Vec<VcardLeaf<'a>>,
+    /// Which version's parameter encoding rules the values are written in.
+    /// Stamped by the parser once `VERSION` is known, as on a value node.
+    pub escaper: VcardEscaper,
 }
 
 impl<'a> VcardParamNode<'a> {
@@ -34,10 +37,12 @@ impl<'a> VcardParamNode<'a> {
                     .into_iter()
                     .map(VcardLeaf::from)
                     .collect(),
+                escaper: VcardEscaper::default(),
             },
             None => Self {
                 name: VcardLeaf::from(param),
                 values: Vec::new(),
+                escaper: VcardEscaper::default(),
             },
         }
     }
@@ -51,6 +56,7 @@ impl<'a> VcardParamNode<'a> {
                 .into_iter()
                 .map(VcardLeaf::into_static)
                 .collect(),
+            escaper: self.escaper,
         }
     }
 

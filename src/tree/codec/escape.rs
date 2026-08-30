@@ -3,10 +3,16 @@
 //! Apply the RFC 6350 3.4 value escapes when serializing. The write half of the
 //! escaping codec; its exact inverse is
 //! [`unescape`](crate::tree::codec::unescape), and the version-specific rules
-//! are selected by the [`VcardEscaper`]. The structural encoders in
-//! [`encode`](crate::tree::codec::encode) run every value leaf through here.
+//! are selected by the [`VcardEscaper`].
+//!
+//! The structural encoders in [`encode`](crate::tree::codec::encode) run every
+//! value leaf through here.
+//!
+//! A parameter value is a different alphabet and has its own writer,
+//! `escape_param`, applying the RFC 6868 caret encoding rather than any
+//! backslash one.
 
-use alloc::{borrow::Cow, vec::Vec};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::tree::codec::mode::VcardEscaper;
 
@@ -15,8 +21,34 @@ use crate::tree::codec::mode::VcardEscaper;
 /// when nothing needs escaping; non-UTF-8 content passes through verbatim.
 pub(crate) fn escape_with(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8]> {
     match escaper {
-        VcardEscaper::Modern => escape_modern(bytes),
+        VcardEscaper::V3_0 | VcardEscaper::V4_0 => escape_modern(bytes),
         VcardEscaper::V2_1 => escape_v21(bytes),
+    }
+}
+
+/// Apply the RFC 6868 3.1 parameter value encoding: `^n`, `^^` and `^'`.
+///
+/// Inverse of [`unescape_param`](crate::tree::codec::unescape::unescape_param).
+/// The wire's own double quotes are kept and only what they enclose is encoded,
+/// since encoding the pair would strip the quoting off every quoted URI.
+pub(crate) fn escape_param(value: &str, escaper: VcardEscaper) -> Cow<'_, str> {
+    if !escaper.has_param_encoding() {
+        return Cow::Borrowed(value);
+    }
+
+    let Some(inner) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')) else {
+        return escape_carets(value);
+    };
+
+    match escape_carets(inner) {
+        Cow::Borrowed(_) => Cow::Borrowed(value),
+        Cow::Owned(inner) => {
+            let mut out = String::with_capacity(inner.len() + 2);
+            out.push('"');
+            out.push_str(&inner);
+            out.push('"');
+            Cow::Owned(out)
+        }
     }
 }
 
@@ -46,12 +78,9 @@ fn escape_modern(bytes: &[u8]) -> Cow<'_, [u8]> {
 
 /// Apply the vCard 2.1 value escapes `\;` and `\n`.
 ///
-/// vCard 2.1 defines only the semicolon escape, so this half is deliberately
-/// not the inverse of the reader: a line break has no 2.1 spelling, and
-/// emitted raw it would end the content line and cut the value in two, so it
-/// is written `\n`, which a 2.1 reader (this crate's included) then reads as a
-/// literal backslash. A value the wire cannot hold is the one thing worse than
-/// a value it holds imprecisely.
+/// 2.1 defines only the semicolon escape, so this half is deliberately not the
+/// reader's inverse: a raw line break would end the content line and cut the
+/// value in two, so it is written `\n` and read back as a literal backslash.
 fn escape_v21(bytes: &[u8]) -> Cow<'_, [u8]> {
     if !bytes.iter().any(|b| matches!(b, b';' | b'\n')) {
         return Cow::Borrowed(bytes);
@@ -70,20 +99,43 @@ fn escape_v21(bytes: &[u8]) -> Cow<'_, [u8]> {
     Cow::Owned(out)
 }
 
+/// Apply the RFC 6868 caret encoding over every character of `value`.
+fn escape_carets(value: &str) -> Cow<'_, str> {
+    if !value.contains(['\n', '^', '"']) {
+        return Cow::Borrowed(value);
+    }
+
+    let mut out = String::with_capacity(value.len());
+
+    for c in value.chars() {
+        match c {
+            '\n' => out.push_str("^n"),
+            '^' => out.push_str("^^"),
+            '"' => out.push_str("^'"),
+            other => out.push(other),
+        }
+    }
+
+    Cow::Owned(out)
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::borrow::Cow;
 
-    use crate::tree::codec::{escape::escape_with, mode::VcardEscaper};
+    use crate::tree::codec::{
+        escape::{escape_param, escape_with},
+        mode::VcardEscaper,
+    };
 
     #[test]
     fn escapes_separators_and_newlines_and_borrows_when_clean() {
         assert_eq!(
-            escape_with(b"a,b;c\nd", VcardEscaper::Modern).as_ref(),
+            escape_with(b"a,b;c\nd", VcardEscaper::V4_0).as_ref(),
             br"a\,b\;c\nd".as_slice(),
         );
         assert!(matches!(
-            escape_with(b"plain", VcardEscaper::Modern),
+            escape_with(b"plain", VcardEscaper::V4_0),
             Cow::Borrowed(b"plain")
         ));
         // NOTE: vCard 2.1 escapes only `;`.
@@ -99,7 +151,7 @@ mod tests {
     #[test]
     fn a_line_break_is_escaped_in_every_version() {
         assert_eq!(
-            escape_with(b"a\nb", VcardEscaper::Modern).as_ref(),
+            escape_with(b"a\nb", VcardEscaper::V4_0).as_ref(),
             br"a\nb".as_slice(),
         );
         // NOTE: vCard 2.1 has no line-break escape, so this half is not the
@@ -118,22 +170,57 @@ mod tests {
         use crate::tree::codec::unescape::unescape_with;
 
         assert_eq!(
-            escape_with(br"C:\path", VcardEscaper::Modern).as_ref(),
+            escape_with(br"C:\path", VcardEscaper::V4_0).as_ref(),
             br"C:\\path".as_slice(),
         );
-        assert_eq!(
-            unescape_with(br"C:\\path", VcardEscaper::Modern),
-            r"C:\path",
-        );
+        assert_eq!(unescape_with(br"C:\\path", VcardEscaper::V4_0), r"C:\path",);
 
-        // A value ending in a backslash is escaped whole, not left dangling.
+        // NOTE: a value ending in a backslash is escaped whole, not dangling.
         assert_eq!(
-            escape_with(br"trailing\", VcardEscaper::Modern).as_ref(),
+            escape_with(br"trailing\", VcardEscaper::V4_0).as_ref(),
             br"trailing\\".as_slice(),
         );
         assert_eq!(
-            unescape_with(br"dangling\", VcardEscaper::Modern),
+            unescape_with(br"dangling\", VcardEscaper::V4_0),
             r"dangling\"
         );
+    }
+
+    #[test]
+    fn encodes_the_rfc_6868_parameter_sequences_and_borrows_when_clean() {
+        assert_eq!(escape_param("a\nb^c\"d", VcardEscaper::V4_0), "a^nb^^c^'d",);
+        assert!(matches!(
+            escape_param("plain", VcardEscaper::V4_0),
+            Cow::Borrowed("plain")
+        ));
+        // NOTE: RFC 6868 section 3.2 forbids backslash escaping, so a path
+        // goes out as it stands.
+        assert!(matches!(
+            escape_param(r"C:\temp", VcardEscaper::V4_0),
+            Cow::Borrowed(r"C:\temp")
+        ));
+    }
+
+    #[test]
+    fn keeps_a_quoted_parameter_value_wrapped() {
+        assert!(matches!(
+            escape_param("\"geo:37.386,-122.083\"", VcardEscaper::V4_0),
+            Cow::Borrowed("\"geo:37.386,-122.083\"")
+        ));
+        assert_eq!(escape_param("\"a^b\"", VcardEscaper::V4_0), "\"a^^b\"");
+    }
+
+    #[test]
+    fn writes_a_pre_4_0_parameter_unencoded() {
+        // NOTE: RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret goes
+        // out as itself and neither reader would resolve `^^` anyway.
+        assert!(matches!(
+            escape_param("a^b", VcardEscaper::V3_0),
+            Cow::Borrowed("a^b")
+        ));
+        assert!(matches!(
+            escape_param("a^b", VcardEscaper::V2_1),
+            Cow::Borrowed("a^b")
+        ));
     }
 }

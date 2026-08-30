@@ -1,13 +1,15 @@
 //! Shared corpus harness for the round-trip tests (`corpus`, `calcard`, `rfc`,
 //! `github`).
 //!
-//! Each corpus is a single mixed-version directory under tests/corpus/
-//! (provenance and licensing live in each one's ATTRIBUTION.md). It is a
-//! robustness harness, not a golden-output suite: the fixtures are real-world
-//! vCard 2.1 / 3.0 / 4.0 cards plus the RFC 2426 / 6350 examples. The one
-//! version-agnostic parser handles them all, so each test sweeps the whole
-//! corpus and asserts every fixture parses, comes back byte for byte, is a
-//! serialization fixpoint, and decodes without panicking.
+//! Each corpus is a single mixed-version directory under tests/corpus/, with
+//! provenance and licensing in each one's ATTRIBUTION.md.
+//!
+//! It is a robustness harness, not a golden-output suite: the fixtures are
+//! real-world vCard 2.1 / 3.0 / 4.0 cards plus the RFC 2426 / 6350 examples.
+//!
+//! The one version-agnostic parser handles them all, so each test sweeps the
+//! whole corpus and asserts every fixture parses, comes back byte for byte, is
+//! a serialization fixpoint, and decodes without panicking.
 
 // Each integration test compiles this module separately and uses only the part
 // of it that it needs.

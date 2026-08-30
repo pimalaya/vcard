@@ -3,11 +3,12 @@
 //! The decoded time-related value kinds: a date-and-or-time, and a timestamp.
 //!
 //! [`VcardDateAndOrTime`] (RFC 6350 4.3.4) backs `BDAY` and `ANNIVERSARY`;
-//! [`VcardTimestamp`] (RFC 6350 4.3.5) backs `REV`. Their reduced-precision
-//! grammar is intricate (omitted components, truncated forms), so the value is
-//! kept as its raw text rather than decoded into broken calendar fields at the
-//! risk of a lossy round-trip. Callers needing calendar semantics parse the
-//! string themselves.
+//! [`VcardTimestamp`] (RFC 6350 4.3.5) backs `REV`.
+//!
+//! Their reduced-precision grammar is intricate (omitted components, truncated
+//! forms), so the value is kept as its raw text rather than decoded into broken
+//! calendar fields at the risk of a lossy round-trip. Callers needing calendar
+//! semantics parse the string themselves.
 
 use alloc::{borrow::Cow, string::String};
 
@@ -38,14 +39,11 @@ impl<'a> From<Cow<'a, str>> for VcardDateAndOrTime<'a> {
 pub struct VcardTimestamp<'a>(pub Cow<'a, str>);
 
 impl VcardTimestamp<'_> {
-    /// Normalizes the RFC 6350 timestamp to seconds from the Unix epoch, so two
-    /// revisions can be ordered; `None` when the text will not parse.
+    /// The RFC 6350 timestamp in Unix epoch seconds, `None` if unparsable.
     ///
-    /// Accepts the ISO 8601 basic (`20260711T172559Z`) and extended
-    /// (`2026-07-11T17:25:59Z`) forms, a `Z` or numeric offset, and reduced
-    /// precision (omitted trailing components read as zero); no zone means UTC.
-    /// For ordering only: it disagrees with the derived `PartialEq`, which
-    /// compares raw text, so it is not exposed as `Ord`.
+    /// For ordering revisions. Accepts the ISO 8601 basic and extended forms,
+    /// a `Z` or numeric offset, and reduced precision (omitted components read
+    /// as zero, no zone meaning UTC). Disagrees with `PartialEq`, so no `Ord`.
     pub fn to_unix_seconds(&self) -> Option<i64> {
         parse_timestamp(self.0.as_ref())
     }
@@ -228,8 +226,8 @@ mod tests {
         assert_eq!(seconds("not-a-date"), None);
         assert_eq!(seconds("2026-13-11T00:00:00Z"), None);
         assert_eq!(seconds("2026-07-11T25:00:00Z"), None);
-        // An offset with no sign, with non-digits, of an unusable width, or out
-        // of range is not an offset.
+        // NOTE: an offset with no sign, with non-digits, of an unusable width,
+        // or out of range is not an offset.
         assert_eq!(seconds("2026-07-11T19:25:5902:00"), None);
         assert_eq!(seconds("2026-07-11T19:25:59+ab:00"), None);
         assert_eq!(seconds("2026-07-11T19:25:59+020"), None);

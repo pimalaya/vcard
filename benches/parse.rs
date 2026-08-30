@@ -1,11 +1,13 @@
-//! Parse/serialize benchmarks, comparing like-with-like by representation level.
+//! Parse and serialize benchmarks, comparing like with like by level.
 //!
 //! `parse_to_content_lines` pits this crate's byte-faithful CST against
 //! `ical_vcard` and `vparser`, which are also low-level content-line parsers
 //! (no decoding).
-//! `parse_to_model` pits our parse + decode (to the `Vcard` model, not the
-//! validated `VcardValid<Vcard>`) against the eager model parsers `calcard` and
-//! `vcard_parser`. The `vcard` crate is builder-only, so it has no parse path.
+//!
+//! `parse_to_model` pits our parse plus decode (to the `Vcard` model, not the
+//! validated `VcardValid<Vcard>`) against the eager model parsers `calcard`
+//! and `vcard_parser`. The `vcard` crate is builder-only, so it never parses.
+//!
 //! Representations still differ in laziness, ownership and decoding depth, so
 //! read these as ballpark rather than a strict ranking.
 
@@ -58,9 +60,10 @@ fn parse_to_content_lines(c: &mut Criterion) {
     group.finish();
 }
 
-/// Decoded-model level: full parse into a typed model. Ours is parse + decode
-/// into `Vcard` (not the validated `VcardValid<Vcard>`), compared against the eager
-/// model parsers.
+/// Decoded-model level: full parse into a typed model.
+///
+/// Ours is parse plus decode into `Vcard`, not the validated
+/// `VcardValid<Vcard>`, compared against the eager model parsers.
 fn parse_to_model(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse_to_model");
 

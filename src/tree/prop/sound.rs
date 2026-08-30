@@ -1,11 +1,12 @@
 //! # SOUND lens
 //!
 //! The `SOUND` property lens: a digital sound associated with the object, such
-//! as a name pronunciation. Its value shape is version-specific, so the lens
-//! overrides [`decode`](VcardPropLens::decode) to resolve it from the card
-//! version through the property spec: a `data:` URI in 4.0
-//! ([`VcardValue::Uri`]), inline base64 or a URI reference in 2.1 / 3.0
-//! ([`VcardValue::Binary`]).
+//! as a name pronunciation.
+//!
+//! Its value shape is version-specific, so the lens overrides
+//! [`decode`](VcardPropLens::decode) to resolve it from the card version
+//! through the property spec: a `data:` URI in 4.0 ([`VcardValue::Uri`]),
+//! inline base64 or a URI reference in 2.1 / 3.0 ([`VcardValue::Binary`]).
 //!
 //! See RFC 6350 6.7.5.
 

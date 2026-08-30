@@ -5,12 +5,14 @@
 //! [`VcardValueNode`] is the syntactic peer of the decoded
 //! [`VcardValue`](crate::value::VcardValue): the bytes after a line's colon,
 //! read as `;`-separated components of `,`-separated
-//! [`crate::tree::leaf::VcardValueLeaf`] values (raw bytes, so a foreign
-//! charset survives). Straight from parse the value stays one unsplit slice
-//! walked on demand; an edit or a model encode splits it into owned components,
-//! which then become the source of truth. The splitting is generic, counting
-//! and preserving separators so the value round-trips; what the components
-//! *mean* is the lens's business.
+//! [`crate::tree::leaf::VcardValueLeaf`]s.
+//!
+//! A leaf is raw bytes, so a foreign charset survives. Straight from parse the
+//! value stays one unsplit slice walked on demand; an edit or a model encode
+//! splits it into owned components, which then become the source of truth.
+//!
+//! The splitting is generic, counting and preserving separators so the value
+//! round-trips; what the components *mean* is the lens's business.
 //!
 //! The codec that unescapes components into decoded values and re-escapes edits
 //! back lives on this type, applying the rules of the sibling
@@ -22,23 +24,18 @@ use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::tree::{
     codec::{
-        encode::{encode_component, encode_leaf},
-        escape::escape_with,
+        encode::{encode_bytes_component, encode_component, encode_leaf},
         mode::VcardEscaper,
         unescape::{unescape_bytes, unescape_with},
     },
     leaf::VcardValueLeaf,
 };
 
-/// A raw value: `;`-separated components, each a list of `,`-separated raw
-/// value leaves.
+/// A raw value: `;`-separated components, each a list of `,`-separated leaves.
 ///
-/// From parse it is one unsplit `raw` slice, walked lazily, so a parse that
-/// never decodes and a byte-faithful reserialize split nothing. The first edit
-/// (or a model encode) splits it into owned `components`, which then take over.
-/// A write touches only the leaf or component it names, so everything else
-/// keeps its parsed bytes. `escaper` records which version's escaping rules to
-/// apply, stamped from the card version after parsing.
+/// From parse it is one unsplit slice walked lazily; the first edit splits it
+/// into owned components, and a write touches only the leaf it names, so
+/// everything else keeps its parsed bytes. `escaper` records the version rules.
 #[derive(Clone, Debug, Default)]
 pub struct VcardValueNode<'a> {
     /// The unsplit value bytes, straight from parse and authoritative until an
@@ -90,53 +87,80 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
-    /// Decode the `i`th component into a clean (unescaped) value list.
-    pub fn decode_at(&self, i: usize) -> Vec<Cow<'_, str>> {
-        match self.component_at(i) {
-            Some(Component::Raw(bytes)) => {
-                let mut values = Vec::new();
-                split_on(bytes, b',', |value| {
-                    values.push(unescape_with(value, self.escaper))
-                });
-                values
+    /// Decode the whole value as one string, its `;` and `,` kept literal.
+    ///
+    /// The read to reach for. A value the specification gives no structure of
+    /// its own separates nothing with its semicolon (RFC 6350 4.2), so naming
+    /// a component truncates `data:text/plain;base64,AAA` at the media type.
+    pub fn decode(&self) -> Cow<'_, str> {
+        match &self.raw {
+            Some(raw) => unescape_with(raw, self.escaper),
+            None => {
+                let joined = self.joined_bytes();
+                Cow::Owned(unescape_with(&joined, self.escaper).into_owned())
             }
-            Some(Component::Split(leaves)) => leaves
-                .iter()
-                .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
-                .collect(),
-            None => Vec::new(),
         }
     }
 
-    /// The `i`th component's first value as raw unescaped bytes, not
-    /// transcoded, for a value carrying a foreign charset.
-    pub fn decode_bytes_at(&self, i: usize) -> Cow<'_, [u8]> {
-        match self.component_at(i) {
-            Some(Component::Raw(bytes)) => unescape_bytes(first_value(bytes), self.escaper),
-            Some(Component::Split(leaves)) => leaves
-                .first()
-                .map(|leaf| unescape_bytes(leaf.as_bytes(), self.escaper))
-                .unwrap_or(Cow::Borrowed(b"")),
-            None => Cow::Borrowed(b""),
+    /// Decode the whole value as its `,`-separated list, `;` kept literal.
+    ///
+    /// The list read to reach for: a comma separates the items of a list
+    /// value, and nothing else in the value is cut.
+    pub fn decode_list(&self) -> Vec<Cow<'_, str>> {
+        let mut values = Vec::new();
+
+        match &self.raw {
+            Some(raw) => split_on(raw, b',', |value| {
+                values.push(unescape_with(value, self.escaper))
+            }),
+            None => {
+                let joined = self.joined_bytes();
+                split_on(&joined, b',', |value| {
+                    values.push(Cow::Owned(unescape_with(value, self.escaper).into_owned()))
+                });
+            }
+        }
+
+        values
+    }
+
+    /// The whole value's `,`-separated items, still escaped.
+    ///
+    /// The raw twin of [`decode_list`](Self::decode_list), item for item. An
+    /// unescape is not injective, `\N` and `\n` both reading as a line break
+    /// (RFC 6350 3.4), so weighing what two sides wrote wants the bytes.
+    pub(crate) fn raw_list(&self) -> Vec<Vec<u8>> {
+        let mut values = Vec::new();
+
+        match &self.raw {
+            Some(raw) => split_on(raw, b',', |value| values.push(value.to_vec())),
+            None => {
+                let joined = self.joined_bytes();
+                split_on(&joined, b',', |value| values.push(value.to_vec()));
+            }
+        }
+
+        values
+    }
+
+    /// The whole value as raw unescaped bytes, not transcoded, for a value
+    /// carrying a foreign charset. Its `;` and `,` stay literal.
+    pub fn decode_bytes(&self) -> Cow<'_, [u8]> {
+        match &self.raw {
+            Some(raw) => unescape_bytes(raw, self.escaper),
+            None => {
+                let joined = self.joined_bytes();
+                Cow::Owned(unescape_bytes(&joined, self.escaper).into_owned())
+            }
         }
     }
 
-    /// Decode the `i`th component's first value (empty when there is none).
-    pub fn decode_scalar_at(&self, i: usize) -> Cow<'_, str> {
-        match self.component_at(i) {
-            Some(Component::Raw(bytes)) => unescape_with(first_value(bytes), self.escaper),
-            Some(Component::Split(leaves)) => leaves
-                .first()
-                .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
-                .unwrap_or(Cow::Borrowed("")),
-            None => Cow::Borrowed(""),
-        }
-    }
-
-    /// Decode the `i`th component as a single value, keeping its `,`-separated
-    /// pieces joined. For values like URIs whose comma is a literal part of the
-    /// value, not a list separator (so they must not be truncated).
-    pub fn decode_joined_at(&self, i: usize) -> Cow<'_, str> {
+    /// Decode the `i`th `;`-component as one string, its `,` kept literal.
+    ///
+    /// Only for a value the specification structures with `;`, which in vCard
+    /// is `N`, `ADR`, `GENDER`, `ORG`, `GEO` and `CLIENTPIDMAP`; on any other,
+    /// naming a component drops everything past the first `;`.
+    pub fn decode_component(&self, i: usize) -> Cow<'_, str> {
         match self.component_at(i) {
             // NOTE: The whole component slice already has the commas in place,
             // so unescaping it verbatim keeps them literal.
@@ -163,29 +187,43 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
-    /// Decode the whole value as one string, its `;` and `,` kept literal.
+    /// Decode the `i`th `;`-component as its `,`-separated list.
     ///
-    /// For a value the specification gives no structure of its own, a URI
-    /// above all: its semicolon separates nothing (RFC 6350 section 4.2), so
-    /// reading one component alone truncates `data:text/plain;base64,AAA` at
-    /// the media type and drops the payload.
-    pub fn decode_joined(&self) -> Cow<'_, str> {
-        match self.component_count() {
-            0 => Cow::Borrowed(""),
-            1 => self.decode_joined_at(0),
-            count => {
-                let mut out = String::new();
-
-                for i in 0..count {
-                    if i > 0 {
-                        out.push(';');
-                    }
-
-                    out.push_str(&self.decode_joined_at(i));
-                }
-
-                Cow::Owned(out)
+    /// Carries the caveat of [`decode_component`](Self::decode_component): a
+    /// value with no `;`-structure of its own wants
+    /// [`decode_list`](Self::decode_list) instead.
+    pub fn decode_component_list(&self, i: usize) -> Vec<Cow<'_, str>> {
+        match self.component_at(i) {
+            Some(Component::Raw(bytes)) => {
+                let mut values = Vec::new();
+                split_on(bytes, b',', |value| {
+                    values.push(unescape_with(value, self.escaper))
+                });
+                values
             }
+            Some(Component::Split(leaves)) => leaves
+                .iter()
+                .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// The `i`th `;`-component's `,`-separated items, still escaped.
+    ///
+    /// The raw twin of [`decode_component_list`](Self::decode_component_list),
+    /// item for item, for the reason [`raw_list`](Self::raw_list) exists.
+    pub(crate) fn raw_component_list(&self, i: usize) -> Vec<Vec<u8>> {
+        match self.component_at(i) {
+            Some(Component::Raw(bytes)) => {
+                let mut values = Vec::new();
+                split_on(bytes, b',', |value| values.push(value.to_vec()));
+                values
+            }
+            Some(Component::Split(leaves)) => {
+                leaves.iter().map(|leaf| leaf.as_bytes().to_vec()).collect()
+            }
+            None => Vec::new(),
         }
     }
 
@@ -211,9 +249,31 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
+    /// Replace the whole value with one component of `,`-separated values,
+    /// escaping each.
+    ///
+    /// The inverse of [`decode_list`](Self::decode_list), so reading a value
+    /// and writing it back leaves no component of the old value behind.
+    pub fn set<S: AsRef<str>>(&mut self, values: &[S]) {
+        self.raw = None;
+        self.components.clear();
+        self.components.push(encode_component(values, self.escaper));
+    }
+
+    /// Replace the whole value with one component of raw value bytes (the
+    /// foreign-charset escape hatch), escaping structural separators but
+    /// writing the bytes verbatim.
+    pub fn set_bytes<B: AsRef<[u8]>>(&mut self, values: &[B]) {
+        self.raw = None;
+        self.components.clear();
+        self.components
+            .push(encode_bytes_component(values, self.escaper));
+    }
+
     /// Set the `i`th component, escaping each value and padding with empty
-    /// components when needed.
-    pub fn set_at<S: AsRef<str>>(&mut self, i: usize, values: &[S]) {
+    /// components when needed. For a `;`-structured value, as
+    /// [`decode_component`](Self::decode_component) spells out.
+    pub fn set_component<S: AsRef<str>>(&mut self, i: usize, values: &[S]) {
         self.materialize();
 
         while self.components.len() <= i {
@@ -225,17 +285,14 @@ impl<'a> VcardValueNode<'a> {
 
     /// Set the `i`th component from raw value bytes (the foreign-charset escape
     /// hatch), escaping structural separators but writing the bytes verbatim.
-    pub fn set_bytes_at<B: AsRef<[u8]>>(&mut self, i: usize, values: &[B]) {
+    pub fn set_component_bytes<B: AsRef<[u8]>>(&mut self, i: usize, values: &[B]) {
         self.materialize();
 
         while self.components.len() <= i {
             self.components.push(Vec::new());
         }
 
-        self.components[i] = values
-            .iter()
-            .map(|v| VcardValueLeaf::from(escape_with(v.as_ref(), self.escaper).into_owned()))
-            .collect();
+        self.components[i] = encode_bytes_component(values, self.escaper);
     }
 
     /// The number of `,`-separated values in the `i`th component (zero when the
@@ -252,8 +309,8 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
-    /// Replace the `j`th value of the `i`th component in place, re-escaping only
-    /// that leaf. Pads with empty values when `j` is past the end.
+    /// Replace the `j`th value of the `i`th component in place, re-escaping
+    /// only that leaf. Pads with empty values when `j` is past the end.
     pub fn set_value_at<S: AsRef<str>>(&mut self, i: usize, j: usize, value: S) {
         let escaper = self.escaper;
         let component = self.component_mut(i);
@@ -343,6 +400,15 @@ impl<'a> VcardValueNode<'a> {
                 escaper: self.escaper,
             },
         }
+    }
+
+    /// The whole value's still-escaped bytes, reassembled from the split
+    /// components. Only a split node needs this: an unsplit one already holds
+    /// the value as one slice and reads it borrowed.
+    fn joined_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        self.write_bytes(&mut out);
+        out
     }
 
     /// Locate the `i`th component, either as a raw slice of the unsplit value
@@ -465,11 +531,11 @@ fn split_all_owned(bytes: &[u8]) -> Vec<Vec<VcardValueLeaf<'static>>> {
     components
 }
 
-/// Call `piece` for each span between unescaped `sep` bytes, always at least
-/// once. A backslash escapes the next byte (so `\;` / `\,` do not split), and
-/// `memchr` skips straight to the next `sep` or backslash instead of scanning
-/// byte by byte, so a large separator-free value (e.g. base64) is skipped in
-/// one pass.
+/// Call `piece` for each span between unescaped `sep` bytes, at least once.
+///
+/// A backslash escapes the next byte, so `\;` and `\,` do not split, and
+/// `memchr` skips straight to the next `sep` or backslash, so a large
+/// separator-free value (base64, say) passes in one go.
 fn split_on<'b>(bytes: &'b [u8], sep: u8, mut piece: impl FnMut(&'b [u8])) {
     let mut start = 0;
     let mut i = 0;
@@ -490,7 +556,7 @@ fn split_on<'b>(bytes: &'b [u8], sep: u8, mut piece: impl FnMut(&'b [u8])) {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{borrow::Cow, string::ToString, vec};
+    use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
 
     use crate::tree::value::node::VcardValueNode;
 
@@ -499,7 +565,7 @@ mod tests {
         let node = VcardValueNode::parse(b"a;b,c;");
         assert_eq!(node.component_count(), 3);
         assert_eq!(
-            node.decode_at(1),
+            node.decode_component_list(1),
             vec![Cow::Borrowed("b"), Cow::Borrowed("c")]
         );
         assert_eq!(node.to_string(), "a;b,c;");
@@ -509,55 +575,76 @@ mod tests {
     fn keeps_escaped_separators_inside_one_value() {
         let node = VcardValueNode::parse(br"a\,b\;c;d");
         assert_eq!(node.component_count(), 2);
-        assert_eq!(node.decode_at(0).len(), 1);
+        assert_eq!(node.decode_component_list(0).len(), 1);
         assert_eq!(node.to_string(), r"a\,b\;c;d");
     }
 
     #[test]
     fn an_edit_splits_and_preserves_untouched_components() {
         let mut node = VcardValueNode::parse(b"a;b;c");
-        node.set_at(1, &["X"]);
+        node.set_component(1, &["X"]);
         assert_eq!(node.to_string(), "a;X;c");
     }
 
     /// Every reader answers the same before and after the node materializes.
     ///
-    /// A node holds its value as raw bytes until the first edit splits it into
-    /// components, and each reader has a branch per state. A parse-and-read
-    /// exercises the lazy branches; these are the other half, and a
-    /// disagreement between the two would surface as a value that changes
-    /// shape the moment an unrelated component is written.
-    fn assert_readers_agree(node: &VcardValueNode<'_>, components: usize) {
-        assert_eq!(node.component_count(), components);
+    /// A node holds raw bytes until the first edit splits it into components,
+    /// and each reader has a branch per state. A disagreement would surface as
+    /// a value changing shape the moment an unrelated component is written.
+    fn assert_readers_agree(node: &VcardValueNode<'_>, whole: &str) {
+        assert_eq!(node.component_count(), whole.split(';').count());
         assert_eq!(node.value_count(1), 2);
-        assert_eq!(node.decode_scalar_at(0), "a");
+        assert_eq!(node.decode(), whole);
+        assert_eq!(node.decode_bytes().as_ref(), whole.as_bytes());
         assert_eq!(
-            node.decode_at(1),
+            node.decode_list(),
+            whole.split(',').map(Cow::Borrowed).collect::<Vec<_>>(),
+        );
+        assert_eq!(node.decode_component(0), "a");
+        assert_eq!(
+            node.decode_component_list(1),
             vec![Cow::Borrowed("b"), Cow::Borrowed("c")],
         );
-        assert_eq!(node.decode_joined_at(1), "b,c");
-        assert_eq!(node.decode_bytes_at(2).as_ref(), b"d");
+        assert_eq!(node.decode_component(1), "b,c");
+        assert_eq!(node.decode_component_list(2), vec![Cow::Borrowed("d")]);
     }
 
     #[test]
     fn readers_agree_before_and_after_an_edit_materializes_the_node() {
         let mut node = VcardValueNode::parse(b"a;b,c;d");
-        assert_readers_agree(&node, 3);
+        assert_readers_agree(&node, "a;b,c;d");
 
         // NOTE: Writing component 3 leaves the read components alone, but it is
         // what moves the node off its raw bytes.
-        node.set_at(3, &["e"]);
-        assert_readers_agree(&node, 4);
+        node.set_component(3, &["e"]);
+        assert_readers_agree(&node, "a;b,c;d;e");
         assert_eq!(node.to_string(), "a;b,c;d;e");
     }
 
     #[test]
     fn readers_agree_after_an_owned_node_is_edited() {
         let mut node = VcardValueNode::parse(b"a;b,c;d").into_static();
-        assert_readers_agree(&node, 3);
+        assert_readers_agree(&node, "a;b,c;d");
 
-        node.set_at(3, &["e"]);
-        assert_readers_agree(&node, 4);
+        node.set_component(3, &["e"]);
+        assert_readers_agree(&node, "a;b,c;d;e");
         assert_eq!(node.to_string(), "a;b,c;d;e");
+    }
+
+    #[test]
+    fn a_whole_value_write_leaves_no_component_of_the_old_value_behind() {
+        // NOTE: The un-indexed writers are the inverse of the un-indexed
+        // readers: a value read whole and written back must come back as it
+        // went in, not gain a tail from the components it replaced.
+        let mut node = VcardValueNode::parse(b"a;b,c;d");
+        let whole = node.decode().into_owned();
+        node.set(&[whole]);
+        assert_eq!(node.decode(), "a;b,c;d");
+        assert_eq!(node.to_string(), r"a\;b\,c\;d");
+
+        let mut node = VcardValueNode::parse(b"a;b,c;d");
+        let whole = node.decode_bytes().into_owned();
+        node.set_bytes(&[whole]);
+        assert_eq!(node.decode_bytes().as_ref(), b"a;b,c;d");
     }
 }

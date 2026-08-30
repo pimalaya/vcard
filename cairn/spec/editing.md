@@ -12,12 +12,30 @@ A lens marker is a zero-sized type-level key spelled exactly as its wire token (
 
 ### Requirement: Edits are byte-preserving
 
-A setter SHALL rewrite only the component it touches, leaving every other leaf, every parameter and every other line of a parsed card byte for byte intact.
+A setter that names a component SHALL rewrite only that component, leaving every other leaf, every parameter and every other line of a parsed card byte for byte intact. A setter that names none replaces the whole value, being the inverse of the reader that names none.
 
 #### Scenario: One item of a list
 - GIVEN a parsed list value whose first item carries a redundant escape such as `a\:b`
 - WHEN a different item of the same list is removed
 - THEN the redundant escape survives verbatim, because no whole-value rewrite happened
+
+### Requirement: A truncating read names the component it truncates at
+
+A value node SHALL read the whole value through readers that take no index (`decode`, `decode_list`, `decode_bytes`), keeping every `;` the value carries literal, and SHALL read one `;`-component only through readers that name it (`decode_component`, `decode_component_list`). No reader SHALL cut a value at both a `;` and a `,`.
+
+The un-indexed writers (`set`, `set_bytes`) SHALL replace the whole value, so a value read whole and written back comes back unchanged. The component writers (`set_component`, `set_component_bytes`) SHALL rewrite nothing but the component they name.
+
+The generic value cursor SHALL follow the same split: `text`, `bytes`, `list` and their setters address the whole value, `component` and `set_component` address one slot.
+
+#### Scenario: A note read past its first semicolon
+- GIVEN a card carrying `NOTE:a;b`
+- WHEN the value is read through the generic cursor
+- THEN it reads `a;b` rather than stopping at the semicolon
+
+#### Scenario: A value read whole and written straight back
+- GIVEN a value of several `;`-components
+- WHEN it is read whole and written back through the un-indexed setter
+- THEN it reads back as it went in, with no component of the old value left behind
 
 ### Requirement: Cursors cover both the generic and the structured shapes
 

@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use vcard::{
     param::{VcardParam, VcardParamKind},
     prop::{VcardProp, VcardPropName},
+    tree::codec::mode::VcardEscaper,
     tree::cst::VcardCst,
     value::{
         VcardValue, VcardValueKind, VcardValueUnknown,
@@ -77,8 +78,7 @@ const PARAM_KINDS: [VcardParamKind; 24] = [
 /// read back from the kind's own `Deref`.
 ///
 /// The match is exhaustive on purpose: a kind added to the vocabulary and left
-/// out of `PARAM_KINDS` fails to compile here rather than quietly escaping
-/// every sweep in this file.
+/// out of `PARAM_KINDS` fails to compile rather than escaping every sweep.
 fn param_wire_name(kind: VcardParamKind) -> &'static str {
     match kind {
         VcardParamKind::AltId => "ALTID",
@@ -412,8 +412,8 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
     }
 }
 
-/// The wire text [`encodes_a_card_with_every_value_kind_and_parameter`] expects,
-/// which differs between versions only in the `VERSION` and `GEO` lines.
+/// The wire text [`encodes_a_card_with_every_value_kind_and_parameter`]
+/// expects, differing between versions only in the `VERSION` and `GEO` lines.
 fn alloc_expected(version: &str, geo: &str) -> String {
     let head = concat!(
         "FN:John\r\n",
@@ -772,18 +772,48 @@ fn exercises_every_parameter_lens() {
     // marker pointing at the wrong kind has somewhere to fail.
     let scalar: Cow<'static, str> = Cow::Borrowed("x");
     let list = vec![Cow::Borrowed("x")];
-    assert_eq!(ALTID::encode(&scalar).to_string(), "ALTID=x");
-    assert_eq!(CALSCALE::encode(&scalar).to_string(), "CALSCALE=x");
-    assert_eq!(GEOP::encode(&scalar).to_string(), "GEO=x");
-    assert_eq!(LABELP::encode(&scalar).to_string(), "LABEL=x");
-    assert_eq!(LANGUAGE::encode(&scalar).to_string(), "LANGUAGE=x");
-    assert_eq!(MEDIATYPE::encode(&scalar).to_string(), "MEDIATYPE=x");
-    assert_eq!(PID::encode(&list).to_string(), "PID=x");
-    assert_eq!(PREF::encode(&scalar).to_string(), "PREF=x");
-    assert_eq!(SORT_AS::encode(&list).to_string(), "SORT-AS=x");
-    assert_eq!(TYPE::encode(&list).to_string(), "TYPE=x");
-    assert_eq!(TZP::encode(&scalar).to_string(), "TZ=x");
-    assert_eq!(VALUE::encode(&scalar).to_string(), "VALUE=x");
+    assert_eq!(
+        ALTID::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "ALTID=x"
+    );
+    assert_eq!(
+        CALSCALE::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "CALSCALE=x"
+    );
+    assert_eq!(
+        GEOP::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "GEO=x"
+    );
+    assert_eq!(
+        LABELP::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "LABEL=x"
+    );
+    assert_eq!(
+        LANGUAGE::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "LANGUAGE=x"
+    );
+    assert_eq!(
+        MEDIATYPE::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "MEDIATYPE=x"
+    );
+    assert_eq!(PID::encode(&list, VcardEscaper::V4_0).to_string(), "PID=x");
+    assert_eq!(
+        PREF::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "PREF=x"
+    );
+    assert_eq!(
+        SORT_AS::encode(&list, VcardEscaper::V4_0).to_string(),
+        "SORT-AS=x"
+    );
+    assert_eq!(
+        TYPE::encode(&list, VcardEscaper::V4_0).to_string(),
+        "TYPE=x"
+    );
+    assert_eq!(TZP::encode(&scalar, VcardEscaper::V4_0).to_string(), "TZ=x");
+    assert_eq!(
+        VALUE::encode(&scalar, VcardEscaper::V4_0).to_string(),
+        "VALUE=x"
+    );
 }
 
 #[test]
@@ -842,12 +872,12 @@ fn rejects_a_card_without_an_end_line() {
 }
 
 #[test]
-fn set_bytes_at_pads_missing_components() {
+fn set_component_bytes_pads_missing_components() {
     // Writing a component beyond the current count pads the gap (the raw-bytes
     // structured-value path).
     let mut cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:x\r\nEND:VCARD\r\n").unwrap();
     let seed: &[&[u8]] = &[b"y"];
-    cst.props[1].value.set_bytes_at(3, seed);
+    cst.props[1].value.set_component_bytes(3, seed);
     assert!(cst.to_bytes().windows(5).any(|w| w == b"x;;;y"));
 }
 
@@ -870,24 +900,18 @@ fn decodes_a_4_0_date_and_geo_uri() {
 fn decodes_a_value_node_through_the_value_codec_fallback() {
     use vcard::tree::{codec::VcardCodec, value::node::VcardValueNode};
 
-    // The VcardValue VcardCodec impl is the liberal raw fallback the divergent lenses
-    // inherit; exercise it directly.
+    // NOTE: the VcardValue VcardCodec impl is the liberal raw fallback the
+    // divergent lenses inherit, exercised directly here.
     let node = VcardValueNode::parse(b"a;b,c");
     let value = <VcardValue as VcardCodec>::decode(&node);
     assert!(matches!(value, VcardValue::Unknown(_)));
 }
 
-/// The parameters RFC 9554 and RFC 9555 added, from the wire to the model and
-/// back.
+/// The parameters RFC 9554 and RFC 9555 added, wire to model and back.
 ///
-/// They were reachable only through the vocabulary sweeps before, so nothing
-/// proved that a card carrying them decodes onto the right variants, or that
-/// what is decoded encodes back to the line it came from.
-///
-/// NOTE: Every value here is free of colons and quotes. A quoted parameter
-/// value is not yet read as RFC 6350 3.3 defines it (the quotes stay in the
-/// decoded value, and a colon inside them splits the line), so a card built
-/// around that would be pinning a bug rather than the parameters.
+/// Every value here is free of colons and quotes: a quoted parameter value is
+/// not yet read as RFC 6350 3.3 defines it, so a card built around one would
+/// pin a bug rather than the parameters.
 #[test]
 fn the_newer_parameters_decode_onto_their_own_variants_and_encode_back() {
     let raw = concat!(

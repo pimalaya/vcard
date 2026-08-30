@@ -12,7 +12,7 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardUtcOffset<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardUtcOffset(node.decode_scalar_at(0))
+        VcardUtcOffset(node.decode())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {

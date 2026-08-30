@@ -16,24 +16,24 @@ use crate::{
 impl<'v> VcardCodec<'v> for VcardAdr<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardAdr {
-            po_box: node.decode_at(0),
-            extended: node.decode_at(1),
-            street: node.decode_at(2),
-            locality: node.decode_at(3),
-            region: node.decode_at(4),
-            postal_code: node.decode_at(5),
-            country: node.decode_at(6),
-            room: node.decode_at(7),
-            apartment: node.decode_at(8),
-            floor: node.decode_at(9),
-            street_number: node.decode_at(10),
-            street_name: node.decode_at(11),
-            building: node.decode_at(12),
-            block: node.decode_at(13),
-            subdistrict: node.decode_at(14),
-            district: node.decode_at(15),
-            landmark: node.decode_at(16),
-            direction: node.decode_at(17),
+            po_box: node.decode_component_list(0),
+            extended: node.decode_component_list(1),
+            street: node.decode_component_list(2),
+            locality: node.decode_component_list(3),
+            region: node.decode_component_list(4),
+            postal_code: node.decode_component_list(5),
+            country: node.decode_component_list(6),
+            room: node.decode_component_list(7),
+            apartment: node.decode_component_list(8),
+            floor: node.decode_component_list(9),
+            street_number: node.decode_component_list(10),
+            street_name: node.decode_component_list(11),
+            building: node.decode_component_list(12),
+            block: node.decode_component_list(13),
+            subdistrict: node.decode_component_list(14),
+            district: node.decode_component_list(15),
+            landmark: node.decode_component_list(16),
+            direction: node.decode_component_list(17),
         }
     }
 
@@ -94,7 +94,7 @@ mod tests {
 
         // NOTE: eighteen slots come back once any extended component is set.
         assert_eq!(
-            adr.encode(VcardEscaper::Modern).to_string(),
+            adr.encode(VcardEscaper::V4_0).to_string(),
             ";;;Quebec;;;Canada;8th wing;;2;2875;boul. Laurier;;;;;;",
         );
     }
@@ -109,7 +109,7 @@ mod tests {
 
         assert!(!adr.has_extended_components());
         assert_eq!(
-            adr.encode(VcardEscaper::Modern).to_string(),
+            adr.encode(VcardEscaper::V4_0).to_string(),
             ";;2875 boul. Laurier;Quebec;;;",
         );
     }

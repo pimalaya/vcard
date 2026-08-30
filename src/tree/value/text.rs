@@ -23,7 +23,7 @@ impl<'v> VcardCodec<'v> for VcardText<'v> {
         // NOTE: a comma must be escaped inside a text value, so an unescaped
         // one is content rather than a separator; cutting the value there
         // would drop everything after it.
-        VcardText(node.decode_joined_at(0))
+        VcardText(node.decode())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
@@ -33,7 +33,7 @@ impl<'v> VcardCodec<'v> for VcardText<'v> {
 
 impl<'v> VcardCodec<'v> for VcardTextList<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardTextList(node.decode_at(0))
+        VcardTextList(node.decode_list())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {

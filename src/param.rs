@@ -4,11 +4,13 @@
 //!
 //! [`VcardParam`] is a closed set of the parameters the RFCs define, one
 //! variant each, plus an [`Unknown`](VcardParam::Unknown) arm so anything else
-//! round-trips. Parameters are few and simple (a text, a list, a small
-//! integer), so unlike properties each variant carries its value directly
-//! rather than through a shared value type; the variant itself names the
-//! parameter. A known name is the closed [`VcardParamKind`], reached through
-//! `FromStr` and `Deref`. Pure model, no [`crate::tree`] dependency.
+//! round-trips. A known name is the closed [`VcardParamKind`], reached through
+//! `FromStr` and `Deref`.
+//!
+//! Parameters are few and simple (a text, a list, a small integer), so unlike
+//! properties each variant carries its value directly rather than through a
+//! shared value type; the variant itself names the parameter. Pure model, no
+//! [`crate::tree`] dependency.
 
 use core::{error, fmt, ops, str};
 

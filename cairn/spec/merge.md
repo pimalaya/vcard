@@ -169,6 +169,8 @@ The merge SHALL decide whether two copies hold the same value by comparing their
 
 Two components agree when they decode to the same list of items, so a difference in escaping is a difference. An absent component and an all-empty one agree, so a trailing empty component is not a change.
 
+Two parameters SHALL be compared the same way, on their raw nodes and value by value: a single-valued parameter decodes its first value alone, so two parameters differing past their first `,` decode alike and the edit is never reported. Where the two nodes carry different escaping modes they share no decoding to compare through, and only identical bytes are then certainly the same parameter. The replay SHALL address the right card's parameter node by name and ordinal, a decoded parameter not being a key either.
+
 #### Scenario: A photo payload past the first semicolon
 - GIVEN a base card carrying `PHOTO:data:image/png;base64,AAAA` and a copy carrying a different payload
 - WHEN they are merged
@@ -178,6 +180,11 @@ Two components agree when they decode to the same list of items, so a difference
 - GIVEN a base `TITLE:boss;of;nothing` and two copies rewriting what follows the second `;`
 - WHEN they are merged
 - THEN the divergence is reported
+
+#### Scenario: A parameter past its first comma
+- GIVEN a base `ADR;LABEL=Ada,Lovelace` and a copy holding `ADR;LABEL=Ada,Byron`
+- WHEN they are merged
+- THEN the change is reported and the merged card carries it
 
 ### Requirement: A whole-value change reports the whole value
 
@@ -203,7 +210,9 @@ Each parameter action SHALL carry that position, so a caller reading the report 
 
 Before pairing a right-side action with a colliding left one, the merge SHALL check whether any left action on the same base instance is the same change, and treat that as agreement: nothing to replay, nothing to report.
 
-Two actions are the same change when they are equal, except that a list parameter (`TYPE`, `PID`) compares its items as an unordered set, since RFC 6350 section 5.6 gives them no order.
+Two sides SHALL be held to have made one change only where they wrote the same bytes. An unescape is not injective, since `\N` and `\n` both read as a line break (RFC 6350 section 3.4), so two changes that decode alike may say different things on the wire, and reading those as one change drops the difference without a word. What is weighed is what the change itself wrote: the value it wrote, the `;`-component it wrote, the item a list gained, the parameter it wrote. A change that only takes something away wrote no bytes, and what it names lives in the base both sides share, so the change itself settles it.
+
+The one exception SHALL be a list parameter the specification gives no order, `TYPE` (RFC 6350 section 5.6) and `PID` (section 7), whose items compare as a set both decoded and raw.
 
 #### Scenario: A repeated parameter name
 - GIVEN a base carrying `TEL;TYPE=work;TYPE=home` and two copies that both rewrote it to `TEL;TYPE=cell;TYPE=fax`
@@ -214,6 +223,11 @@ Two actions are the same change when they are equal, except that a list paramete
 - GIVEN a base whose `TEL` carries no `TYPE`, a left copy adding `TYPE=work,cell` and a right copy adding `TYPE=cell,work`
 - WHEN they are merged
 - THEN nothing is reported
+
+#### Scenario: One value spelled two ways
+- GIVEN a base holding `FN:Ada`, a left copy holding `FN:Ada\nLovelace` and a right copy holding `FN:Ada\NLovelace`
+- WHEN they are merged
+- THEN the divergence is reported and the merged card is the left copy's bytes
 
 ### Requirement: A replaced value outranks an item edit
 
@@ -275,12 +289,12 @@ Two cards escaping values by different rules share no decoding, so whether they 
 
 ### Requirement: A replayed parameter item keeps its wire form
 
-An item the merge replays into a list parameter SHALL be written as the right card spelled it, never as its decoded text: a parameter value is unescaped on the way in and copied verbatim on the way out, so a decoded item carrying a line break would end the line in the middle of its head.
+An item the merge replays into a list parameter SHALL be written as the right card spelled it, never as its decoded text: a decoded item holds a real line break where the wire holds the RFC 6868 `^n`, so writing it back decoded would end the line in the middle of its head.
 
-#### Scenario: A type value holding an escaped line break
-- GIVEN a base `TEL;TYPE=work` and a right copy adding the item `a\nb`
+#### Scenario: A type value holding an encoded line break
+- GIVEN a base `TEL;TYPE=work` and a right copy adding the item `a\nb^nc`
 - WHEN they are merged
-- THEN the merged line reads `TEL;TYPE=work,a\nb` and parses back to itself
+- THEN the merged line reads `TEL;TYPE=work,a\nb^nc` and parses back to itself
 
 ### Requirement: A removal both sides made takes one copy
 

@@ -20,15 +20,11 @@ use crate::{
     version::VcardVersion,
 };
 
-/// The per-property contract: the versions it lives in, its multiplicity, the
-/// value-types and parameters it may carry (all per version), and the
-/// value-type in force for a given version and optionally declared `VALUE`.
+/// The per-property contract: versions, multiplicity, value-types, parameters.
 ///
-/// Implemented on the zero-sized lens markers. The defaults cover the uniform
-/// majority (a single text value, valid in every version), so only
-/// [`KIND`](Self::KIND) is required. The value and `VALUE` axes resolve
-/// together in [`value`](Self::value), which the decoder consults to pick a
-/// value kind.
+/// Implemented on the zero-sized lens markers, whose defaults cover the
+/// uniform majority (one text value, every version), leaving only
+/// [`KIND`](Self::KIND) required. [`value`](Self::value) resolves both axes.
 pub trait VcardPropSpec {
     /// The property this spec describes.
     const KIND: VcardPropKind;

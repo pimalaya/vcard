@@ -1,12 +1,15 @@
 #![no_main]
 
-//! Coverage-guided fuzz target for the three-way merge. The oracles are the
-//! merge's algebraic laws, which hold for any three cards: the merged card
-//! reparses to a byte-stable fixpoint unless it is empty or a degenerate
-//! record, an untouched side contributes nothing, two identical edits are not
-//! a disagreement, and a line all three copies carry keeps its bytes, as long
-//! as the card's instances can be told apart. Each exemption is explained at
-//! the site that carries it.
+//! Coverage-guided fuzz target for the three-way merge.
+//!
+//! The oracles are the merge's algebraic laws, which hold for any three cards:
+//! the merged card reparses to a byte-stable fixpoint unless it is empty or a
+//! degenerate record, an untouched side contributes nothing, and two identical
+//! edits are not a disagreement.
+//!
+//! A line all three copies carry keeps its bytes, as long as the card's
+//! instances can be told apart. Each exemption is explained at the site that
+//! carries it.
 //!
 //! The three cards are carved from one input, so the mutator naturally
 //! produces related copies rather than three unrelated cards, which is where
@@ -31,14 +34,11 @@ fn merge<'a>(
     VcardMerge { base, left, right }.merge()
 }
 
-/// Whether a card carries two interchangeable instances of one property: the
-/// same name and the same content, differing at most in their line ending.
+/// Whether a card carries two interchangeable instances of one property.
 ///
-/// Which of several interchangeable copies survives a removal, and which
-/// spelling it has, is not something the merge can promise: the three
-/// matchings are free to pair them differently, and every pairing preserves
-/// the same content. The byte-preservation law is stated for a card whose
-/// instances can be told apart, so it skips these.
+/// Which of several copies survives a removal is not something the merge can
+/// promise: the three matchings may pair them differently, every pairing
+/// preserving the content. The byte-preservation law skips such cards.
 fn repeats_an_instance(cst: &VcardCst<'_>) -> bool {
     let content = |line: &VcardLine<'_>| {
         line.to_string()
@@ -56,13 +56,11 @@ fn repeats_an_instance(cst: &VcardCst<'_>) -> bool {
     })
 }
 
-/// Whether a card is a bare record carrying an envelope line among its
-/// properties.
+/// Whether a bare record carries an envelope line among its properties.
 ///
-/// Such a document is degenerate: its bytes are read as an enveloped card the
-/// moment a `BEGIN` line becomes the first one, so removing an earlier
-/// property changes what the same bytes describe. The fixpoint law skips it,
-/// since the merge preserved the content it was given either way.
+/// Degenerate: its bytes read as an enveloped card the moment a `BEGIN` line
+/// becomes the first one, so removing an earlier property changes what the
+/// same bytes describe. The fixpoint law skips it.
 fn is_degenerate(cst: &VcardCst<'_>) -> bool {
     cst.begin.is_none()
         && cst.props.iter().any(|line| {

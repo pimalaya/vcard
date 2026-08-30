@@ -14,7 +14,7 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardUri<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardUri(node.decode_joined())
+        VcardUri(node.decode())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {

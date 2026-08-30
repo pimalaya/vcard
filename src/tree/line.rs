@@ -5,14 +5,17 @@
 //! [`VcardLine`] is the syntactic unit a property occupies. It owns the line
 //! tokeniser ([`take`](VcardLine::take), which splits one logical line off the
 //! remaining input) and the head splitter separating the name from its
-//! parameters, but stays generic: what the name means and how the value decodes
-//! belong to the lens markers and the [`codec`](crate::tree::codec).
+//! parameters.
 //!
-//! Folding, stray blank lines and QUOTED-PRINTABLE soft breaks are resolved on
-//! parse, so every layer above sees one logical line, and recorded on the
-//! line's [`wire`](VcardLine::wire) shape, so serialization puts them back. A
-//! card therefore round-trips byte for byte however it was laid out. The final
-//! line needs no trailing break.
+//! It stays generic: what the name means and how the value decodes belong to
+//! the lens markers and the [`codec`](crate::tree::codec).
+//!
+//! Folding, stray blank lines and `QUOTED-PRINTABLE` soft breaks are resolved
+//! on parse, so every layer above sees one logical line, and recorded on the
+//! line's [`wire`](VcardLine::wire) shape, so serialization puts them back.
+//!
+//! A card therefore round-trips byte for byte however it was laid out. The
+//! final line needs no trailing break.
 
 use core::{fmt, str};
 
@@ -29,12 +32,9 @@ use crate::tree::{
 
 /// One raw content line: a name, parameters, a value and the line ending.
 ///
-/// This is a *logical* line, not a physical one: [`take`](Self::take) unfolds
-/// RFC 6350 3.2 folded continuations and QUOTED-PRINTABLE soft line breaks, so
-/// a `VcardLine` never holds an internal line break, only its terminating
-/// [`eol`](Self::eol). What it unfolded is kept on [`wire`](Self::wire), which
-/// is what puts the folds back on output. It is also the syntactic unit for the
-/// `BEGIN` / `VERSION` / `END` envelope lines, not only decoded properties.
+/// This is a *logical* line: [`take`](Self::take) unfolds RFC 6350 3.2
+/// continuations and soft breaks into [`wire`](Self::wire), which puts them
+/// back on output. The `BEGIN` / `VERSION` / `END` lines are `VcardLine`s too.
 #[derive(Clone, Debug)]
 pub struct VcardLine<'a> {
     /// The property name leaf, with any group prefix.
@@ -60,19 +60,18 @@ impl<'a> VcardLine<'a> {
             params: Vec::new(),
             value: VcardValueNode::from_components(
                 vec![vec![VcardValueLeaf::from(value.into())]],
-                VcardEscaper::Modern,
+                VcardEscaper::V4_0,
             ),
             eol: VcardLeaf(Cow::Borrowed("\r\n")),
             wire: VcardWire::default(),
         }
     }
 
-    /// Tokenise the logical line at the start of `rest`, unfolding any folded
-    /// continuation lines, and return it with the remaining input. RFC 6350 3.2
-    /// folds a long line by inserting a CRLF and a single leading space or tab;
-    /// unfolding drops them into the line's wire shape. A line with no folds
-    /// borrows the source; a folded line is rebuilt owned, since its bytes are
-    /// no longer contiguous.
+    /// Tokenise the logical line at the start of `rest`, unfolding folds.
+    ///
+    /// RFC 6350 3.2 folds with a CRLF and one leading space or tab; unfolding
+    /// drops them into the line's wire shape. A folded line is rebuilt owned,
+    /// since its bytes are no longer contiguous; an unfolded one borrows.
     pub fn take(rest: &'a [u8]) -> Result<(Self, &'a [u8]), VcardParseError> {
         // NOTE: Everything this tokeniser resolves is recorded here, so
         // serialization can put it back.
@@ -96,11 +95,10 @@ impl<'a> VcardLine<'a> {
             wire.skipped(0, ascii(&rest[..rest.len() - head.len()]));
         }
 
-        // NOTE: A line that begins with folding whitespace but has no line to
-        // continue (a dangling continuation, e.g. left after a dropped blank
-        // line) would fold into the previous line on reparse; strip the leading
-        // whitespace so it stays its own line, and record it so it still
-        // round-trips.
+        // NOTE: A dangling continuation (folding whitespace with no line to
+        // continue, left by a dropped blank line) would fold into the previous
+        // line on reparse; strip the leading whitespace so it stays its own
+        // line, and record it so it still round-trips.
         let indented = first;
         let first = strip_leading_wsp(first);
 
@@ -257,11 +255,10 @@ impl<'a> VcardLine<'a> {
         let mut value = &content[colon + 1..];
         let mut wire = VcardWire::default();
 
-        // NOTE: A trailing `=` on a QUOTED-PRINTABLE value is always a dangling
-        // soft-break marker, since real content encodes `=` as `=3D`. Left in,
-        // it would re-trigger the join on reparse and swallow the next line, so
-        // the logical line drops it and the wire shape keeps it. Base64 padding
-        // is safe: `ENCODING=BASE64` is not quoted-printable.
+        // NOTE: A trailing `=` on a QUOTED-PRINTABLE value is always a
+        // dangling soft-break marker, real content encoding `=` as `=3D`. Left
+        // in, it would re-trigger the join on reparse and swallow the next
+        // line, so the logical line drops it and the wire shape keeps it.
         if head_is_quoted_printable(content) {
             let full = value.len();
             while value.last() == Some(&b'=') {
@@ -305,12 +302,11 @@ impl fmt::Display for VcardLine<'_> {
     }
 }
 
-/// Append a continuation's content to the logical line being assembled, and
-/// record what could not go in it.
+/// Append a continuation's content to the logical line, recording the rest.
 ///
-/// A logical line still empty at this point came from a whitespace-only
-/// physical line, so a leading whitespace on the continuation is a wire
-/// artifact of a line with nothing to continue rather than part of the name.
+/// A logical line still empty here came from a whitespace-only physical line,
+/// so a leading whitespace on the continuation is a wire artifact rather than
+/// part of the name.
 fn push_content<'a>(logical: &mut Vec<u8>, wire: &mut VcardWire<'a>, content: &'a [u8]) {
     let kept = if logical.is_empty() {
         strip_leading_wsp(content)
@@ -347,13 +343,11 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
     (name, params)
 }
 
-/// The index of the `:` separating a line's head from its value: the first one
-/// outside a double-quoted parameter value, which RFC 6350 section 3.3 lets
-/// carry both a colon and a semicolon.
+/// The index of the `:` separating a line's head from its value.
 ///
-/// A head with an unbalanced quote would swallow the rest of the line, so with
-/// no colon outside quotes the scan falls back to the first colon anywhere and
-/// the line still parses.
+/// It is the first colon outside a double-quoted parameter value, which RFC
+/// 6350 3.3 lets carry one. An unbalanced quote would swallow the rest of the
+/// line, so with no colon outside quotes the scan falls back to the first.
 fn value_colon(content: &[u8]) -> Option<usize> {
     let mut quoted = false;
 

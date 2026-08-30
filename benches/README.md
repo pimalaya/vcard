@@ -22,4 +22,8 @@ The comparison is level-matched, so each group compares like with like: content-
 
 ## Reading the numbers
 
-These are a ballpark, not a strict ranking: the libraries produce different representations (borrowed versus owned, shallow versus validating), so they do different amounts of work. `vparser` is a zero-allocation pull tokenizer that builds no leaf or parameter structs, which is why it stays ahead at the content-line level; at the model level we are on par with `calcard`. The `vcard` crate is builder-only and does not parse, so it is absent from both groups.
+These are a ballpark, not a strict ranking: the libraries produce different representations (borrowed versus owned, shallow versus validating), so they do different amounts of work.
+
+`vparser` is a zero-allocation pull tokenizer that builds no leaf or parameter structs, which is why it stays ahead at the content-line level; at the model level we are on par with `calcard`.
+
+The `vcard` crate is builder-only and does not parse, so it is absent from both groups.

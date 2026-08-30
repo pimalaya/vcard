@@ -5,20 +5,27 @@
 //!
 //! A cursor borrows a content line mutably and reads and writes its value
 //! through the codec: getters decode (unescape), setters encode (escape) and
-//! write through to the syntax node. A setter only rewrites the component it
-//! touches, so every other leaf (and every parameter) of a parsed line stays
-//! byte for byte intact. [`VcardValueCursor`] offers convenience accessors for
-//! the common single-value and list shapes plus raw component-level access; the
+//! write through to the syntax node.
+//!
+//! A setter only rewrites the component it touches, so every other leaf (and
+//! every parameter) of a parsed line stays byte for byte intact.
+//!
+//! [`VcardValueCursor`] offers convenience accessors for the common
+//! single-value and list shapes plus raw component-level access; the
 //! structured properties (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor
 //! naming their own components instead.
 //!
 //! Beside the UTF-8 text accessors it offers a raw byte hatch
 //! ([`bytes`](VcardValueCursor::bytes) /
 //! [`set_bytes`](VcardValueCursor::set_bytes)) for a value in a foreign
-//! charset, and, behind the content-encoding features, the
+//! charset.
+//!
+//! Behind the content-encoding features sit the
 //! [`quoted_printable`](VcardValueCursor::quoted_printable) and
 //! [`charset`](VcardValueCursor::charset) decoders.
 
+#[cfg(feature = "encoding")]
+use alloc::string::String;
 use alloc::{borrow::Cow, vec::Vec};
 
 use crate::tree::{line::VcardLine, param::lens::VcardParamLens, value::node::VcardValueNode};
@@ -31,40 +38,40 @@ pub struct VcardValueCursor<'c, 'a> {
 }
 
 impl<'a> VcardValueCursor<'_, 'a> {
-    /// The whole value as a single decoded text (component 0, value 0).
+    /// The whole value as a single decoded text, its `;` and `,` kept literal.
     pub fn text(&self) -> Cow<'_, str> {
-        self.line.value.decode_scalar_at(0)
+        self.line.value.decode()
     }
 
-    /// Set the value to a single text, escaping and preserving any other
-    /// components. Writes UTF-8; to keep a foreign charset, transcode yourself
-    /// and use [`set_bytes`](Self::set_bytes).
+    /// Set the whole value to a single text, escaping it. Writes UTF-8; to keep
+    /// a foreign charset, transcode yourself and use
+    /// [`set_bytes`](Self::set_bytes).
     pub fn set_text(&mut self, value: impl AsRef<str>) {
-        self.line.value.set_at(0, &[value]);
+        self.line.value.set(&[value]);
     }
 
-    /// The whole value's raw bytes (component 0, value 0), unescaped but not
-    /// transcoded and not transfer-decoded, for a value carrying a foreign
-    /// charset. To resolve `QUOTED-PRINTABLE` or a `CHARSET`, use the
-    /// [`quoted_printable`](Self::quoted_printable) /
+    /// The whole value's raw bytes, unescaped but not otherwise decoded.
+    ///
+    /// For a value carrying a foreign charset. To resolve `QUOTED-PRINTABLE`
+    /// or a `CHARSET`, use the [`quoted_printable`](Self::quoted_printable) /
     /// [`charset`](Self::charset) feature helpers.
     pub fn bytes(&self) -> Cow<'_, [u8]> {
-        self.line.value.decode_bytes_at(0)
+        self.line.value.decode_bytes()
     }
 
-    /// Set the value to raw bytes (the foreign-charset escape hatch), escaping
-    /// structural separators but writing the bytes verbatim and preserving any
-    /// other components. The card's `CHARSET` parameter is left untouched: it
-    /// is the caller's to keep consistent.
+    /// Set the whole value to raw bytes (the foreign-charset escape hatch),
+    /// escaping structural separators but writing the bytes verbatim. The
+    /// card's `CHARSET` parameter is left untouched: it is the caller's to keep
+    /// consistent.
     pub fn set_bytes(&mut self, value: impl AsRef<[u8]>) {
-        self.line.value.set_bytes_at(0, &[value]);
+        self.line.value.set_bytes(&[value]);
     }
 
-    /// Decode the value's `QUOTED-PRINTABLE` `=XX` octets to raw bytes when the
-    /// line declares that encoding, else the raw [`bytes`](Self::bytes). Still
-    /// in the value's own (possibly foreign) charset; pair with
-    /// [`charset`](Self::charset) to get text. Requires the `quoted-printable`
-    /// feature.
+    /// Decode the value's `QUOTED-PRINTABLE` `=XX` octets to raw bytes.
+    ///
+    /// The raw [`bytes`](Self::bytes) when the line declares no such encoding.
+    /// Still in the value's own (possibly foreign) charset, so pair with
+    /// [`charset`](Self::charset) for text. Requires `quoted-printable`.
     #[cfg(feature = "quoted-printable")]
     pub fn quoted_printable(&self) -> Vec<u8> {
         let raw = self.bytes();
@@ -82,7 +89,7 @@ impl<'a> VcardValueCursor<'_, 'a> {
     /// is also on, `QUOTED-PRINTABLE` octets are resolved first. Requires the
     /// `encoding` feature.
     #[cfg(feature = "encoding")]
-    pub fn charset(&self) -> alloc::string::String {
+    pub fn charset(&self) -> String {
         #[cfg(feature = "quoted-printable")]
         let bytes = self.quoted_printable();
         #[cfg(not(feature = "quoted-printable"))]
@@ -97,25 +104,25 @@ impl<'a> VcardValueCursor<'_, 'a> {
         encoding.decode_without_bom_handling(&bytes).0.into_owned()
     }
 
-    /// The value's first component as a decoded list (its `,`-separated
-    /// values).
+    /// The whole value as a decoded list (its `,`-separated values), its `;`
+    /// kept literal.
     pub fn list(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(0)
+        self.line.value.decode_list()
     }
 
-    /// Set the value's first component to a list, escaping each value.
+    /// Set the whole value to a list, escaping each value.
     pub fn set_list<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(0, values);
+        self.line.value.set(values);
     }
 
     /// The `i`th component as a decoded list, for structured values.
     pub fn component(&self, i: usize) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(i)
+        self.line.value.decode_component_list(i)
     }
 
     /// Set the `i`th component, escaping each value and preserving the rest.
     pub fn set_component<S: AsRef<str>>(&mut self, i: usize, values: &[S]) {
-        self.line.value.set_at(i, values);
+        self.line.value.set_component(i, values);
     }
 
     /// Walk into the `i`th component to edit its `,`-separated values one at a
@@ -162,7 +169,10 @@ impl VcardListCursor<'_, '_> {
 
     /// The `j`th value, decoded, or `None` when the index is out of range.
     pub fn get(&self, j: usize) -> Option<Cow<'_, str>> {
-        self.node.decode_at(self.component).into_iter().nth(j)
+        self.node
+            .decode_component_list(self.component)
+            .into_iter()
+            .nth(j)
     }
 
     /// Replace the `j`th value in place, re-escaping only that leaf.
@@ -333,6 +343,50 @@ mod tests {
         assert!(out.contains("NICKNAME:first,a,B,c,last\r\n"), "got: {out}");
     }
 
+    /// The generic accessors read and write the value, not its first slot.
+    ///
+    /// A semicolon separates nothing in a text value, so a read stopping at
+    /// one handed back a truncated value and a write rewriting only the first
+    /// component left the old tail behind: read then write changed the value.
+    #[test]
+    fn reads_and_writes_the_whole_value_not_its_first_component() {
+        use crate::tree::prop::note::NOTE;
+
+        let mut card =
+            VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a;b\r\nEND:VCARD\r\n").unwrap();
+
+        {
+            let cursor = card.prop_mut::<NOTE>().unwrap();
+            assert_eq!(cursor.text(), "a;b");
+            assert_eq!(cursor.bytes().as_ref(), b"a;b");
+            assert_eq!(cursor.list(), vec!["a;b"]);
+        }
+
+        let whole = card.prop_mut::<NOTE>().unwrap().text().into_owned();
+        card.prop_mut::<NOTE>().unwrap().set_text(&whole);
+
+        assert!(card.to_string().contains("NOTE:a\\;b\r\n"), "got: {card}");
+        assert_eq!(card.prop_mut::<NOTE>().unwrap().text(), "a;b");
+    }
+
+    /// A named component of a structured value keeps the commas inside it.
+    #[test]
+    fn reads_a_structured_component_past_its_first_comma() {
+        use crate::tree::prop::client_pid_map::CLIENTPIDMAP;
+
+        let mut card = VcardCst::parse(concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:4.0\r\n",
+            "CLIENTPIDMAP:1;urn:uuid:a,b\r\n",
+            "END:VCARD\r\n",
+        ))
+        .unwrap();
+
+        let cursor = card.prop_mut::<CLIENTPIDMAP>().unwrap();
+        assert_eq!(cursor.id(), "1");
+        assert_eq!(cursor.uri(), "urn:uuid:a,b");
+    }
+
     #[test]
     fn exercises_every_generic_accessor() {
         use crate::tree::prop::note::NOTE;
@@ -343,10 +397,10 @@ mod tests {
         {
             let mut cursor = card.prop_mut::<NOTE>().unwrap();
 
-            // NOTE: A text read takes one value (component 0, value 0), while a
-            // list read takes the whole first component, and a component read
-            // takes one `;`-separated slot.
-            assert_eq!(cursor.text(), "a");
+            // NOTE: A text read takes the whole value and a list read splits it
+            // on its commas, both keeping every `;` the value carries, while a
+            // component read takes one `;`-separated slot.
+            assert_eq!(cursor.text(), "a,b");
             assert_eq!(cursor.list(), vec!["a", "b"]);
             assert_eq!(cursor.component(0), vec!["a", "b"]);
 
@@ -356,8 +410,8 @@ mod tests {
             cursor.set_list(&["a", "b"]);
             assert_eq!(cursor.list(), vec!["a", "b"]);
 
-            // A component past the last one extends the value rather than
-            // dropping the write.
+            // NOTE: a component past the last one extends the value rather
+            // than dropping the write.
             cursor.set_component(1, &["y"]);
             assert_eq!(cursor.component(1), vec!["y"]);
         }

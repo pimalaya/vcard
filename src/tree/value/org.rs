@@ -13,7 +13,7 @@ use crate::{
 impl<'v> VcardCodec<'v> for VcardOrg<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         let units = (0..node.component_count())
-            .map(|i| node.decode_scalar_at(i))
+            .map(|i| node.decode_component(i))
             .collect();
         VcardOrg(units)
     }

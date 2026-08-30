@@ -19,15 +19,15 @@ impl<'v> VcardCodec<'v> for VcardGeo<'v> {
         // NOTE: 2.1 separates the pair with `,` (one component, two values),
         // 3.0 with `;` (two components); the node's escaper tells them apart.
         if node.escaper == VcardEscaper::V2_1 {
-            let mut parts = node.decode_at(0).into_iter();
+            let mut parts = node.decode_component_list(0).into_iter();
             VcardGeo {
                 latitude: parts.next().unwrap_or_default(),
                 longitude: parts.next().unwrap_or_default(),
             }
         } else {
             VcardGeo {
-                latitude: node.decode_scalar_at(0),
-                longitude: node.decode_scalar_at(1),
+                latitude: node.decode_component(0),
+                longitude: node.decode_component(1),
             }
         }
     }

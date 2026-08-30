@@ -70,22 +70,22 @@ impl VcardGenderCursor<'_, '_> {
 
     /// The sex code, decoded.
     pub fn sex(&self) -> Cow<'_, str> {
-        self.line.value.decode_scalar_at(0)
+        self.line.value.decode_component(0)
     }
 
     /// Set the sex code.
     pub fn set_sex(&mut self, value: impl AsRef<str>) {
-        self.line.value.set_at(0, &[value]);
+        self.line.value.set_component(0, &[value]);
     }
 
     /// The free-text gender identity, decoded.
     pub fn identity(&self) -> Cow<'_, str> {
-        self.line.value.decode_scalar_at(1)
+        self.line.value.decode_component(1)
     }
 
     /// Set the gender identity.
     pub fn set_identity(&mut self, value: impl AsRef<str>) {
-        self.line.value.set_at(1, &[value]);
+        self.line.value.set_component(1, &[value]);
     }
 
     /// The first parameter of type `P` on this line, decoded.

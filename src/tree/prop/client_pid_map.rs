@@ -66,22 +66,22 @@ impl VcardClientPidMapCursor<'_, '_> {
 
     /// The PID source identifier, decoded.
     pub fn id(&self) -> Cow<'_, str> {
-        self.line.value.decode_scalar_at(0)
+        self.line.value.decode_component(0)
     }
 
     /// Set the PID source identifier.
     pub fn set_id(&mut self, value: impl AsRef<str>) {
-        self.line.value.set_at(0, &[value]);
+        self.line.value.set_component(0, &[value]);
     }
 
     /// The client URI, decoded.
     pub fn uri(&self) -> Cow<'_, str> {
-        self.line.value.decode_scalar_at(1)
+        self.line.value.decode_component(1)
     }
 
     /// Set the client URI.
     pub fn set_uri(&mut self, value: impl AsRef<str>) {
-        self.line.value.set_at(1, &[value]);
+        self.line.value.set_component(1, &[value]);
     }
 
     /// The first parameter of type `P` on this line, decoded.

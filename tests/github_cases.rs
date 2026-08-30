@@ -1,9 +1,12 @@
 #![cfg(feature = "parser")]
-//! Focused input -> expected cases translated from the unit tests of popular
-//! open-source vCard libraries on GitHub. Each case reproduces an explicit
-//! assertion from a source repo (parse this card, expect that decoded value)
-//! against this crate's `VcardCst::parse(...).prop::<LENS>()` / `.version()`
-//! API. Provenance and licensing for every source repo live in its own corpus
+//! Focused input to expected cases, translated from the unit tests of popular
+//! open-source vCard libraries on GitHub.
+//!
+//! Each case reproduces an explicit assertion from a source repo (parse this
+//! card, expect that decoded value) against this crate's
+//! `VcardCst::parse(...).prop::<LENS>()` / `.version()` API.
+//!
+//! Provenance and licensing for every source repo live in its own corpus
 //! directory under tests/corpus/ (see each project's ATTRIBUTION.md).
 
 use std::borrow::Cow;

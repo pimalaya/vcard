@@ -2,9 +2,10 @@
 //!
 //! [`VcardPropLens`] ties a property (by type) to its decoded value type, an
 //! edit cursor, and the `decode` projection from the generic syntax node onto
-//! the type. The wire name comes from its [`VcardPropSpec::KIND`] supertrait,
-//! so the two stay in sync; each property implements it on the marker in its
-//! own module.
+//! the type.
+//!
+//! The wire name comes from its [`VcardPropSpec::KIND`] supertrait, so the two
+//! stay in sync; each property implements it on the marker in its own module.
 
 use crate::{
     tree::{codec::VcardCodec, line::VcardLine, prop::spec::VcardPropSpec},
@@ -25,11 +26,11 @@ pub trait VcardPropLens: VcardPropSpec {
     where
         'a: 'c;
 
-    /// Project a content line onto the decoded type, consulting the card
-    /// version where the value's shape is version-specific (`GEO`, the binary
-    /// props). The default ignores the version and decodes the value node
-    /// through the target's [`VcardCodec`]; the version-specific lenses
-    /// override it.
+    /// Project a content line onto the decoded type.
+    ///
+    /// The default ignores the version and decodes the node through the
+    /// target's [`VcardCodec`]. The lenses whose value shape is
+    /// version-specific (`GEO`, the binary props) override it.
     fn decode<'v>(line: &'v VcardLine<'_>, _version: VcardVersion) -> Self::Target<'v> {
         <Self::Target<'v> as VcardCodec<'v>>::decode(&line.value)
     }

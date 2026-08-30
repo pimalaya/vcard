@@ -3,8 +3,14 @@
 //! Resolve the RFC 6350 3.4 value escapes when parsing. The read half of the
 //! escaping codec; its exact inverse is
 //! [`escape`](crate::tree::codec::escape), and the version-specific rules are
-//! selected by the [`VcardEscaper`]. The structural decoders in
-//! [`decode`](crate::tree::codec::decode) run every value leaf through here.
+//! selected by the [`VcardEscaper`].
+//!
+//! The structural decoders in [`decode`](crate::tree::codec::decode) run every
+//! value leaf through here.
+//!
+//! A parameter value is a different alphabet and has its own reader,
+//! `unescape_param`. RFC 6350 section 3.3 gives a parameter no backslash
+//! escapes at all, which is why RFC 6868 gives it the caret ones instead.
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
@@ -21,16 +27,46 @@ pub(crate) fn unescape_with(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, str>
 /// preserving any non-UTF-8 content verbatim.
 pub(crate) fn unescape_bytes(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8]> {
     match escaper {
-        VcardEscaper::Modern => unescape_modern(bytes),
+        VcardEscaper::V3_0 | VcardEscaper::V4_0 => unescape_modern(bytes),
         VcardEscaper::V2_1 => unescape_v21(bytes),
     }
 }
 
-/// Resolve value escapes with the modern (RFC 2426 / 6350) rules over text. The
-/// default used wherever the escaping mode is not version-specific (parameters,
-/// the version-blind lens path).
-pub(crate) fn unescape(text: &str) -> Cow<'_, str> {
-    lossy(unescape_modern(text.as_bytes()))
+/// Resolve the RFC 6868 3.1 parameter value encoding: `^n`, `^^` and `^'`.
+///
+/// A caret before anything else, and a trailing one, stay literal, 3.1
+/// forbidding an error either way. No backslash is touched: RFC 6350 3.3 gives
+/// a parameter no escapes and RFC 6868 3.2 forbids adding the backslash ones.
+pub(crate) fn unescape_param(text: &str, escaper: VcardEscaper) -> Cow<'_, str> {
+    if !escaper.has_param_encoding() || !text.contains('^') {
+        return Cow::Borrowed(text);
+    }
+
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c != '^' {
+            out.push(c);
+            continue;
+        }
+
+        match chars.peek() {
+            Some('n') => out.push('\n'),
+            Some('^') => out.push('^'),
+            Some('\'') => out.push('"'),
+            // NOTE: any other caret sequence is left as it stands, so the
+            // caret goes out alone and the character after it is read again.
+            _ => {
+                out.push('^');
+                continue;
+            }
+        }
+
+        chars.next();
+    }
+
+    Cow::Owned(out)
 }
 
 /// Interpret unescaped bytes as UTF-8, keeping the borrow when possible.
@@ -110,18 +146,62 @@ fn unescape_v21(bytes: &[u8]) -> Cow<'_, [u8]> {
 mod tests {
     use alloc::borrow::Cow;
 
-    use crate::tree::codec::unescape::unescape;
+    use crate::tree::codec::{
+        mode::VcardEscaper,
+        unescape::{unescape_param, unescape_with},
+    };
 
     #[test]
     fn unescapes_value_escapes_and_borrows_when_clean() {
-        assert_eq!(unescape(r"a\,b\;c\nd"), "a,b;c\nd");
-        assert!(matches!(unescape("plain"), Cow::Borrowed("plain")));
+        assert_eq!(
+            unescape_with(br"a\,b\;c\nd", VcardEscaper::V4_0),
+            "a,b;c\nd",
+        );
+        assert!(matches!(
+            unescape_with(b"plain", VcardEscaper::V4_0),
+            Cow::Borrowed("plain")
+        ));
+    }
+
+    #[test]
+    fn unescapes_the_rfc_6868_parameter_sequences() {
+        assert_eq!(
+            unescape_param("a^nb^^c^'d", VcardEscaper::V4_0),
+            "a\nb^c\"d",
+        );
+        assert!(matches!(
+            unescape_param("plain", VcardEscaper::V4_0),
+            Cow::Borrowed("plain")
+        ));
+    }
+
+    #[test]
+    fn keeps_an_unknown_caret_sequence_and_a_backslash() {
+        // NOTE: RFC 6868 section 3.1 forbids reading `^x` as an error, and
+        // section 3.2 forbids backslash escaping, so both stay as they are.
+        assert_eq!(unescape_param("a^xb^Nc^", VcardEscaper::V4_0), "a^xb^Nc^");
+        assert_eq!(
+            unescape_param(r"C:\temp\note", VcardEscaper::V4_0),
+            r"C:\temp\note",
+        );
+    }
+
+    #[test]
+    fn leaves_a_pre_4_0_parameter_caret_alone() {
+        // NOTE: RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret is a
+        // literal caret and resolving it would corrupt the value.
+        assert!(matches!(
+            unescape_param("a^nb", VcardEscaper::V3_0),
+            Cow::Borrowed("a^nb")
+        ));
+        assert!(matches!(
+            unescape_param("a^nb", VcardEscaper::V2_1),
+            Cow::Borrowed("a^nb")
+        ));
     }
 
     #[test]
     fn unescapes_only_the_semicolon_in_v2_1() {
-        use crate::tree::codec::{mode::VcardEscaper, unescape::unescape_with};
-
         // NOTE: vCard 2.1 resolves `\;` only; `\n` keeps its literal backslash,
         // and a trailing backslash stays.
         assert_eq!(unescape_with(br"a\;b\nc\", VcardEscaper::V2_1), "a;b\\nc\\");

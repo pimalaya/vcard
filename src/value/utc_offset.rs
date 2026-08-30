@@ -2,9 +2,9 @@
 //!
 //! The decoded UTC-offset value kind.
 //!
-//! One of the forms the `TZ` property may take: a signed `hhmm` offset from UTC
-//! (RFC 6350 4.7; e.g. `-0500`), kept as its raw text. `TZ` may instead be plain
-//! text or a URI, decoded as the corresponding kinds.
+//! One of the forms the `TZ` property may take: a signed `hhmm` offset from
+//! UTC (RFC 6350 4.7; e.g. `-0500`), kept as its raw text. `TZ` may instead be
+//! plain text or a URI, decoded as the corresponding kinds.
 
 use alloc::{borrow::Cow, string::String};
 

@@ -13,7 +13,7 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardLanguageTag<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardLanguageTag(node.decode_scalar_at(0))
+        VcardLanguageTag(node.decode())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {

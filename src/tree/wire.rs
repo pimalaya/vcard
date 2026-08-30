@@ -6,9 +6,10 @@
 //! A real card folds at 75 octets, blank-lines its properties apart and, under
 //! vCard 2.1, breaks a `QUOTED-PRINTABLE` value across physical lines. Every
 //! layer above the parser wants the *logical* line, so
-//! [`VcardLine::take`](crate::tree::line::VcardLine::take) resolves all three
-//! away. [`VcardWire`] is what makes that resolution reversible: a list of
-//! byte offsets into the logical line, each holding the bytes the wire carried
+//! [`VcardLine::take`](crate::tree::line::VcardLine::take) resolves all three.
+//!
+//! [`VcardWire`] is what makes that resolution reversible: a list of byte
+//! offsets into the logical line, each holding the bytes the wire carried
 //! there, so serialization reproduces the input exactly rather than a
 //! normalised paraphrase of it.
 //!
@@ -17,11 +18,15 @@
 //! An offset indexes the line's logical bytes (its name, its parameters and
 //! its value, exactly as `VcardLine::write_bytes` lays them out, line ending
 //! excluded, which is why a blank line before the line is an insertion at
-//! offset 0). The logical length is recorded with them, and a shape whose
-//! length no longer matches is dropped rather than applied: an edit that
-//! changes a value's length moves every byte after it, so the old fold points
-//! would land in the wrong places. An edited line is written unfolded, which
-//! RFC 6350 3.2 permits (it recommends 75 octets, it does not require them).
+//! offset 0).
+//!
+//! The logical length is recorded with them, and a shape whose length no
+//! longer matches is dropped rather than applied: an edit that changes a
+//! value's length moves every byte after it, so the old fold points would land
+//! in the wrong places.
+//!
+//! An edited line is written unfolded, which RFC 6350 3.2 permits (it
+//! recommends 75 octets, it does not require them).
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -119,15 +124,9 @@ impl<'a> VcardWire<'a> {
 
     /// Put `earlier`'s pieces before this shape's, keeping the sealed length.
     ///
-    /// The tokeniser records what it resolved (blank lines, folds, soft breaks)
-    /// and the line splitter records a dangling `=` the value ends on. The two
-    /// lists are each ordered, and a piece sitting at the same offset in both
-    /// belongs to the tokeniser first, so a stable sort by offset merges them.
-    ///
-    /// The sort is not cosmetic. A value ending on two `=` gives the tokeniser
-    /// a soft break past the last logical byte and the splitter a dangling `=`
-    /// before it, so concatenating alone would emit the soft break first and
-    /// the reparsed line would swallow the one that follows.
+    /// A piece at a shared offset belongs to the tokeniser first, so a stable
+    /// sort by offset merges the two ordered lists. Concatenating alone would
+    /// emit a soft break ahead of an earlier dangling `=`, swallowing a line.
     pub(crate) fn prepend(&mut self, mut earlier: VcardWire<'a>) {
         if earlier.parts.is_empty() {
             return;

@@ -15,8 +15,8 @@ use crate::{
 impl<'v> VcardCodec<'v> for VcardClientPidMap<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardClientPidMap {
-            id: node.decode_scalar_at(0),
-            uri: node.decode_scalar_at(1),
+            id: node.decode_component(0),
+            uri: node.decode_component(1),
         }
     }
 

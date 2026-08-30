@@ -4,10 +4,11 @@
 //!
 //! [`VcardVersion`] is the decoded `VERSION` line: one of the three defined
 //! versions (2.1 / 3.0 / 4.0), an unrecognised or missing one normalising to
-//! [`V4_0`](VcardVersion::V4_0) at decode time. It sits apart from the other
-//! properties because the syntax tree, which is what preserves the raw
-//! `VERSION` line byte for byte, treats it as part of the card envelope. Pure
-//! model, no syntax dependency.
+//! [`V4_0`](VcardVersion::V4_0) at decode time.
+//!
+//! It sits apart from the other properties because the syntax tree, which is
+//! what preserves the raw `VERSION` line byte for byte, treats it as part of
+//! the card envelope. Pure model, no syntax dependency.
 
 use core::{error, fmt, ops, str};
 

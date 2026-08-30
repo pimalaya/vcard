@@ -15,7 +15,7 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardBinary<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardBinary::Base64(node.decode_scalar_at(0))
+        VcardBinary::Base64(node.decode())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {

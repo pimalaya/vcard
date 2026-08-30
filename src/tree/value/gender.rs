@@ -16,8 +16,8 @@ use crate::{
 impl<'v> VcardCodec<'v> for VcardGender<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardGender {
-            sex: node.decode_scalar_at(0),
-            identity: node.decode_scalar_at(1),
+            sex: node.decode_component(0),
+            identity: node.decode_component(1),
         }
     }
 

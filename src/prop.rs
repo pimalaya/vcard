@@ -5,9 +5,11 @@
 //! A [`VcardProp`] is a [`VcardPropName`], a list of parameters, and a decoded
 //! value. The name is stored explicitly because many properties share one
 //! [`VcardValue`] kind: `FN` and `TITLE` both decode to text, so the value
-//! alone cannot say which property it is. A known name is the closed
-//! [`VcardPropKind`] identity (its wire spelling reached through `Deref` and
-//! `FromStr`); an unknown one keeps its verbatim bytes.
+//! alone cannot say which property it is.
+//!
+//! A known name is the closed [`VcardPropKind`] identity (its wire spelling
+//! reached through `Deref` and `FromStr`); an unknown one keeps its verbatim
+//! bytes.
 //!
 //! Build a property directly from its public fields; strict, spec-checked
 //! construction lives in the syntax layer

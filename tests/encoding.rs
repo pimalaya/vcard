@@ -48,8 +48,8 @@ fn quoted_printable_is_kept_raw_and_its_param_preserved() {
         b"caf=C3=A9"
     );
 
-    // ...and the ENCODING parameter is kept (not dropped) so a consumer knows to
-    // decode it.
+    // NOTE: the ENCODING parameter is kept, not dropped, so a consumer knows
+    // to decode it.
     assert!(
         card.decode().properties[0]
             .params
@@ -59,7 +59,7 @@ fn quoted_printable_is_kept_raw_and_its_param_preserved() {
 
 #[test]
 fn a_non_utf8_charset_value_round_trips_byte_for_byte() {
-    // A vCard 2.1 NOTE in ISO-8859-1: 0xE9 ('é' in Latin-1) is not valid UTF-8.
+    // NOTE: a vCard 2.1 NOTE in ISO-8859-1, whose 0xE9 is not valid UTF-8.
     let mut raw = Vec::new();
     raw.extend_from_slice(b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;CHARSET=ISO-8859-1:caf");
     raw.push(0xE9);

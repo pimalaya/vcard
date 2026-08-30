@@ -1,18 +1,21 @@
 //! # Encode (model to syntax)
 //!
-//! The write side of the structural bridge: project the decoded model onto a raw
-//! syntax tree. A value's [`VcardCodec`] impl encodes it into a
-//! [`VcardValueNode`], a [`VcardParam`] into a [`VcardParamNode`], a
-//! [`VcardProp`] into a [`VcardLine`] (its name taken verbatim from the
-//! property, its value delegated to the value codec), and a [`Vcard`] into a
-//! whole [`VcardCst`].
+//! The write side of the structural bridge: project the decoded model onto a
+//! raw syntax tree.
+//!
+//! A value's [`VcardCodec`] impl encodes it into a [`VcardValueNode`], a
+//! [`VcardParam`] into a [`VcardParamNode`], a [`VcardProp`] into a
+//! [`VcardLine`] (its name verbatim from the property, its value delegated to
+//! the value codec), and a [`Vcard`] into a whole [`VcardCst`].
 //!
 //! The card is encoded for its version's [`VcardEscaper`], which the value
 //! codecs use to escape every leaf (through the sibling
 //! [`escape`](crate::tree::codec::escape) codec) and to pick any
-//! version-specific value shape; byte-preserving edits are the cursors' job, not
-//! this module's. [`Display`](core::fmt::Display) for [`Vcard`] renders a
-//! decoded card straight to its serialized bytes through here.
+//! version-specific value shape.
+//!
+//! Byte-preserving edits are the cursors' job, not this module's.
+//! [`Display`](core::fmt::Display) for [`Vcard`] renders a decoded card
+//! straight to its serialized bytes through here.
 
 use core::fmt;
 
@@ -22,7 +25,11 @@ use crate::{
     param::VcardParam,
     prop::VcardProp,
     tree::{
-        codec::{VcardCodec, escape::escape_with, mode::VcardEscaper},
+        codec::{
+            VcardCodec,
+            escape::{escape_param, escape_with},
+            mode::VcardEscaper,
+        },
         cst::VcardCst,
         leaf::{VcardLeaf, VcardValueLeaf},
         line::VcardLine,
@@ -62,7 +69,11 @@ impl VcardProp<'_> {
     pub fn encode(&self, escaper: VcardEscaper) -> VcardLine<'static> {
         VcardLine {
             name: VcardLeaf::from(self.name.to_string()),
-            params: self.params.iter().map(VcardParam::encode).collect(),
+            params: self
+                .params
+                .iter()
+                .map(|param| param.encode(escaper))
+                .collect(),
             value: self.value.encode(escaper),
             eol: VcardLeaf::from("\r\n".to_string()),
             wire: VcardWire::default(),
@@ -71,43 +82,38 @@ impl VcardProp<'_> {
 }
 
 impl VcardParam<'_> {
-    /// Encode the parameter into a raw parameter node, dispatching on its kind.
-    pub fn encode(&self) -> VcardParamNode<'static> {
+    /// Encode the parameter into a raw parameter node for the given escaping
+    /// mode, dispatching on its kind.
+    pub fn encode(&self, escaper: VcardEscaper) -> VcardParamNode<'static> {
         use crate::param::VcardParamKind::*;
 
         match self {
-            VcardParam::Language(v) => param_scalar(&Language, v),
-            VcardParam::Charset(v) => param_scalar(&Charset, v),
-            VcardParam::Encoding(v) => param_scalar(&Encoding, v),
-            VcardParam::Value(v) => param_scalar(&Value, v),
-            VcardParam::Pref(v) => param_scalar(&Pref, v),
-            VcardParam::AltId(v) => param_scalar(&AltId, v),
-            VcardParam::Pid(vs) => param_list(&Pid, vs),
-            VcardParam::Type(vs) => param_list(&Type, vs),
-            VcardParam::MediaType(v) => param_scalar(&MediaType, v),
-            VcardParam::CalScale(v) => param_scalar(&CalScale, v),
-            VcardParam::SortAs(vs) => param_list(&SortAs, vs),
-            VcardParam::Geo(v) => param_scalar(&Geo, v),
-            VcardParam::Tz(v) => param_scalar(&Tz, v),
-            VcardParam::Label(v) => param_scalar(&Label, v),
-            VcardParam::Author(v) => param_scalar(&Author, v),
-            VcardParam::AuthorName(v) => param_scalar(&AuthorName, v),
-            VcardParam::Created(v) => param_scalar(&Created, v),
-            VcardParam::Derived(v) => param_scalar(&Derived, v),
-            VcardParam::Jsptr(v) => param_scalar(&Jsptr, v),
-            VcardParam::Phonetic(v) => param_scalar(&Phonetic, v),
-            VcardParam::PropId(v) => param_scalar(&PropId, v),
-            VcardParam::Script(v) => param_scalar(&Script, v),
-            VcardParam::ServiceType(v) => param_scalar(&ServiceType, v),
-            VcardParam::Username(v) => param_scalar(&Username, v),
+            VcardParam::Language(v) => param_scalar(&Language, v, escaper),
+            VcardParam::Charset(v) => param_scalar(&Charset, v, escaper),
+            VcardParam::Encoding(v) => param_scalar(&Encoding, v, escaper),
+            VcardParam::Value(v) => param_scalar(&Value, v, escaper),
+            VcardParam::Pref(v) => param_scalar(&Pref, v, escaper),
+            VcardParam::AltId(v) => param_scalar(&AltId, v, escaper),
+            VcardParam::Pid(vs) => param_list(&Pid, vs, escaper),
+            VcardParam::Type(vs) => param_list(&Type, vs, escaper),
+            VcardParam::MediaType(v) => param_scalar(&MediaType, v, escaper),
+            VcardParam::CalScale(v) => param_scalar(&CalScale, v, escaper),
+            VcardParam::SortAs(vs) => param_list(&SortAs, vs, escaper),
+            VcardParam::Geo(v) => param_scalar(&Geo, v, escaper),
+            VcardParam::Tz(v) => param_scalar(&Tz, v, escaper),
+            VcardParam::Label(v) => param_scalar(&Label, v, escaper),
+            VcardParam::Author(v) => param_scalar(&Author, v, escaper),
+            VcardParam::AuthorName(v) => param_scalar(&AuthorName, v, escaper),
+            VcardParam::Created(v) => param_scalar(&Created, v, escaper),
+            VcardParam::Derived(v) => param_scalar(&Derived, v, escaper),
+            VcardParam::Jsptr(v) => param_scalar(&Jsptr, v, escaper),
+            VcardParam::Phonetic(v) => param_scalar(&Phonetic, v, escaper),
+            VcardParam::PropId(v) => param_scalar(&PropId, v, escaper),
+            VcardParam::Script(v) => param_scalar(&Script, v, escaper),
+            VcardParam::ServiceType(v) => param_scalar(&ServiceType, v, escaper),
+            VcardParam::Username(v) => param_scalar(&Username, v, escaper),
 
-            VcardParam::Unknown { name, values } => VcardParamNode {
-                name: VcardLeaf::from(name.to_string()),
-                values: values
-                    .iter()
-                    .map(|v| VcardLeaf::from(v.to_string()))
-                    .collect(),
-            },
+            VcardParam::Unknown { name, values } => param_list(name, values, escaper),
         }
     }
 }
@@ -142,6 +148,20 @@ pub(crate) fn encode_component<S: AsRef<str>>(
     values.iter().map(|v| encode_leaf(v, escaper)).collect()
 }
 
+/// Escape and own raw value bytes into one component, by escaping mode.
+///
+/// The foreign-charset escape hatch: only the structural separators are
+/// escaped, every other byte going out exactly as given.
+pub(crate) fn encode_bytes_component<B: AsRef<[u8]>>(
+    values: &[B],
+    escaper: VcardEscaper,
+) -> Vec<VcardValueLeaf<'static>> {
+    values
+        .iter()
+        .map(|v| VcardValueLeaf::from(escape_with(v.as_ref(), escaper).into_owned()))
+        .collect()
+}
+
 /// Escape one value into an owned leaf, by escaping mode. Backs the per-item
 /// value edits, which splice a single leaf and leave its siblings' bytes as
 /// they were parsed.
@@ -152,23 +172,30 @@ pub(crate) fn encode_leaf<S: AsRef<str>>(
     VcardValueLeaf::from(escape_with(value.as_ref().as_bytes(), escaper).into_owned())
 }
 
-/// A parameter node from a single value (parameter values are not escaped: the
-/// wire form is quoted, not backslash-escaped).
-fn param_scalar(name: &str, value: &str) -> VcardParamNode<'static> {
+/// A parameter node from a single value, encoded by the given mode's parameter
+/// rules.
+fn param_scalar(name: &str, value: &str, escaper: VcardEscaper) -> VcardParamNode<'static> {
     VcardParamNode {
         name: VcardLeaf::from(name.to_string()),
-        values: vec![VcardLeaf::from(value.to_string())],
+        values: vec![VcardLeaf::from(escape_param(value, escaper).into_owned())],
+        escaper,
     }
 }
 
-/// A parameter node from a value list (parameter values are not escaped).
-fn param_list(name: &str, values: &[Cow<'_, str>]) -> VcardParamNode<'static> {
+/// A parameter node from a value list, encoded by the given mode's parameter
+/// rules.
+fn param_list(
+    name: &str,
+    values: &[Cow<'_, str>],
+    escaper: VcardEscaper,
+) -> VcardParamNode<'static> {
     VcardParamNode {
         name: VcardLeaf::from(name.to_string()),
         values: values
             .iter()
-            .map(|v| VcardLeaf::from(v.to_string()))
+            .map(|v| VcardLeaf::from(escape_param(v, escaper).into_owned()))
             .collect(),
+        escaper,
     }
 }
 
@@ -177,6 +204,7 @@ mod tests {
     use alloc::{borrow::Cow, string::ToString, vec};
 
     use crate::{
+        param::VcardParam,
         tree::{
             codec::{VcardCodec, mode::VcardEscaper},
             cst::VcardCst,
@@ -186,7 +214,7 @@ mod tests {
 
     #[test]
     fn encodes_a_text_value_escaping_it() {
-        let node = VcardText(Cow::Borrowed("hi, there")).encode(VcardEscaper::Modern);
+        let node = VcardText(Cow::Borrowed("hi, there")).encode(VcardEscaper::V4_0);
         assert_eq!(node.to_string(), r"hi\, there");
     }
 
@@ -196,7 +224,7 @@ mod tests {
             family: vec![Cow::Borrowed("Doe")],
             ..Default::default()
         };
-        assert_eq!(n.encode(VcardEscaper::Modern).to_string(), "Doe;;;;");
+        assert_eq!(n.encode(VcardEscaper::V4_0).to_string(), "Doe;;;;");
     }
 
     #[test]
@@ -221,5 +249,53 @@ mod tests {
             "{}",
             card.to_string(),
         );
+    }
+
+    #[test]
+    fn encodes_the_rfc_6868_parameter_sequences() {
+        // NOTE: RFC 6868 section 3.1 read backwards, over the three characters
+        // a parameter value cannot carry raw.
+        let param = VcardParam::Label(Cow::Borrowed("a\nb^c\"d"));
+
+        assert_eq!(
+            param.encode(VcardEscaper::V4_0).to_string(),
+            "LABEL=a^nb^^c^'d",
+        );
+    }
+
+    #[test]
+    fn keeps_a_quoted_parameter_value_quoted() {
+        // NOTE: the decoded model holds a parameter exactly as the wire spelled
+        // it, its own delimiters included, so the surrounding pair is written
+        // back as a pair rather than encoded as content.
+        let param = VcardParam::Geo(Cow::Borrowed("\"geo:37.386,-122.083\""));
+
+        assert_eq!(
+            param.encode(VcardEscaper::V4_0).to_string(),
+            "GEO=\"geo:37.386,-122.083\"",
+        );
+    }
+
+    #[test]
+    fn writes_a_pre_4_0_parameter_unencoded() {
+        // NOTE: RFC 6868 updates RFC 6350 alone, so a 3.0 caret goes out as
+        // itself.
+        let param = VcardParam::Label(Cow::Borrowed("a^b"));
+
+        assert_eq!(param.encode(VcardEscaper::V3_0).to_string(), "LABEL=a^b");
+    }
+
+    #[test]
+    fn round_trips_a_parameter_byte_for_byte() {
+        let input = concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:4.0\r\n",
+            "FN;LANGUAGE=en;GEO=\"geo:37.386,-122.083\"",
+            ";X-PATH=\"C:\\temp\";X-NOTE=a^nb^^c^'d:Ada\r\n",
+            "END:VCARD\r\n",
+        );
+        let cst = VcardCst::parse(input).unwrap();
+
+        assert_eq!(cst.decode().to_string(), input);
     }
 }

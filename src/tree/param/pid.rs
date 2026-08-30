@@ -7,7 +7,7 @@ use alloc::{borrow::Cow, string::ToString, vec::Vec};
 use crate::{
     param::VcardParamKind,
     tree::{
-        codec::unescape::unescape,
+        codec::{escape::escape_param, mode::VcardEscaper, unescape::unescape_param},
         leaf::VcardLeaf,
         param::{lens::VcardParamLens, node::VcardParamNode},
     },
@@ -25,18 +25,19 @@ impl VcardParamLens for PID {
         param
             .values
             .iter()
-            .map(|value| unescape(value.get()))
+            .map(|value| unescape_param(value.get(), param.escaper))
             .collect()
     }
 
     #[allow(clippy::ptr_arg)]
-    fn encode(decoded: &Vec<Cow<'_, str>>) -> VcardParamNode<'static> {
+    fn encode(decoded: &Vec<Cow<'_, str>>, escaper: VcardEscaper) -> VcardParamNode<'static> {
         VcardParamNode {
             name: VcardLeaf::from(Self::KIND.to_string()),
             values: decoded
                 .iter()
-                .map(|value| VcardLeaf::from(value.to_string()))
+                .map(|value| VcardLeaf::from(escape_param(value, escaper).into_owned()))
                 .collect(),
+            escaper,
         }
     }
 }

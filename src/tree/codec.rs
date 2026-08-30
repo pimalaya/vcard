@@ -4,13 +4,20 @@
 //! part of [`crate::tree`] that consults the card version.
 //!
 //! [`decode`] projects a raw syntax tree onto the decoded model and [`encode`]
-//! projects it back; that is the structural level. Underneath, at the
-//! value-string level, [`escape`] and [`unescape`] apply and resolve the RFC
-//! 6350 3.4 value escapes, keyed by the [`mode`] `VcardEscaper`, and every value
-//! leaf the structural codecs touch runs through them. Content transfer
-//! encodings (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are never resolved
-//! here: the core transforms no content, leaving that to the opt-in feature
-//! helpers.
+//! projects it back; that is the structural level.
+//!
+//! Underneath, at the value-string level, [`escape`] and [`unescape`] apply and
+//! resolve the RFC 6350 3.4 value escapes, keyed by the [`mode`]
+//! `VcardEscaper`, and every value leaf the structural codecs touch runs
+//! through them.
+//!
+//! A parameter value is a different alphabet, with no backslash escapes at all
+//! (RFC 6350 3.3) and the RFC 6868 caret encoding instead, so it has its own
+//! pair in the same two modules, keyed by the same `VcardEscaper`.
+//!
+//! Content transfer encodings (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are
+//! never resolved here: the core transforms no content, leaving that to the
+//! opt-in feature helpers.
 //!
 //! The per-value-type projection is the [`VcardCodec`] trait, implemented once
 //! per value type under [`crate::tree::value`], mirroring the model's `value/`;
@@ -27,13 +34,11 @@ pub mod escape;
 pub mod mode;
 pub mod unescape;
 
-/// How a decoded value type projects to and from a syntax node: `decode` reads
-/// it from a node (its [`escaper`](VcardValueNode::escaper) carries the mode),
-/// `encode` writes it back, escaping every leaf with the given [`VcardEscaper`]
-/// and stamping it on the node. The escaper is symmetric across the two
-/// directions: decode reads it off the incoming node, encode receives the
-/// target mode and applies it (the decoded value itself is escaper-agnostic
-/// clean text).
+/// How a decoded value type projects to and from a syntax node.
+///
+/// `decode` reads it from a node, whose [`escaper`](VcardValueNode::escaper)
+/// carries the mode; `encode` writes it back, escaping every leaf with the
+/// given [`VcardEscaper`]. A decoded value is itself escaper-agnostic text.
 pub trait VcardCodec<'v>: Sized {
     /// Decode the value from a syntax node.
     fn decode(node: &'v VcardValueNode<'_>) -> Self;
@@ -43,11 +48,11 @@ pub trait VcardCodec<'v>: Sized {
 }
 
 impl<'v> VcardCodec<'v> for VcardValue<'v> {
-    /// Decode liberally as raw [`Unknown`](VcardValue::Unknown): no value kind
-    /// is known at this level (that is the spec's job), so the
-    /// version-divergent lenses whose target is `VcardValue` override the lens
-    /// `decode` to resolve the real kind; this fallback is what the others
-    /// inherit.
+    /// Decode liberally as raw [`Unknown`](VcardValue::Unknown).
+    ///
+    /// No value kind is known at this level, that being the spec's job: the
+    /// version-divergent lenses targeting `VcardValue` override the lens
+    /// `decode` to resolve it, and this fallback is what the others inherit.
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardValue::Unknown(VcardValueUnknown::decode(node))
     }

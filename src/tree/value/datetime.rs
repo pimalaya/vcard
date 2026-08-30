@@ -13,7 +13,7 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardDateAndOrTime<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardDateAndOrTime(node.decode_scalar_at(0))
+        VcardDateAndOrTime(node.decode())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
@@ -23,7 +23,7 @@ impl<'v> VcardCodec<'v> for VcardDateAndOrTime<'v> {
 
 impl<'v> VcardCodec<'v> for VcardTimestamp<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardTimestamp(node.decode_scalar_at(0))
+        VcardTimestamp(node.decode())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {

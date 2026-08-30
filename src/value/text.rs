@@ -5,9 +5,11 @@
 //!
 //! These back the bulk of RFC 6350 properties whose value is plain text (the
 //! TEXT value type, RFC 6350 4.1): `FN`, `TITLE`, `ROLE`, `NOTE`, `PRODID`,
-//! `KIND`, `TEL`, `EMAIL`, ... for [`VcardText`], and `NICKNAME` / `CATEGORIES`
-//! for [`VcardTextList`]. Carrying no wire name, the same value type
-//! round-trips through any property that shares the kind.
+//! `KIND`, `TEL`, `EMAIL`, ... for [`VcardText`], and `NICKNAME` /
+//! `CATEGORIES` for [`VcardTextList`].
+//!
+//! Carrying no wire name, the same value type round-trips through any property
+//! that shares the kind.
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 

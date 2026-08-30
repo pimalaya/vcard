@@ -1,8 +1,10 @@
 //! # Parameters (syntax side)
 //!
 //! The per-parameter lens contract ([`VcardParamLens`](lens::VcardParamLens))
-//! and one hand-written module per RFC 6350 parameter, tying a wire name to its
-//! decoded shape; the markers are the type-level keys for
+//! and one hand-written module per RFC 6350 parameter, tying a wire name to
+//! its decoded shape.
+//!
+//! The markers are the type-level keys for
 //! [`VcardLine::param`](crate::tree::line::VcardLine::param). The raw
 //! [`VcardParamNode`](node::VcardParamNode) they read and write is defined
 //! alongside.

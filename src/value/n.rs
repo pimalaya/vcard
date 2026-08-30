@@ -3,10 +3,11 @@
 //! The decoded `N` (structured name) value.
 //!
 //! `N` is one of the few genuinely structured RFC 6350 values (section 6.2.2):
-//! five `;`-ordered components (family, given, additional, prefixes, suffixes),
-//! each a possibly multi-valued `,`-separated list. This bespoke type names
-//! them, so callers read `name.family` rather than indexing a raw component
-//! vector.
+//! five `;`-ordered components (family, given, additional, prefixes,
+//! suffixes), each a possibly multi-valued `,`-separated list.
+//!
+//! This bespoke type names them, so callers read `name.family` rather than
+//! indexing a raw component vector.
 
 use alloc::{borrow::Cow, vec::Vec};
 

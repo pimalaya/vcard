@@ -5,18 +5,21 @@
 //!
 //! Validity and lossiness are orthogonal: a conformant card may still carry
 //! extensions (`X-`/IANA properties, unknown parameters), so "valid" cannot be
-//! a type with no `Unknown` arms. [`Vcard::validate`] therefore checks the
-//! *known* parts of the (lossy) model against the per-property
+//! a type with no `Unknown` arms.
+//!
+//! [`Vcard::validate`] therefore checks the *known* parts of the (lossy) model
+//! against the per-property
 //! [`VcardPropSpec`](crate::tree::prop::spec::VcardPropSpec) for the card
-//! version (existence, value kind, parameters, cardinality) and leaves the
-//! unknown parts alone. A passing check mints a [`VcardValid`] marker, the only
-//! way to obtain one, so holding a `VcardValid<Vcard>` is proof the check
-//! passed. The same per-property check backs the [`VcardPropBuilder`]'s strict
-//! construction.
+//! version, and leaves the unknown parts alone.
+//!
+//! The check covers existence, value kind, parameters and cardinality. A
+//! passing check mints a [`VcardValid`] marker, the only way to obtain one, so
+//! holding a `VcardValid<Vcard>` is proof the check passed. The same
+//! per-property check backs the [`VcardPropBuilder`]'s strict construction.
 //!
 //! [`VcardPropBuilder`]: crate::tree::vcard::builder::VcardPropBuilder
 //!
-//! # Example
+//! ## Example
 //!
 //! Decode a parsed card, validate it into a proof, and convert that back into a
 //! byte tree:
@@ -24,8 +27,8 @@
 //! ```rust
 //! use vcard::tree::cst::VcardCst;
 //!
-//! let cst =
-//!     VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n").unwrap();
+//! let raw = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n";
+//! let cst = VcardCst::parse(raw).unwrap();
 //!
 //! // validate consumes the card and returns the proof (or the violations).
 //! let valid = cst.decode().validate().expect("a conformant 4.0 card");
@@ -128,12 +131,11 @@ impl fmt::Display for VcardValidateError {
 impl error::Error for VcardValidateError {}
 
 impl<'a> Vcard<'a> {
-    /// Check the card against RFC 6350 for its version: every known property
-    /// must exist in the version, carry an allowed value kind and allowed
-    /// parameters, and respect its multiplicity. Extensions (unknown
-    /// properties and parameters) are conformant and pass. On success the card
-    /// is yielded back as a [`VcardValid`] proof; on failure every violation is
-    /// collected.
+    /// Check the card against RFC 6350 for its version.
+    ///
+    /// Every known property must exist in the version, carry an allowed value
+    /// kind and parameters, and respect its multiplicity; extensions pass. The
+    /// card comes back as a [`VcardValid`] proof, or every violation does.
     pub fn validate(self) -> Result<VcardValid<Vcard<'a>>, Vec<VcardValidateError>> {
         let mut errors = Vec::new();
         let mut counts: Vec<(VcardPropKind, usize)> = Vec::new();
@@ -277,11 +279,11 @@ fn cardinality_ok(cardinality: VcardPropCardinality, count: usize) -> bool {
     }
 }
 
-/// A value that has passed validation. The only way to mint one is a validating
-/// conversion ([`Vcard::validate`] or its `TryFrom`), so holding a
-/// `VcardValid<T>` is proof the check passed; it derefs to the inner value for
-/// reads and yields it back with [`into_inner`](Self::into_inner). It is never
-/// constructed directly: it is a marker, not data.
+/// A value that has passed validation.
+///
+/// The only way to mint one is a validating conversion ([`Vcard::validate`] or
+/// its `TryFrom`), so holding a `VcardValid<T>` is proof the check passed. It
+/// derefs for reads and yields the value with [`into_inner`](Self::into_inner).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VcardValid<T>(T);
 

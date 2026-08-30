@@ -4,22 +4,24 @@
 //!
 //! [`VcardCst`] is the hub of the crate. It models a card as its real lines: an
 //! optional `BEGIN` / `END` envelope (absent for a bare RFC 2425 record) and
-//! the property lines between them, the `VERSION` line among them, made of the
-//! nodes in the sibling modules ([`line`](crate::tree::line),
-//! [`param`](crate::tree::param), [`value`](crate::tree::value),
-//! [`leaf`](crate::tree::leaf)), each line keeping the
-//! [`wire`](crate::tree::wire) shape it arrived in.
+//! the property lines between them, the `VERSION` line among them.
+//!
+//! Those lines are made of the nodes in the sibling modules
+//! ([`line`](crate::tree::line), [`param`](crate::tree::param),
+//! [`value`](crate::tree::value), [`leaf`](crate::tree::leaf)), each keeping
+//! the [`wire`](crate::tree::wire) shape it arrived in.
 //!
 //! It knows nothing about what a property *means*. It is filled from bytes
-//! (`parse`) or from typed properties (`push`), exports its bytes
+//! (`parse`) or from typed properties (`push`), and exports its bytes
 //! byte-faithfully ([`to_bytes`](VcardCst::to_bytes), or the
-//! lossy-for-non-UTF-8 [`Display`](core::fmt::Display)), and offers typed
-//! access by lens (`prop`, `prop_mut`, `remove`). The semantic projection
-//! ([`decode`](VcardCst::decode)) and the codec live in the
+//! lossy-for-non-UTF-8 [`Display`](core::fmt::Display)).
+//!
+//! Typed access goes by lens (`prop`, `prop_mut`, `remove`), and the semantic
+//! projection ([`decode`](VcardCst::decode)) and the codec live in the
 //! [`decode`](crate::tree::codec::decode) /
 //! [`encode`](crate::tree::codec::encode) siblings.
 //!
-//! # Example
+//! ## Example
 //!
 //! Parse raw bytes into a CST, edit a field in place (byte-preservingly), then
 //! project onto the decoded model:
@@ -44,7 +46,7 @@
 //! assert_eq!(&*card.properties[0].name, "FN");
 //! ```
 
-use core::{fmt, str};
+use core::{fmt, iter, str};
 
 use alloc::{
     borrow::Cow,
@@ -65,11 +67,11 @@ use crate::{
     version::VcardVersion,
 };
 
-/// A whole card as raw syntax: an optional `BEGIN` / `END` envelope and the
-/// property lines between them (the `VERSION` line among them, wherever it
-/// falls). All are real lines so nothing is reconstructed by rule, `VERSION`
-/// keeps its source position, and the envelope is absent only for a bare RFC
-/// 2425 directory record.
+/// A whole card as raw syntax: an envelope and the property lines between.
+///
+/// All are real lines so nothing is reconstructed by rule, `VERSION` keeps its
+/// source position wherever it falls, and the `BEGIN` / `END` envelope is
+/// absent only for a bare RFC 2425 directory record.
 #[derive(Clone, Debug)]
 pub struct VcardCst<'a> {
     /// The BEGIN line, or `None` for a bare RFC 2425 directory record parsed
@@ -97,15 +99,10 @@ impl<'a> VcardCst<'a> {
     }
 
     /// Parse the first card from raw text, borrowing it for the Cst lifetime.
-    /// `VERSION` is an ordinary property wherever it appears, or nowhere: the
-    /// parser is as liberal about its position as real cards are. Anything
-    /// after `END` is ignored, except trailing blank lines, which are kept: use
-    /// [`parse_many`](Self::parse_many) for a file.
     ///
-    /// A bare RFC 2425 record with no `BEGIN:VCARD` is also accepted: every
-    /// line becomes a property, [`begin`](Self::begin) / [`end`](Self::end)
-    /// stay `None`, and it round-trips without a synthesised envelope. Only
-    /// here, since without the envelope `parse_many` has no record boundary.
+    /// As liberal as real cards are: `VERSION` sits wherever it falls or
+    /// nowhere, anything past `END` but trailing blank lines is ignored, and a
+    /// bare RFC 2425 record parses whole, with no envelope in or out.
     pub fn parse<T: AsRef<[u8]> + ?Sized>(input: &'a T) -> Result<Self, VcardParseError> {
         let input = input.as_ref();
         let (first, _rest) = VcardLine::take(input)?;
@@ -140,6 +137,9 @@ impl<'a> VcardCst<'a> {
 
         for line in &mut props {
             line.value.escaper = escaper;
+            for param in &mut line.params {
+                param.escaper = escaper;
+            }
         }
 
         let mut card = Self {
@@ -161,6 +161,10 @@ impl<'a> VcardCst<'a> {
     /// blank lines after the last one to that card, so concatenating what this
     /// yields reproduces the file byte for byte.
     ///
+    /// A bare RFC 2425 record is not read here: with no `BEGIN` / `END`
+    /// envelope there is no boundary to split a file on, so use
+    /// [`parse`](Self::parse) for one.
+    ///
     /// ```rust
     /// use vcard::tree::cst::VcardCst;
     ///
@@ -176,7 +180,7 @@ impl<'a> VcardCst<'a> {
     ) -> impl Iterator<Item = Result<Self, VcardParseError>> {
         let mut rest = input.as_ref();
 
-        core::iter::from_fn(move || {
+        iter::from_fn(move || {
             if is_blank(rest) {
                 return None;
             }
@@ -243,8 +247,8 @@ impl<'a> VcardCst<'a> {
                 }
 
                 // NOTE: VERSION can sit anywhere, so the escaping mode is only
-                // known once the whole card is parsed: stamp every value node
-                // with it.
+                // known once the whole card is parsed: stamp every value and
+                // parameter node with it.
                 let escaper = props
                     .iter()
                     .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
@@ -253,6 +257,9 @@ impl<'a> VcardCst<'a> {
 
                 for line in &mut props {
                     line.value.escaper = escaper;
+                    for param in &mut line.params {
+                        param.escaper = escaper;
+                    }
                 }
 
                 return Ok((
@@ -310,14 +317,11 @@ impl<'a> VcardCst<'a> {
         self
     }
 
-    /// Append a blank instance of every required property the card is missing
-    /// for its version: in practice `N` in 2.1 / 3.0 and `FN` from 3.0 on.
-    /// Strict servers (iCloud, Fastmail) reject a 3.0 card with no `N`, and an
-    /// empty `N:;;;;` satisfies them without inventing a display value.
+    /// Append a blank instance of every property required for the version.
     ///
-    /// The repair half of
-    /// [`Vcard::validate`](crate::vcard::Vcard::validate)'s cardinality check,
-    /// idempotent and byte-preserving like [`push`](Self::push).
+    /// In practice `N` in 2.1 / 3.0 and `FN` from 3.0 on: strict servers
+    /// (iCloud, Fastmail) reject a 3.0 card with no `N`, and an empty `N:;;;;`
+    /// satisfies them without inventing a display value. Byte-preserving.
     pub fn fill_required(&mut self) -> &mut Self {
         let version = self.version();
         for kind in VcardPropKind::ALL {

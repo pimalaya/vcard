@@ -3,35 +3,40 @@
 //! The RFC 9555 conversion: the decoded card as an RFC 9553 JSContact Card, and
 //! back.
 //!
-//! [`Vcard::to_jscontact`] writes the decoded model as the JSON Card object JMAP
-//! for Contacts (RFC 9610) exchanges; [`Vcard::from_jscontact`] reads one back,
-//! borrowing the JSON tree's strings. There is no JSContact model in this crate:
-//! the Card is a plain [`serde_json::Value`], and vCard stays the one decoded
-//! model.
+//! [`Vcard::to_jscontact`] writes the decoded model as the JSON Card object
+//! JMAP for Contacts (RFC 9610) exchanges; [`Vcard::from_jscontact`] reads one
+//! back, borrowing the JSON tree's strings.
 //!
-//! Both directions are lossless through the RFC 9555 escape hatches, and only a
-//! non-object root can fail the import. Exporting, a property with no JSContact
-//! counterpart (or whose value cannot be represented, like a free-text birthday)
-//! is preserved whole in the Card's `vCardProps` member, in jCard syntax through
-//! the sibling [`crate::jcard`] codec; a parameter left over after a property
-//! converts is preserved in the object's `vCardParams` member. Importing, the
-//! mirror hatch applies: a Card member (or nested piece) with no vCard
-//! counterpart becomes a `JSPROP` property holding its JSON, located by a
-//! `JSPTR` parameter that the export grafts back onto the Card. A `PROP-ID`
-//! parameter carries each object's map key across conversions, which is what
-//! keeps JMAP patch identity stable; without one, keys are the 1-based source
-//! order.
+//! There is no JSContact model in this crate: the Card is a plain
+//! [`serde_json::Value`], and vCard stays the one decoded model.
+//!
+//! Both directions are lossless through the RFC 9555 escape hatches, and only
+//! a non-object root can fail the import.
+//!
+//! Exporting, a property with no JSContact counterpart (or whose value cannot
+//! be represented, like a free-text birthday) is preserved whole in the Card's
+//! `vCardProps` member, in jCard syntax through the sibling [`crate::jcard`]
+//! codec; a leftover parameter goes to the object's `vCardParams` member.
+//!
+//! Importing, the mirror hatch applies: a Card member (or nested piece) with no
+//! vCard counterpart becomes a `JSPROP` property holding its JSON, located by a
+//! `JSPTR` parameter that the export grafts back onto the Card.
+//!
+//! A `PROP-ID` parameter carries each object's map key across conversions,
+//! which is what keeps JMAP patch identity stable; without one, keys are the
+//! 1-based source order.
 //!
 //! Mapped properties: UID, PRODID, REV, KIND, FN and N (with SORT-AS),
 //! NICKNAME, ADR (all eighteen components, with LABEL, GEO, TZ), EMAIL, TEL,
 //! IMPP, LANG, ORG, TITLE, ROLE, BDAY, ANNIVERSARY, PHOTO, LOGO, SOUND, KEY,
-//! CALURI, FBURL, CALADRURI, URL, SOURCE, CATEGORIES, NOTE, MEMBER and
-//! RELATED, plus the RFC 9554 set: CREATED, LANGUAGE, GRAMGENDER, PRONOUNS,
+//! CALURI, FBURL, CALADRURI, URL, SOURCE, CATEGORIES, NOTE, MEMBER, RELATED.
+//!
+//! The RFC 9554 set follows: CREATED, LANGUAGE, GRAMGENDER, PRONOUNS,
 //! SOCIALPROFILE and the JSPROP carrier. The TYPE parameter maps to contexts
 //! (`home` becomes `private`) and, on TEL, to features (`cell` becomes
 //! `mobile`); PREF maps to `pref`. Everything else rides the escape hatches.
 
-use core::{error, fmt};
+use core::{error, fmt, mem};
 
 use alloc::{
     borrow::Cow,
@@ -1135,7 +1140,7 @@ impl<'a> Import<'a> {
                     let params = if has_components {
                         Vec::new()
                     } else {
-                        core::mem::take(&mut params)
+                        mem::take(&mut params)
                     };
                     self.prop(VcardPropKind::Fn, params, text_value(Cow::Borrowed(full)));
                 }
@@ -2152,7 +2157,7 @@ mod tests {
         let cst = VcardCst::parse(input).unwrap();
         let card = cst.decode().to_jscontact();
 
-        // RFC 9553 §2.6 registers these names; the pre-RFC drafts spelled
+        // NOTE: RFC 9553 2.6 registers these names; the pre-RFC drafts spelled
         // them `MediaResource`, `CryptoResource` and so on, and a strict
         // server (Fastmail) rejects the draft spelling outright.
         assert_eq!(card["media"]["1"]["@type"], json!("Media"));
@@ -2175,7 +2180,7 @@ mod tests {
         });
         let vcard = Vcard::from_jscontact(&card).unwrap();
 
-        // Import ignores `@type`, so a Card written by an older version
+        // NOTE: import ignores `@type`, so a Card written by an older version
         // still converts back to URL rather than falling into JSPROP.
         let names: Vec<&str> = vcard.properties.iter().map(|prop| &*prop.name).collect();
         assert_eq!(names, ["URL"]);

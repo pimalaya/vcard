@@ -15,11 +15,11 @@ use crate::{
 impl<'v> VcardCodec<'v> for VcardN<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardN {
-            family: node.decode_at(0),
-            given: node.decode_at(1),
-            additional: node.decode_at(2),
-            prefixes: node.decode_at(3),
-            suffixes: node.decode_at(4),
+            family: node.decode_component_list(0),
+            given: node.decode_component_list(1),
+            additional: node.decode_component_list(2),
+            prefixes: node.decode_component_list(3),
+            suffixes: node.decode_component_list(4),
         }
     }
 

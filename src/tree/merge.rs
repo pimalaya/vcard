@@ -6,11 +6,12 @@
 //! Given a base card and two cards derived from it (left and right),
 //! [`VcardMerge::merge`] reports every change each side made as a list of
 //! [`VcardMergeAction`]s and builds the merged card, the reconciliation unit a
-//! synchronisation engine needs. That card starts as a clone of the left one,
-//! so the left side's edits are present byte for byte; the right side's actions
-//! are then replayed onto it through the byte-preserving edit layer
-//! ([`crate::tree::value`]), so every field the right side did not touch keeps
-//! its exact bytes.
+//! synchronisation engine needs.
+//!
+//! That card starts as a clone of the left one, so the left side's edits are
+//! present byte for byte; the right side's actions are then replayed onto it
+//! through the byte-preserving edit layer ([`crate::tree::value`]), so every
+//! field the right side did not touch keeps its exact bytes.
 //!
 //! ## Ours and theirs
 //!
@@ -21,9 +22,10 @@
 //!
 //! One side answers both questions on purpose. A caller reaches for a merge
 //! holding the version it is merging into, and that version is the one it
-//! would rather not churn and the one it means to keep. Every collision is
-//! reported either way, so a caller wanting the other value puts it to
-//! somebody rather than asking the merge to guess.
+//! would rather not churn and the one it means to keep.
+//!
+//! Every collision is reported either way, so a caller wanting the other value
+//! puts it to somebody rather than asking the merge to guess.
 //!
 //! ## What is matched with what
 //!
@@ -42,20 +44,25 @@
 //!
 //! An identity a same-named sibling repeats tells neither of them apart, so
 //! both fall back to their positions, and an instance carrying an identity is
-//! never matched with one carrying none. The position rung is safe because the
-//! base card is never mutated: an ordinal counted there names the same
-//! instance whenever it is resolved.
+//! never matched with one carrying none.
+//!
+//! The position rung is safe because the base card is never mutated: an
+//! ordinal counted there names the same instance whenever it is resolved.
 //!
 //! Two values compare on their raw nodes, component by component, never
 //! through the decoded model, which reads a non-structured value's first
 //! `;`-component alone; across versions they compare on the bytes, since two
-//! cards escaping values differently share no decoding. Changes are diffed at
-//! the finest granularity the value shape allows: whole property, whole value,
-//! one component of a structured value, one item of a list value, one
-//! parameter, one item of a list parameter. List items merge as a set (both
-//! sides' additions and removals all apply), so they never conflict, and the
-//! items of a `TYPE` or `PID` parameter compare as one too, since RFC 6350
-//! gives them no order. One parameter name may be written more than once
+//! cards escaping values differently share no decoding.
+//!
+//! Changes are diffed at the finest granularity the value shape allows: whole
+//! property, whole value, one component of a structured value, one item of a
+//! list value, one parameter, one item of a list parameter.
+//!
+//! List items merge as a set (both sides' additions and removals all apply),
+//! so they never conflict, and the items of a `TYPE` or `PID` parameter
+//! compare as one too, since RFC 6350 gives them no order.
+//!
+//! One parameter name may be written more than once
 //! (`TEL;TYPE=work;TYPE=voice`, RFC 2426 section 4), and each occurrence is a
 //! field of its own, so two sides rewriting two of them agree.
 //!
@@ -64,21 +71,37 @@
 //! components instead of as a decoded value missing everything past its first
 //! `;`-component.
 //!
+//! Two sides agree on a change only where they wrote the same bytes. A decode
+//! is not injective, so `\N` and `\n` read alike (RFC 6350 section 3.4) while
+//! saying different things on the wire, and reading two such lines as one
+//! change would drop the difference without a word.
+//!
+//! The right side's change is instead judged normally, meets the left side's,
+//! and is reported.
+//!
+//! A change that only takes something away wrote no bytes, and what it names
+//! lives in the base both sides share, so the change itself settles it. The one
+//! exception is `TYPE` and `PID`, whose items are a set rather than a sequence.
+//!
 //! Divergent changes to the same field are conflicts ([`VcardMergeConflict`]):
 //! the left side's action wins in the merged card, except when a removal meets
 //! an update, where the update wins at every granularity and whichever side it
-//! came from (data survives over silent loss). A change both sides made is no
-//! conflict at all. Every conflict is reported, so a caller can resolve
-//! differently.
+//! came from (data survives over silent loss).
+//!
+//! A change both sides made is no conflict at all. Every conflict is reported,
+//! so a caller can resolve differently.
 //!
 //! The merged card keeps the left card's `VERSION`; a version change is not
 //! reconciled, but a value replayed from a card of another version is
 //! re-encoded for the merged card's escaping mode, so it arrives meaning what
-//! it meant. A `BEGIN` or `END` line is envelope rather than property, so it
-//! is never diffed or replayed, and an addition lands among the outer card's
-//! lines rather than inside a card embedded in a vCard 2.1 `AGENT`. Every line
-//! of the merged card but its last carries a line ending, so the card a caller
-//! serializes reads back as itself.
+//! it meant.
+//!
+//! A `BEGIN` or `END` line is envelope rather than property, so it is never
+//! diffed or replayed, and an addition lands among the outer card's lines
+//! rather than inside a card embedded in a vCard 2.1 `AGENT`.
+//!
+//! Every line of the merged card but its last carries a line ending, so the
+//! card a caller serializes reads back as itself.
 
 use core::mem;
 
@@ -92,7 +115,7 @@ use crate::{
     param::VcardParam,
     prop::{VcardProp, VcardPropKind},
     tree::{
-        codec::{VcardCodec, mode::VcardEscaper, unescape::unescape},
+        codec::{VcardCodec, mode::VcardEscaper, unescape::unescape_param},
         cst::VcardCst,
         leaf::VcardLeaf,
         line::VcardLine,
@@ -215,14 +238,11 @@ pub struct VcardPropPath<'a> {
     /// [`PropAdded`](VcardMergeAction::PropAdded), whose instance only exists
     /// in the changed card.
     pub index: usize,
-    /// The value that tells the instance from its same-named siblings, where
-    /// vCard gives it one: the address of an `EMAIL`, the number of a `TEL`,
-    /// the URI of an `IMPP`, `URL`, `PHOTO`, `LOGO`, `SOUND`, `KEY`, `SOURCE`,
-    /// `FBURL`, `CALURI`, `CALADRURI` or `SOCIALPROFILE`, the entity a
-    /// `MEMBER` or a `RELATED` names. Lowercased, since matching normalises
-    /// and writing is exact. `None` for every other property, whose position
-    /// is then what tells it from its siblings, and `None` too for a value a
-    /// same-named sibling repeats, which tells neither of them apart.
+    /// The value that tells the instance from its same-named siblings.
+    ///
+    /// The address of an `EMAIL`, the URI of an `IMPP` or `PHOTO`, the entity
+    /// a `MEMBER` names, lowercased since matching normalises and writing is
+    /// exact. `None` where position, not a value, tells the siblings apart.
     pub identity: Option<Cow<'a, str>>,
 }
 
@@ -401,14 +421,11 @@ enum Slot {
 }
 
 impl Slot {
-    /// Whether a left action on this slot collides with a right action on
-    /// `right`. Two item edits never collide: they merge as a set. An item
-    /// edit does collide with a whole-value change on the other side, either
-    /// way round, since one of the two values has to go.
+    /// Whether a left action on this slot collides with a right one on `right`.
     ///
-    /// Two parameters of one name are two slots: RFC 2426 section 4 writes
-    /// `TEL;TYPE=work;TYPE=voice`, and a side rewriting the first contests
-    /// nothing a side rewriting the second wrote.
+    /// Two item edits merge as a set and never collide; an item edit against a
+    /// whole-value change does, either way round, since one value has to go.
+    /// Two parameters of one name are two slots (RFC 2426 4), never rivals.
     fn collides_with(&self, right: &Slot) -> bool {
         match (self, right) {
             (Self::Value, Self::Value | Self::Component(_) | Self::Items) => true,
@@ -499,24 +516,11 @@ fn instances<'a>(cst: &'a VcardCst<'a>) -> Vec<Instance<'a>> {
     insts
 }
 
-/// The value that tells a property from its same-named siblings, where vCard
-/// gives it one, normalised into the key it is compared on.
+/// The value naming what a property is about, lowercased into a match key.
 ///
-/// A property that may occur more than once and whose value names a thing
-/// outside the card is that thing: `EMAIL` an address (RFC 6350 6.4.2), `TEL`
-/// a number (6.4.1), `IMPP` (6.4.3), `URL` (6.7.8), `SOURCE` (6.1.3), `FBURL`,
-/// `CALURI` and `CALADRURI` (6.9), `PHOTO` (6.2.4), `LOGO` (6.6.3), `SOUND`
-/// (6.7.5), `KEY` (6.8.1) and `SOCIALPROFILE` (RFC 9554) a URI, `MEMBER`
-/// (6.6.5) and `RELATED` (6.6.6) the entity the URI names. Every other
-/// property has none: either it may occur only once, so its name already tells
-/// it apart, or its value is the datum being edited, and keying on it would
-/// make every edit a replacement.
-///
-/// Matching normalises and writing is exact. The key is lowercased, so a URI
-/// scheme (RFC 3986 3.1) and a mail host meet whichever case they were written
-/// in, while the line goes back on the wire with the bytes it arrived with. A
-/// grouped name carries no identity, since the group is part of what tells the
-/// instance apart already.
+/// A repeatable property whose value names a thing outside the card is that
+/// thing. Any other value is the datum edited, so keying on it would make
+/// every edit a replacement. A grouped name has none: the group tells it apart.
 fn identity_of(key: &str, line: &VcardLine<'_>) -> Option<String> {
     let identified = matches!(
         key.parse::<VcardPropKind>(),
@@ -540,27 +544,22 @@ fn identity_of(key: &str, line: &VcardLine<'_>) -> Option<String> {
     identified.then(|| String::from_utf8_lossy(&raw_value(&line.value)).to_lowercase())
 }
 
-/// Whether a line names the card's structure rather than a property: the
-/// `VERSION` indicator, or one half of a `BEGIN` / `END` pair.
+/// Whether a line names the card's structure: `VERSION`, `BEGIN` or `END`.
 ///
-/// A vCard 2.1 `AGENT` embeds a whole `BEGIN:VCARD`..`END:VCARD` that the
-/// parser keeps verbatim among the outer card's properties, and a bare RFC
-/// 2425 record has no envelope, so a `BEGIN` or `END` line in one is an
-/// ordinary line of the body. Neither is a property, so neither is diffed,
-/// matched, moved or replayed: replaying an `END` would close the merged card
-/// early and drop everything after it.
+/// None of them is a property, so none is diffed, matched, moved or replayed,
+/// the `BEGIN` / `END` of a card embedded in a vCard 2.1 `AGENT` included:
+/// replaying an `END` would close the merged card early and drop the rest.
 fn is_envelope(name: &str) -> bool {
     name.eq_ignore_ascii_case("VERSION")
         || name.eq_ignore_ascii_case("BEGIN")
         || name.eq_ignore_ascii_case("END")
 }
 
-/// Which lines of a card belong to an embedded card rather than to the card
-/// itself, `BEGIN` and `END` included.
+/// Which lines belong to an embedded card, its `BEGIN` and `END` included.
 ///
-/// An embedded card's lines are diffed like any other property, since a change
-/// inside an agent is still a change, but an addition is never *placed* among
-/// them: it belongs to the card that owns the property name it repeats.
+/// They are diffed like any other property, a change inside an agent still
+/// being a change, but an addition is never *placed* among them: it belongs to
+/// the card that owns the property name it repeats.
 fn embedded(props: &[VcardLine<'_>]) -> Vec<bool> {
     let mut out = Vec::with_capacity(props.len());
     let mut depth = 0usize;
@@ -592,11 +591,11 @@ struct Matching {
     removed: Vec<usize>,
 }
 
-/// Pair the base instances with one side's, per name, down the matching
-/// ladder: the `PID` synchronisation identity (RFC 6350 section 7), then the
-/// natural identity of a property whose value names a thing outside the card,
-/// then exact bytes, then equality, then position. Leftovers are additions
-/// (side) and removals (base).
+/// Pair the base instances with one side's, per name, down the matching ladder.
+///
+/// The rungs are the `PID` synchronisation identity (RFC 6350 7), the natural
+/// identity of a property whose value names a thing outside the card, exact
+/// bytes, equality, then position. Leftovers are additions and removals.
 fn matching<'a>(
     base_cst: &VcardCst<'a>,
     base: &[Instance<'a>],
@@ -783,7 +782,14 @@ fn diff_pair<'a>(
 ) {
     let at = prop_path(base, b);
 
-    diff_params(&b.prop.params, &s.prop.params, &at, out);
+    diff_params(
+        &b.prop.params,
+        &s.prop.params,
+        &base.props[b.line].params,
+        &side.props[s.line].params,
+        &at,
+        out,
+    );
 
     let old_node = &base.props[b.line].value;
     let new_node = &side.props[s.line].value;
@@ -793,11 +799,12 @@ fn diff_pair<'a>(
     }
 
     match (&b.prop.value, &s.prop.value) {
-        // NOTE: a list value decodes its first component only, so it diffs
-        // item by item only while the rest of the node agrees; otherwise the
-        // whole value changed.
+        // NOTE: a list value's items are the whole value split on its commas,
+        // while an item action is replayed by splicing one leaf of component
+        // zero, so the two only address the same thing while the value is one
+        // component; past that the whole value changed.
         (VcardValue::TextList(old), VcardValue::TextList(new))
-            if components_eq(old_node, new_node, 1) =>
+            if old_node.component_count() == 1 && new_node.component_count() == 1 =>
         {
             let (added, removed) = list_diff(&old.0, &new.0);
             for item in removed {
@@ -817,8 +824,8 @@ fn diff_pair<'a>(
             let count = old_node.component_count().max(new_node.component_count());
 
             for component in 0..count {
-                let old = old_node.decode_at(component);
-                let new = new_node.decode_at(component);
+                let old = old_node.decode_component_list(component);
+                let new = new_node.decode_component_list(component);
                 if !component_eq(&old, &new) {
                     out.push(VcardMergeAction::ValueComponentChanged {
                         at: at.clone(),
@@ -839,13 +846,9 @@ fn diff_pair<'a>(
 
 /// What a value node says, reported whole.
 ///
-/// A decoded value reads its own kind's shape, and the shape of every
-/// unstructured kind is one `;`-component, so the rest of the node never
-/// reaches the decoded value: `NOTE:a;b` decodes to the text `a`, and two
-/// notes differing past their first component decode alike, which would report
-/// a change whose old and new are the same truncated text. A value whose
-/// decoding does not say what its node says is reported as the node's raw
-/// components instead, which is what the merged bytes carry.
+/// A decoded value says what its node says only when it encodes back to it:
+/// `NOTE:a;b` decodes to the text `a;b` but re-encodes with the semicolon
+/// escaped. A value failing that round trip is reported as raw components.
 fn whole<'a>(value: &VcardValue<'a>, node: &'a VcardValueNode<'a>) -> VcardValue<'a> {
     if value_eq(&value.encode(node.escaper), node) {
         return value.clone();
@@ -896,30 +899,33 @@ fn line_eq<'a>(
     left == right
 }
 
-/// Whether two instances hold the same property: the same decoded name and
-/// parameters, and the same value on the raw node.
+/// Whether two instances hold the same property: the same decoded name, and
+/// the same parameters and value on the raw nodes.
 fn prop_eq<'a>(
     a_cst: &VcardCst<'a>,
     a: &Instance<'a>,
     b_cst: &VcardCst<'a>,
     b: &Instance<'a>,
 ) -> bool {
+    let a_line = &a_cst.props[a.line];
+    let b_line = &b_cst.props[b.line];
+
     a.prop.name == b.prop.name
-        && a.prop.params == b.prop.params
-        && value_eq(&a_cst.props[a.line].value, &b_cst.props[b.line].value)
+        && a_line.params.len() == b_line.params.len()
+        && a_line
+            .params
+            .iter()
+            .zip(&b_line.params)
+            .all(|(a, b)| a.name.get().eq_ignore_ascii_case(b.name.get()) && param_eq(a, b))
+        && value_eq(&a_line.value, &b_line.value)
 }
 
-/// Whether two raw value nodes hold the same value.
+/// Whether two raw value nodes hold the same value, component by component.
 ///
 /// The comparison runs on the node rather than on the decoded value, which
-/// reads only a value's first `;`-component and would make a change past it
-/// invisible: two `data:` URIs differing in their payload alone decode alike.
+/// reads its own kind's shape and would hide a change the kind cannot express:
+/// two `data:` URIs differing in their payload alone decode alike.
 fn value_eq(old: &VcardValueNode<'_>, new: &VcardValueNode<'_>) -> bool {
-    components_eq(old, new, 0)
-}
-
-/// Whether two raw value nodes agree on every component from `from` onwards.
-fn components_eq(old: &VcardValueNode<'_>, new: &VcardValueNode<'_>, from: usize) -> bool {
     // NOTE: two cards of different versions escape values by different rules,
     // so they share no decoding to compare through: `http\://x` reads as
     // itself in 2.1 and as `http://x` later. Only identical bytes are then
@@ -930,7 +936,38 @@ fn components_eq(old: &VcardValueNode<'_>, new: &VcardValueNode<'_>, from: usize
 
     let count = old.component_count().max(new.component_count());
 
-    (from..count).all(|i| component_eq(&old.decode_at(i), &new.decode_at(i)))
+    (0..count).all(|i| component_eq(&old.decode_component_list(i), &new.decode_component_list(i)))
+}
+
+/// Whether two raw parameter nodes hold the same parameter, value by value.
+///
+/// On the node rather than the decoded parameter, for the reason [`value_eq`]
+/// gives: a single-valued parameter reads its first value alone, so two
+/// parameters differing past the first `,` decode alike.
+fn param_eq(old: &VcardParamNode<'_>, new: &VcardParamNode<'_>) -> bool {
+    // NOTE: two cards of different versions encode parameters by different
+    // rules, so they share no decoding to compare through. Only identical
+    // bytes are then certainly the same parameter.
+    if old.escaper != new.escaper {
+        return raw_param(old) == raw_param(new);
+    }
+
+    old.values.len() == new.values.len()
+        && old
+            .values
+            .iter()
+            .zip(&new.values)
+            .all(|(old_value, value)| {
+                unescape_param(old_value.get(), old.escaper)
+                    == unescape_param(value.get(), new.escaper)
+            })
+}
+
+/// A parameter node's raw bytes, as it would serialize.
+fn raw_param(node: &VcardParamNode<'_>) -> Vec<u8> {
+    let mut out = Vec::new();
+    node.write_bytes(&mut out);
+    out
 }
 
 /// A value node's raw bytes, as it would serialize.
@@ -940,14 +977,19 @@ fn raw_value(node: &VcardValueNode<'_>) -> Vec<u8> {
     out
 }
 
-/// Diff two matched properties' parameter lists, keyed by parameter name and,
-/// within a name, paired by position: one name may be written more than once
-/// (RFC 2426 section 4 gives `TEL;TYPE=work;TYPE=voice`), and each occurrence
-/// is a field of its own. A single `TYPE` / `PID` on both sides diffs per item
-/// (they are sets); everything else diffs as whole parameters.
+/// One decoded parameter alongside the raw node it was decoded from.
+type ParamPair<'p, 'a> = (&'p VcardParam<'a>, &'p VcardParamNode<'a>);
+
+/// Diff two matched properties' parameter lists, by name then by position.
+///
+/// One name may be written more than once (RFC 2426 4 gives
+/// `TEL;TYPE=work;TYPE=voice`), each occurrence a field of its own. A single
+/// `TYPE` / `PID` on both sides diffs per item instead, those being sets.
 fn diff_params<'a>(
     old: &[VcardParam<'a>],
     new: &[VcardParam<'a>],
+    old_nodes: &[VcardParamNode<'a>],
+    new_nodes: &[VcardParamNode<'a>],
     at: &VcardPropPath<'a>,
     out: &mut Vec<VcardMergeAction<'a>>,
 ) {
@@ -960,14 +1002,30 @@ fn diff_params<'a>(
     }
 
     for key in keys {
-        let olds: Vec<&VcardParam<'a>> = old.iter().filter(|p| param_key(p) == key).collect();
-        let news: Vec<&VcardParam<'a>> = new.iter().filter(|p| param_key(p) == key).collect();
+        // NOTE: a decode maps the parameters one for one, so each decoded
+        // parameter is paired with the raw node it came from and the
+        // comparison can run on the node.
+        let olds: Vec<ParamPair<'_, 'a>> = old
+            .iter()
+            .zip(old_nodes)
+            .filter(|(param, _)| param_key(param) == key)
+            .collect();
+        let news: Vec<ParamPair<'_, 'a>> = new
+            .iter()
+            .zip(new_nodes)
+            .filter(|(param, _)| param_key(param) == key)
+            .collect();
 
-        if olds.len() == news.len() && olds.iter().zip(&news).all(|(old, new)| old == new) {
+        if olds.len() == news.len()
+            && olds
+                .iter()
+                .zip(&news)
+                .all(|((_, old), (_, new))| param_eq(old, new))
+        {
             continue;
         }
 
-        if let (&[old], &[new]) = (olds.as_slice(), news.as_slice()) {
+        if let (&[(old, _)], &[(new, _)]) = (olds.as_slice(), news.as_slice()) {
             match (old, new) {
                 (VcardParam::Type(old), VcardParam::Type(new))
                 | (VcardParam::Pid(old), VcardParam::Pid(new)) => {
@@ -996,27 +1054,27 @@ fn diff_params<'a>(
 
         let shared = olds.len().min(news.len());
         for i in 0..shared {
-            if olds[i] != news[i] {
+            if !param_eq(olds[i].1, news[i].1) {
                 out.push(VcardMergeAction::ParamChanged {
                     at: at.clone(),
                     index: i,
-                    old: olds[i].clone(),
-                    new: news[i].clone(),
+                    old: olds[i].0.clone(),
+                    new: news[i].0.clone(),
                 });
             }
         }
-        for (i, &param) in news.iter().enumerate().skip(shared) {
+        for (i, (param, _)) in news.iter().enumerate().skip(shared) {
             out.push(VcardMergeAction::ParamAdded {
                 at: at.clone(),
                 index: i,
-                param: param.clone(),
+                param: (*param).clone(),
             });
         }
-        for (i, &param) in olds.iter().enumerate().skip(shared) {
+        for (i, (param, _)) in olds.iter().enumerate().skip(shared) {
             out.push(VcardMergeAction::ParamRemoved {
                 at: at.clone(),
                 index: i,
-                param: param.clone(),
+                param: (*param).clone(),
             });
         }
     }
@@ -1054,7 +1112,7 @@ fn same_change(left: &VcardMergeAction<'_>, right: &VcardMergeAction<'_>) -> boo
                 index: right_index,
                 param: right,
             },
-        ) => left_at == right_at && left_index == right_index && param_eq(left, right),
+        ) => left_at == right_at && left_index == right_index && same_param(left, right),
 
         (
             ParamChanged {
@@ -1072,8 +1130,8 @@ fn same_change(left: &VcardMergeAction<'_>, right: &VcardMergeAction<'_>) -> boo
         ) => {
             left_at == right_at
                 && left_index == right_index
-                && param_eq(left_old, right_old)
-                && param_eq(left_new, right_new)
+                && same_param(left_old, right_old)
+                && same_param(left_new, right_new)
         }
 
         (left, right) => left == right,
@@ -1081,8 +1139,8 @@ fn same_change(left: &VcardMergeAction<'_>, right: &VcardMergeAction<'_>) -> boo
 }
 
 /// Whether two parameters carry the same value, a list parameter's items
-/// compared as an unordered set.
-fn param_eq(left: &VcardParam<'_>, right: &VcardParam<'_>) -> bool {
+/// compared as an unordered set: see [`unordered`].
+fn same_param(left: &VcardParam<'_>, right: &VcardParam<'_>) -> bool {
     match (left, right) {
         (VcardParam::Type(left), VcardParam::Type(right))
         | (VcardParam::Pid(left), VcardParam::Pid(right)) => sorted(left) == sorted(right),
@@ -1090,11 +1148,90 @@ fn param_eq(left: &VcardParam<'_>, right: &VcardParam<'_>) -> bool {
     }
 }
 
+/// Whether a parameter's items are a set rather than a sequence.
+///
+/// `TYPE` (RFC 6350 5.6) and `PID` (7) each hold a list the specification
+/// gives no order, so two sides writing their items in two orders wrote one
+/// parameter.
+fn unordered(param: &VcardParam<'_>) -> bool {
+    matches!(param, VcardParam::Type(_) | VcardParam::Pid(_))
+}
+
 /// A list parameter's items in a stable order, for comparing them as a set.
 fn sorted<'v>(values: &'v [Cow<'_, str>]) -> Vec<&'v str> {
     let mut items: Vec<&str> = values.iter().map(Cow::as_ref).collect();
     items.sort_unstable();
     items
+}
+
+/// Whether two sides spelled one parameter the same way on the wire.
+///
+/// A list parameter the specification gives no order compares as a set of raw
+/// items, for the reason [`unordered`] gives; every other parameter compares
+/// whole, so how it is written is part of what it says.
+fn param_alike(
+    ours: &VcardLine<'_>,
+    theirs: &VcardLine<'_>,
+    param: &VcardParam<'_>,
+    index: usize,
+) -> bool {
+    let key = param_key(param);
+
+    let (Some(ours), Some(theirs)) = (
+        param_node(ours, &key, index),
+        param_node(theirs, &key, index),
+    ) else {
+        return false;
+    };
+
+    if !unordered(param) {
+        return raw_param(ours) == raw_param(theirs);
+    }
+
+    let raw = |node: &VcardParamNode<'_>| {
+        let mut items: Vec<String> = node
+            .values
+            .iter()
+            .map(|leaf| leaf.get().to_string())
+            .collect();
+        items.sort_unstable();
+        items
+    };
+
+    ours.name.get().eq_ignore_ascii_case(theirs.name.get()) && raw(ours) == raw(theirs)
+}
+
+/// The still-encoded form one item of a list parameter was written as.
+fn raw_param_item<'l>(
+    line: &'l VcardLine<'_>,
+    param: &str,
+    index: usize,
+    item: &str,
+) -> Option<&'l str> {
+    let node = param_node(line, param, index)?;
+
+    node.values
+        .iter()
+        .find(|value| unescape_param(value.get(), node.escaper) == item)
+        .map(|leaf| leaf.get())
+}
+
+/// Whether two sides spelled one item of a list value the same way on the
+/// wire.
+fn item_alike(ours: &VcardValueNode<'_>, theirs: &VcardValueNode<'_>, item: &str) -> bool {
+    let raw = |node: &VcardValueNode<'_>| -> Option<Vec<u8>> {
+        let at = node
+            .decode_list()
+            .iter()
+            .position(|held| held.as_ref() == item)?;
+
+        node.raw_list().into_iter().nth(at)
+    };
+
+    match (raw(ours), raw(theirs)) {
+        (Some(ours), Some(theirs)) => ours == theirs,
+        _ => false,
+    }
 }
 
 /// The dispatch key of a parameter: the canonical spelling of a known kind,
@@ -1184,15 +1321,11 @@ impl<'a> Merger<'_, 'a> {
 
         match action {
             VcardMergeAction::ValueChanged { .. } => {
-                // NOTE: the action's decoded payload cannot tell two values
-                // apart past their first `;`-component, so the two sides are
-                // compared on their nodes: same value, nothing to replay.
-                let left_value = &self.left.props[line].value;
-                let right_value = &self.right.props[self.right_insts[r].line].value;
-
-                if value_eq(left_value, right_value) {
+                if self.already_made(b, r, action) {
                     return;
                 }
+
+                let right_value = &self.right.props[self.right_insts[r].line].value;
 
                 if let Some(colliding) = self.colliding(b, &Slot::Value) {
                     let colliding = colliding.clone();
@@ -1204,7 +1337,7 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ValueComponentChanged { component, new, .. } => {
-                if self.already_made(b, action) {
+                if self.already_made(b, r, action) {
                     return;
                 }
 
@@ -1214,19 +1347,27 @@ impl<'a> Merger<'_, 'a> {
                     return;
                 }
 
-                self.merged.props[line].value.set_at(*component, new);
+                self.merged.props[line].value.set_component(*component, new);
             }
 
             VcardMergeAction::ValueItemAdded { item, .. } => {
+                if self.already_made(b, r, action) {
+                    return;
+                }
+
                 if let Some(colliding) = self.colliding(b, &Slot::Items) {
                     let colliding = colliding.clone();
                     self.record(colliding, action);
                     return;
                 }
 
+                // NOTE: component zero is named on purpose here, and read the
+                // same way it is written: an item is spliced as one leaf, so
+                // the leaves it is looked up among must be the same ones. The
+                // diff only raises an item action for a one-component value.
                 let value = &mut self.merged.props[line].value;
                 let present = value
-                    .decode_at(0)
+                    .decode_component_list(0)
                     .iter()
                     .any(|value| value.as_ref() == item.as_ref());
 
@@ -1239,7 +1380,7 @@ impl<'a> Merger<'_, 'a> {
                 // NOTE: a removal is not idempotent when the list holds the
                 // item twice, so a side that already dropped it must not drop
                 // a second copy neither side wrote off.
-                if self.already_made(b, action) {
+                if self.already_made(b, r, action) {
                     return;
                 }
 
@@ -1251,7 +1392,7 @@ impl<'a> Merger<'_, 'a> {
 
                 let value = &mut self.merged.props[line].value;
                 let position = value
-                    .decode_at(0)
+                    .decode_component_list(0)
                     .iter()
                     .position(|value| value.as_ref() == item.as_ref());
 
@@ -1261,7 +1402,7 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ParamAdded { index, param, .. } => {
-                if self.already_made(b, action) {
+                if self.already_made(b, r, action) {
                     return;
                 }
 
@@ -1283,7 +1424,7 @@ impl<'a> Merger<'_, 'a> {
                     }
                 }
 
-                let Some(node) = self.right_param_node(r, param).cloned() else {
+                let Some(node) = self.right_param_node(r, param, *index).cloned() else {
                     return;
                 };
 
@@ -1291,7 +1432,7 @@ impl<'a> Merger<'_, 'a> {
             }
 
             VcardMergeAction::ParamRemoved { index, param, .. } => {
-                if self.already_made(b, action) {
+                if self.already_made(b, r, action) {
                     return;
                 }
 
@@ -1319,7 +1460,7 @@ impl<'a> Merger<'_, 'a> {
             VcardMergeAction::ParamChanged {
                 index, old, new, ..
             } => {
-                if self.already_made(b, action) {
+                if self.already_made(b, r, action) {
                     return;
                 }
 
@@ -1344,7 +1485,7 @@ impl<'a> Merger<'_, 'a> {
                     .iter()
                     .position(|node| node.decode() == *old);
 
-                if let Some(node) = self.right_param_node(r, new) {
+                if let Some(node) = self.right_param_node(r, new, *index) {
                     match (position, restore) {
                         (Some(i), _) => self.merged.props[line].params[i] = node.clone(),
                         // NOTE: the left side removed the parameter this
@@ -1358,10 +1499,13 @@ impl<'a> Merger<'_, 'a> {
             VcardMergeAction::ParamItemAdded {
                 index, param, item, ..
             } => {
-                // NOTE: a parameter value is read through the value unescaper
-                // and written back verbatim, so the item has to land as the
-                // right card spelled it: written decoded, a `\n` would become
-                // a real line break and cut the line in two.
+                if self.already_made(b, r, action) {
+                    return;
+                }
+
+                // NOTE: the item has to land as the right card spelled it: a
+                // decoded item holds a real line break where the wire holds
+                // `^n`, and written decoded it would cut the line in two.
                 let leaf = self.right_param_item(r, param, *index, item);
 
                 let Some(node) = param_node_mut(&mut self.merged.props[line], param, *index) else {
@@ -1372,7 +1516,7 @@ impl<'a> Merger<'_, 'a> {
                 let present = node
                     .values
                     .iter()
-                    .any(|value| unescape(value.get()) == item.as_ref());
+                    .any(|value| unescape_param(value.get(), node.escaper) == item.as_ref());
 
                 if let Some(leaf) = leaf
                     && !present
@@ -1386,7 +1530,7 @@ impl<'a> Merger<'_, 'a> {
             } => {
                 // NOTE: as above, a parameter may hold one item twice, and
                 // `TYPE=work,,` is exactly that.
-                if self.already_made(b, action) {
+                if self.already_made(b, r, action) {
                     return;
                 }
 
@@ -1398,7 +1542,7 @@ impl<'a> Merger<'_, 'a> {
                 let position = node
                     .values
                     .iter()
-                    .position(|value| unescape(value.get()) == item.as_ref());
+                    .position(|value| unescape_param(value.get(), node.escaper) == item.as_ref());
 
                 if let Some(i) = position {
                     node.values.remove(i);
@@ -1430,15 +1574,11 @@ impl<'a> Merger<'_, 'a> {
         self.removals.push(line);
     }
 
-    /// The left arrival standing over the same base instance as the right
-    /// arrival `s`, when both sides took that instance away.
+    /// The left arrival standing over the same departed base instance as `s`.
     ///
     /// A property whose identity is its own value cannot be seen to change, so
-    /// an edit of one is reported as a departure and an arrival. Within one
-    /// side those pair off in order, and two arrivals over one departure both
-    /// sides agreed on are one instance edited twice, which collides. An
-    /// arrival over a departure only one side made replaces nothing the other
-    /// side also replaced, so it merges as a set.
+    /// an edit is a departure plus an arrival: two arrivals over one departure
+    /// both sides agreed on are one instance edited twice, which collides.
     fn paired_arrival(&self, key: &str, s: usize) -> Option<usize> {
         let gone = |matching: &Matching| {
             matching
@@ -1574,9 +1714,48 @@ impl<'a> Merger<'_, 'a> {
 
     /// Whether the left side already made the very same change, so the merged
     /// card holds it and the right action needs neither a replay nor a report.
-    fn already_made(&self, b: usize, action: &VcardMergeAction<'a>) -> bool {
+    fn already_made(&self, b: usize, r: usize, action: &VcardMergeAction<'a>) -> bool {
         self.left_ops_on(b)
             .any(|(_, left)| same_change(left, action))
+            && self.wrote_alike(b, r, action)
+    }
+
+    /// Whether the two sides put the same bytes on the wire for one change.
+    ///
+    /// A decode is not injective, so two sides writing different bytes can
+    /// decode alike, and calling that one change drops a difference without a
+    /// word. A removal wrote nothing, so the change itself settles it.
+    fn wrote_alike(&self, b: usize, r: usize, action: &VcardMergeAction<'a>) -> bool {
+        let ours = &self.left.props[self.left_line(b)];
+        let theirs = &self.right.props[self.right_insts[r].line];
+
+        match action {
+            VcardMergeAction::PropAdded { .. } | VcardMergeAction::PropRemoved { .. } => false,
+            VcardMergeAction::ValueItemRemoved { .. }
+            | VcardMergeAction::ParamRemoved { .. }
+            | VcardMergeAction::ParamItemRemoved { .. } => true,
+            VcardMergeAction::ValueChanged { .. } => {
+                raw_value(&ours.value) == raw_value(&theirs.value)
+            }
+            VcardMergeAction::ValueComponentChanged { component, .. } => {
+                ours.value.raw_component_list(*component)
+                    == theirs.value.raw_component_list(*component)
+            }
+            VcardMergeAction::ValueItemAdded { item, .. } => {
+                item_alike(&ours.value, &theirs.value, item)
+            }
+            VcardMergeAction::ParamAdded { index, param, .. }
+            | VcardMergeAction::ParamChanged {
+                index, new: param, ..
+            } => param_alike(ours, theirs, param, *index),
+            VcardMergeAction::ParamItemAdded {
+                index, param, item, ..
+            } => {
+                let ours = raw_param_item(ours, param, *index, item);
+
+                ours.is_some() && ours == raw_param_item(theirs, param, *index, item)
+            }
+        }
     }
 
     /// The left-side action whose slot collides with a right action's slot on
@@ -1604,13 +1783,11 @@ impl<'a> Merger<'_, 'a> {
         line
     }
 
-    /// The right card's raw leaf for one decoded item of the `index`th list
-    /// parameter of that name.
+    /// The right card's raw leaf for one item of the `index`th list parameter.
     ///
-    /// The item was decoded from that very node, so the leaf is there; without
-    /// it there is no wire form to write, and the decoded text is not one: a
-    /// parameter value is unescaped on the way in and copied verbatim on the
-    /// way out, so writing it back decoded can put a line break in the head.
+    /// The decoded text is no wire form: an item holds a real line break where
+    /// the wire holds `^n`, so writing it back decoded would cut the line in
+    /// two. The item was decoded from that node, so the leaf is there.
     fn right_param_item(
         &self,
         r: usize,
@@ -1618,24 +1795,33 @@ impl<'a> Merger<'_, 'a> {
         index: usize,
         item: &str,
     ) -> Option<VcardLeaf<'a>> {
-        self.right.props[self.right_insts[r].line]
-            .params
+        let line = &self.right.props[self.right_insts[r].line];
+        let node = param_node(line, param, index)?;
+
+        node.values
             .iter()
-            .filter(|node| node.name.get().eq_ignore_ascii_case(param))
-            .nth(index)?
-            .values
-            .iter()
-            .find(|value| unescape(value.get()) == item)
+            .find(|value| unescape_param(value.get(), node.escaper) == item)
             .cloned()
     }
 
-    /// The right card's raw node of a decoded parameter, for byte-faithful
-    /// replay.
-    fn right_param_node(&self, r: usize, param: &VcardParam<'_>) -> Option<&'a VcardParamNode<'a>> {
+    /// The right card's raw parameter node, for byte-faithful replay.
+    ///
+    /// Addressed by name and ordinal, which is how the action was raised: a
+    /// decoded parameter is no key, two same-named ones differing past their
+    /// first value decoding alike.
+    fn right_param_node(
+        &self,
+        r: usize,
+        param: &VcardParam<'_>,
+        index: usize,
+    ) -> Option<&'a VcardParamNode<'a>> {
+        let key = param_key(param);
+
         self.right.props[self.right_insts[r].line]
             .params
             .iter()
-            .find(|node| node.decode() == *param)
+            .filter(|node| node.name.get().eq_ignore_ascii_case(&key))
+            .nth(index)
     }
 
     /// Replay a right item edit whose parameter the left side removed: the
@@ -1690,13 +1876,11 @@ impl<'a> Merger<'_, 'a> {
     }
 }
 
-/// Re-encode a value node for `escaper`, so a value replayed from a card of
-/// another version arrives with the escaping its new card reads.
+/// Re-encode a value node for `escaper`, the escaping its new card reads.
 ///
-/// vCard 2.1 escapes only `;`, while the later versions also escape a
-/// backslash, a comma and a newline, so copying the bytes across would change
-/// what the value means. A node already written for `escaper` is cloned
-/// unchanged, which is every merge of one version's cards.
+/// vCard 2.1 escapes only `;` while the later versions also escape a
+/// backslash, a comma and a newline, so copying across the bytes of a value
+/// replayed from another version's card would change what it means.
 fn transcode<'a>(node: &VcardValueNode<'a>, escaper: VcardEscaper) -> VcardValueNode<'a> {
     if node.escaper == escaper {
         return node.clone();
@@ -1705,7 +1889,7 @@ fn transcode<'a>(node: &VcardValueNode<'a>, escaper: VcardEscaper) -> VcardValue
     let mut out = VcardValueNode::from_components(Vec::new(), escaper);
 
     for i in 0..node.component_count() {
-        out.set_at(i, &node.decode_at(i));
+        out.set_component(i, &node.decode_component_list(i));
     }
 
     out
@@ -1714,9 +1898,8 @@ fn transcode<'a>(node: &VcardValueNode<'a>, escaper: VcardEscaper) -> VcardValue
 /// Give every line of a card but its last a line ending.
 ///
 /// A card read without a trailing break leaves its final line with an empty
-/// ending, which is right only while that line stays last: a line serializes
-/// as its name, parameters, value and ending with nothing in between, so
-/// anything written after an unterminated line would land inside its value.
+/// ending, right only while that line stays last: a line serializes with
+/// nothing between its parts, so anything after it would land in its value.
 fn terminate_lines(cst: &mut VcardCst<'_>) {
     let mut lines: Vec<&mut VcardLine<'_>> = cst
         .begin
@@ -1736,8 +1919,19 @@ fn terminate_lines(cst: &mut VcardCst<'_>) {
     }
 }
 
-/// The `at`th parameter node of a line whose name matches the given key,
-/// mutably, for item-level replay.
+/// The `at`th parameter node of a line whose name matches the given key.
+fn param_node<'l, 'a>(
+    line: &'l VcardLine<'a>,
+    key: &str,
+    at: usize,
+) -> Option<&'l VcardParamNode<'a>> {
+    line.params
+        .iter()
+        .filter(|node| node.name.get().eq_ignore_ascii_case(key))
+        .nth(at)
+}
+
+/// The same, mutably, for item-level replay.
 fn param_node_mut<'l, 'a>(
     line: &'l mut VcardLine<'a>,
     key: &str,
@@ -2302,10 +2496,9 @@ mod tests {
     #[test]
     fn an_identity_meets_the_other_case_it_was_written_in() {
         // NOTE: matching normalises, so the two scheme spellings are one
-        // address and the card comes out with one instance rather than two.
-        // Writing is exact, so what lands is the bytes a side wrote: the
-        // right side rewrote the scheme's case, which is a change like any
-        // other, and the merge never invents a spelling of its own.
+        // address and one instance comes out. Writing is exact, so what lands
+        // is the bytes a side wrote: the right side rewrote the scheme's case,
+        // a change like any other, and the merge invents no spelling.
         let base = card("IMPP:XMPP:ada@x.test\r\n");
         let left = card("IMPP;TYPE=work:XMPP:ada@x.test\r\n");
         let right = card("IMPP;PREF=1:xmpp:ada@x.test\r\n");
@@ -2385,5 +2578,24 @@ mod tests {
 
         let report = merge(&base, &updated, &removed);
         assert!(report.merged.to_string().contains("NOTE:b\r\n"));
+    }
+
+    /// A list value carrying a semicolon is diffed whole, not item by item.
+    ///
+    /// A list's items are the value split on its commas, while an item action
+    /// splices one leaf of component zero. Past one component the added item
+    /// straddles them, escaping its semicolon and writing the tail twice.
+    #[test]
+    fn a_list_value_with_a_semicolon_is_diffed_whole() {
+        let base = card("FN:A\r\nNICKNAME:a,b;x\r\n");
+        let right = card("FN:A\r\nNICKNAME:a,b,c;x\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &base, &right);
+        let merged = report.merged.to_string();
+
+        assert!(merged.contains("NICKNAME:a,b,c;x\r\n"), "got: {merged}");
     }
 }

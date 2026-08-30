@@ -6,14 +6,16 @@
 //! [`VcardPropLens`](lens::VcardPropLens) ties a wire name to a decoded value
 //! type plus the `decode` projection and an edit cursor; each property
 //! implements it on the marker in its own module, the type-level key for
-//! [`VcardCst::prop`](crate::tree::cst::VcardCst::prop). Scalar, list and URI
-//! properties share the generic
+//! [`VcardCst::prop`](crate::tree::cst::VcardCst::prop).
+//!
+//! Scalar, list and URI properties share the generic
 //! [`VcardValueCursor`](crate::tree::value::cursor::VcardValueCursor); the
-//! structured ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor naming
-//! their components. The per-property contract is
-//! [`VcardPropSpec`](spec::VcardPropSpec), with the
-//! [`VcardPropCardinality`](cardinality::VcardPropCardinality) multiplicity
-//! axis.
+//! structured ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor
+//! naming their components.
+//!
+//! The per-property contract is [`VcardPropSpec`](spec::VcardPropSpec), with
+//! the [`VcardPropCardinality`](cardinality::VcardPropCardinality)
+//! multiplicity axis.
 
 pub mod adr;
 pub mod agent;

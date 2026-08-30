@@ -3,11 +3,12 @@
 //! The `N` (structured name) property lens and its bespoke edit cursor: the
 //! components of the name of the object the card represents (RFC 6350 6.2.2).
 //!
-//! `N` is the showcase of the structured-value path: it pairs [`VcardN`] with a
-//! dedicated [`VcardNCursor`] naming the five components, so callers write
-//! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`. Only the
-//! cursor is bespoke: decode and encode use the lens defaults, which delegate to
-//! [`VcardN`]'s [`VcardCodec`] impl in [`crate::tree::value`].
+//! `N` is the showcase of the structured-value path: it pairs [`VcardN`] with
+//! a dedicated [`VcardNCursor`] naming the five components, so callers write
+//! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`.
+//!
+//! Only the cursor is bespoke: decode and encode use the lens defaults, which
+//! delegate to [`VcardN`]'s [`VcardCodec`] impl in [`crate::tree::value`].
 
 use alloc::{borrow::Cow, vec::Vec};
 
@@ -82,54 +83,54 @@ impl VcardNCursor<'_, '_> {
 
     /// The family names, decoded.
     pub fn family(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(0)
+        self.line.value.decode_component_list(0)
     }
 
     /// The given names, decoded.
     pub fn given(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(1)
+        self.line.value.decode_component_list(1)
     }
 
     /// The additional names, decoded.
     pub fn additional(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(2)
+        self.line.value.decode_component_list(2)
     }
 
     /// The honorific prefixes, decoded.
     pub fn prefixes(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(3)
+        self.line.value.decode_component_list(3)
     }
 
     /// The honorific suffixes, decoded.
     pub fn suffixes(&self) -> Vec<Cow<'_, str>> {
-        self.line.value.decode_at(4)
+        self.line.value.decode_component_list(4)
     }
 
     /// Set the family names, escaping and preserving the rest of the line.
     pub fn set_family<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(0, values);
+        self.line.value.set_component(0, values);
     }
 
     /// Set the given names, escaping and preserving the rest of the line.
     pub fn set_given<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(1, values);
+        self.line.value.set_component(1, values);
     }
 
     /// Set the additional names, escaping and preserving the rest of the line.
     pub fn set_additional<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(2, values);
+        self.line.value.set_component(2, values);
     }
 
     /// Set the honorific prefixes, escaping and preserving the rest of the
     /// line.
     pub fn set_prefixes<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(3, values);
+        self.line.value.set_component(3, values);
     }
 
     /// Set the honorific suffixes, escaping and preserving the rest of the
     /// line.
     pub fn set_suffixes<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_at(4, values);
+        self.line.value.set_component(4, values);
     }
 
     /// The first parameter of type `P` on this line, decoded.
