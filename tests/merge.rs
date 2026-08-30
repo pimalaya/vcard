@@ -2024,6 +2024,20 @@ fn a_quoted_parameter_value_may_carry_a_colon_and_a_semicolon() {
 }
 
 #[test]
+fn requoting_a_parameter_is_not_a_change() {
+    // The quotes RFC 6350 section 3.3 wraps a parameter value in are the
+    // grammar's, not the value's, so a server that adds or drops a pair around
+    // an unchanged value has changed nothing to report or collide over.
+    let base = card("TEL;TZ=America/New_York:+1\r\n");
+    let left = card("TEL;TZ=\"America/New_York\":+1\r\n");
+
+    let (merged, conflicts) = merge_text(&base, &left, &base);
+
+    assert_eq!(merged, left);
+    assert_eq!(conflicts, 0);
+}
+
+#[test]
 fn duplicate_list_items_are_diffed_as_a_multiset_and_replayed_as_a_set() {
     // NOTE: this pins current behaviour rather than a law, and is why the
     // generator only produces lists of distinct items. `list_diff` counts

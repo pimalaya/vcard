@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed a parameter value reading back with the double quotes RFC 6350 section 3.3 wraps it in.
+
+  They are the grammar's delimiters, not content, so `GEO="geo:12.3457,78.910"` now decodes to `geo:12.3457,78.910`, in a lens read, in the decoded model, and in the jCard and JSContact exports. Encoding puts a pair back around a value carrying a `,`, a `;` or a `:`, so a card that needed quoting still gets it, and vCard 2.1, whose grammar has no quoting, is unaffected. A card's own bytes are untouched: the quotes live on the syntax leaf, which round-tripping never reads through the codec.
+
+  The merge no longer reports a change when one side merely re-quoted a parameter it left alone.
+
+  **Breaking** for a caller that built a parameter with its own quotes: `VcardParam::Geo(Cow::Borrowed("\"geo:...\""))` now means a value whose text starts and ends with a double quote, and goes out as `GEO="^'geo:...^'"`. Pass the value without them.
+
 ## [0.3.0] - 2026-08-30
 
 ### Removed

@@ -32,12 +32,25 @@ pub(crate) fn unescape_bytes(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8
     }
 }
 
-/// Resolve the RFC 6868 3.1 parameter value encoding: `^n`, `^^` and `^'`.
+/// Strip the delimiters off a parameter value, then resolve the RFC 6868 3.1
+/// encoding: `^n`, `^^` and `^'`.
 ///
 /// A caret before anything else, and a trailing one, stay literal, 3.1
 /// forbidding an error either way. No backslash is touched: RFC 6350 3.3 gives
 /// a parameter no escapes and RFC 6868 3.2 forbids adding the backslash ones.
 pub(crate) fn unescape_param(text: &str, escaper: VcardEscaper) -> Cow<'_, str> {
+    // NOTE: RFC 6350 3.3 wraps a value carrying a delimiter in double quotes.
+    // The pair is the production's own, never part of what it encloses, so it
+    // goes before the carets are read. An unbalanced one closed nothing and is
+    // therefore content.
+    let text = if escaper.has_param_quoting() {
+        text.strip_prefix('"')
+            .and_then(|inner| inner.strip_suffix('"'))
+            .unwrap_or(text)
+    } else {
+        text
+    };
+
     if !escaper.has_param_encoding() || !text.contains('^') {
         return Cow::Borrowed(text);
     }
@@ -184,6 +197,35 @@ mod tests {
             unescape_param(r"C:\temp\note", VcardEscaper::V4_0),
             r"C:\temp\note",
         );
+    }
+
+    /// RFC 6350 section 3.3 makes the double quotes the `param-value`
+    /// production's own delimiter, so what comes back is what they enclose.
+    #[test]
+    fn strips_the_parameter_value_delimiters() {
+        assert!(matches!(
+            unescape_param("\"geo:37.386,-122.083\"", VcardEscaper::V4_0),
+            Cow::Borrowed("geo:37.386,-122.083")
+        ));
+        assert!(matches!(
+            unescape_param("\"05:45\"", VcardEscaper::V3_0),
+            Cow::Borrowed("05:45")
+        ));
+        assert_eq!(unescape_param("\"a^'b\"", VcardEscaper::V4_0), "a\"b");
+    }
+
+    /// A quote that closes nothing is content, and vCard 2.1 has no quoting at
+    /// all, so both keep every character they were written with.
+    #[test]
+    fn keeps_a_quote_that_delimits_nothing() {
+        assert!(matches!(
+            unescape_param("\"work", VcardEscaper::V4_0),
+            Cow::Borrowed("\"work")
+        ));
+        assert!(matches!(
+            unescape_param("\"bar\"", VcardEscaper::V2_1),
+            Cow::Borrowed("\"bar\"")
+        ));
     }
 
     /// RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret is a literal

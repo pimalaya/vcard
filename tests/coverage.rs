@@ -428,15 +428,25 @@ fn alloc_expected(version: &str, geo: &str) -> String {
         "GENDER:M;man\r\n",
         "ORG:Acme\r\n",
     );
-    let tail = concat!(
-        "CLIENTPIDMAP:1;urn:x\r\n",
-        "PHOTO:Zm9v\r\n",
-        "KEY:http://x\r\n",
-        "X-FOO:\r\n",
-        "NOTE;ALTID=1;CALSCALE=gregorian;CHARSET=UTF-8;ENCODING=8BIT;GEO=geo:1,2;",
-        "LABEL=addr;LANGUAGE=en;MEDIATYPE=text/plain;PID=1,2;PREF=1;SORT-AS=Doe;",
-        "TYPE=home,work;TZ=-0500;VALUE=text;X-CUSTOM=v:hi\r\n",
-        "END:VCARD\r\n",
+    // The GEO parameter carries a `:` and a `,`, neither of which RFC 6350
+    // section 3.3 lets a bare value hold, so it goes out quoted wherever
+    // quoting exists; vCard 2.1 has none and writes it as it stands.
+    let geo_param = match version {
+        "2.1" => "GEO=geo:1,2",
+        _ => "GEO=\"geo:1,2\"",
+    };
+    let tail = format!(
+        concat!(
+            "CLIENTPIDMAP:1;urn:x\r\n",
+            "PHOTO:Zm9v\r\n",
+            "KEY:http://x\r\n",
+            "X-FOO:\r\n",
+            "NOTE;ALTID=1;CALSCALE=gregorian;CHARSET=UTF-8;ENCODING=8BIT;{0};",
+            "LABEL=addr;LANGUAGE=en;MEDIATYPE=text/plain;PID=1,2;PREF=1;SORT-AS=Doe;",
+            "TYPE=home,work;TZ=-0500;VALUE=text;X-CUSTOM=v:hi\r\n",
+            "END:VCARD\r\n",
+        ),
+        geo_param,
     );
 
     format!("BEGIN:VCARD\r\nVERSION:{version}\r\n{head}{geo}{tail}")
@@ -954,4 +964,37 @@ fn the_newer_parameters_decode_onto_their_own_variants_and_encode_back() {
 
     // The decoded card writes the same line back out.
     assert_eq!(VcardCst::from(card).to_string(), raw);
+}
+
+/// RFC 6350 section 3.3 wraps a parameter value carrying a `:` or a `,` in
+/// double quotes, section 6.3.1 writing its own address that way. The pair is
+/// the grammar's, so a lens reads what it encloses, and the decoded card puts
+/// it back where the value still needs it.
+#[test]
+fn a_quoted_parameter_reads_without_its_delimiters_and_writes_them_back() {
+    use vcard::prop::adr::ADR;
+    use vcard::tree::param::{geo::GEO as GEOP, label::LABEL as LABELP};
+
+    let raw = concat!(
+        "BEGIN:VCARD\r\nVERSION:4.0\r\n",
+        "ADR;GEO=\"geo:12.3457,78.910\";LABEL=\"Mail Drop: TNE QB^n123 Main Street\";",
+        "TYPE=work:;;123 Main Street;Any Town;CA;91921-1234;U.S.A.\r\n",
+        "END:VCARD\r\n",
+    );
+    let mut cst = VcardCst::parse(raw).unwrap();
+
+    let adr = cst.prop_mut::<ADR>().unwrap();
+    assert_eq!(adr.param::<GEOP>().as_deref(), Some("geo:12.3457,78.910"));
+    assert_eq!(
+        adr.param::<LABELP>().as_deref(),
+        Some("Mail Drop: TNE QB\n123 Main Street"),
+    );
+
+    // The syntax tree never reads through the codec, so the card it was parsed
+    // from comes back byte for byte.
+    assert_eq!(cst.to_string(), raw);
+
+    // And the canonical projection quotes both again: one carries a `,` and a
+    // `:`, the other a `:` and a line break the caret encoding spells `^n`.
+    assert_eq!(VcardCst::from(cst.decode()).to_string(), raw);
 }

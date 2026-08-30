@@ -48,4 +48,12 @@ impl VcardEscaper {
     pub fn has_param_encoding(self) -> bool {
         matches!(self, Self::V4_0)
     }
+
+    /// Whether this version wraps a parameter value carrying a delimiter in
+    /// double quotes: RFC 2425 section 5.1 defines the `quoted-string` RFC
+    /// 2426 inherits and RFC 6350 section 3.3 keeps, so 3.0 and 4.0 have it
+    /// and 2.1, whose grammar has none, reads its double quote as content.
+    pub fn has_param_quoting(self) -> bool {
+        matches!(self, Self::V3_0 | Self::V4_0)
+    }
 }

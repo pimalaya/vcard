@@ -270,12 +270,12 @@ mod tests {
         );
     }
 
-    /// The decoded model holds a parameter exactly as the wire spelled it, its
-    /// own delimiters included, so the surrounding pair is written back as a
-    /// pair rather than encoded as content.
+    /// The decoded model holds a parameter's content, its RFC 6350 section 3.3
+    /// delimiters excluded, so the pair is put back around a value carrying a
+    /// character a bare SAFE-CHAR run may not hold.
     #[test]
-    fn keeps_a_quoted_parameter_value_quoted() {
-        let param = VcardParam::Geo(Cow::Borrowed("\"geo:37.386,-122.083\""));
+    fn quotes_a_parameter_value_carrying_a_delimiter() {
+        let param = VcardParam::Geo(Cow::Borrowed("geo:37.386,-122.083"));
 
         assert_eq!(
             param.encode(VcardEscaper::V4_0).to_string(),

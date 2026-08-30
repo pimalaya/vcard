@@ -26,30 +26,30 @@ pub(crate) fn escape_with(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8]> 
     }
 }
 
-/// Apply the RFC 6868 3.1 parameter value encoding: `^n`, `^^` and `^'`.
+/// Apply the RFC 6868 3.1 parameter value encoding: `^n`, `^^` and `^'`, then
+/// wrap the result in the RFC 6350 3.3 delimiters when it needs them.
 ///
 /// Inverse of [`unescape_param`](crate::tree::codec::unescape::unescape_param).
-/// The wire's own double quotes are kept and only what they enclose is encoded,
-/// since encoding the pair would strip the quoting off every quoted URI.
 pub(crate) fn escape_param(value: &str, escaper: VcardEscaper) -> Cow<'_, str> {
-    if !escaper.has_param_encoding() {
-        return Cow::Borrowed(value);
-    }
-
-    let Some(inner) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')) else {
-        return escape_carets(value);
+    let value = if escaper.has_param_encoding() {
+        escape_carets(value)
+    } else {
+        Cow::Borrowed(value)
     };
 
-    match escape_carets(inner) {
-        Cow::Borrowed(_) => Cow::Borrowed(value),
-        Cow::Owned(inner) => {
-            let mut out = String::with_capacity(inner.len() + 2);
-            out.push('"');
-            out.push_str(&inner);
-            out.push('"');
-            Cow::Owned(out)
-        }
+    if !escaper.has_param_quoting() || !value.contains([',', ';', ':']) {
+        return value;
     }
+
+    // NOTE: a double quote never reaches here in 4.0, the caret encoding
+    // having spelled it `^'`. In 3.0 it cannot be encoded at all, so a value
+    // holding one alongside a delimiter has no conformant spelling and is
+    // written quoted rather than left to split on the delimiter.
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    out.push_str(&value);
+    out.push('"');
+    Cow::Owned(out)
 }
 
 /// Apply the RFC 2426 / 6350 3.4 value escapes `\\` `\,` `\;` `\n`.
@@ -192,20 +192,44 @@ mod tests {
             Cow::Borrowed("plain")
         ));
         // NOTE: RFC 6868 section 3.2 forbids backslash escaping, so a path
-        // goes out as it stands.
+        // keeps its backslash; its colon is what the quotes are for.
+        assert_eq!(escape_param(r"C:\temp", VcardEscaper::V4_0), r#""C:\temp""#);
+    }
+
+    /// RFC 6350 section 3.3 keeps `,`, `;` and `:` out of a bare SAFE-CHAR
+    /// run, so a value carrying one is wrapped and a value carrying none is
+    /// not: the quotes are the grammar's, not the value's.
+    #[test]
+    fn quotes_a_parameter_value_only_where_a_delimiter_needs_it() {
+        assert_eq!(
+            escape_param("geo:37.386,-122.083", VcardEscaper::V4_0),
+            "\"geo:37.386,-122.083\"",
+        );
+        assert_eq!(escape_param("05:45", VcardEscaper::V3_0), "\"05:45\"");
         assert!(matches!(
-            escape_param(r"C:\temp", VcardEscaper::V4_0),
-            Cow::Borrowed(r"C:\temp")
+            escape_param("work", VcardEscaper::V4_0),
+            Cow::Borrowed("work")
         ));
     }
 
+    /// A double quote is content, so it goes out RFC 6868 encoded rather than
+    /// as a delimiter, and the pair the comma calls for is added around it.
     #[test]
-    fn keeps_a_quoted_parameter_value_wrapped() {
+    fn encodes_a_double_quote_rather_than_reading_it_as_a_delimiter() {
+        assert_eq!(
+            escape_param("say \"hi\", then go", VcardEscaper::V4_0),
+            "\"say ^'hi^', then go\"",
+        );
+    }
+
+    /// vCard 2.1 has no quoted-string, so nothing is wrapped: a delimiter goes
+    /// out bare, as every 2.1 writer puts it.
+    #[test]
+    fn never_quotes_a_2_1_parameter_value() {
         assert!(matches!(
-            escape_param("\"geo:37.386,-122.083\"", VcardEscaper::V4_0),
-            Cow::Borrowed("\"geo:37.386,-122.083\"")
+            escape_param("a,b", VcardEscaper::V2_1),
+            Cow::Borrowed("a,b")
         ));
-        assert_eq!(escape_param("\"a^b\"", VcardEscaper::V4_0), "\"a^^b\"");
     }
 
     /// RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret goes out as

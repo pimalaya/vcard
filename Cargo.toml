@@ -40,6 +40,21 @@ path = "examples/parse_edit_export.rs"
 required-features = ["parser"]
 
 [[example]]
+name = "structured_values"
+path = "examples/structured_values.rs"
+required-features = ["parser"]
+
+[[example]]
+name = "forgiving_parse"
+path = "examples/forgiving_parse.rs"
+required-features = ["parser"]
+
+[[example]]
+name = "all_versions"
+path = "examples/all_versions.rs"
+required-features = ["parser"]
+
+[[example]]
 name = "strict_builder"
 path = "examples/strict_builder.rs"
 required-features = ["parser"]
@@ -48,6 +63,36 @@ required-features = ["parser"]
 name = "raw_builder"
 path = "examples/raw_builder.rs"
 required-features = ["parser"]
+
+[[example]]
+name = "validate_errors"
+path = "examples/validate_errors.rs"
+required-features = ["parser"]
+
+[[example]]
+name = "three_way_merge"
+path = "examples/three_way_merge.rs"
+required-features = ["parser"]
+
+[[example]]
+name = "address_book"
+path = "examples/address_book.rs"
+required-features = ["parser"]
+
+[[example]]
+name = "content_encodings"
+path = "examples/content_encodings.rs"
+required-features = ["parser", "quoted-printable", "base64", "encoding"]
+
+[[example]]
+name = "jcard"
+path = "examples/jcard.rs"
+required-features = ["parser", "jcard"]
+
+[[example]]
+name = "jscontact"
+path = "examples/jscontact.rs"
+required-features = ["parser", "jscontact"]
 
 [dev-dependencies]
 calcard = { version = "0.3", default-features = false }
