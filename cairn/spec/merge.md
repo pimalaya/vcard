@@ -104,7 +104,7 @@ The merged card is a clone of the left one and every edit lands on that clone, s
 
 ### Requirement: Conflicts are reported, never silently resolved away
 
-A divergent change to the same field on both sides SHALL be surfaced as a `VcardMergeConflict` in the `VcardMergeReport`, with the preferred side's action winning, the left one unless the caller says otherwise, except that an update beats a removal, at every granularity the merge diffs at: the whole property, one parameter, and one item of a list parameter alike.
+A divergent change to the same field on both sides SHALL be surfaced as a `VcardMergeConflict` in the `VcardMergeReport`, with the left side's action winning, except that an update beats a removal, at every granularity the merge diffs at: the whole property, one parameter, and one item of a list parameter alike.
 
 A parameter an update restores over a removal is appended to the merged line, since the removal took its position with it and parameter order carries no meaning.
 
@@ -118,35 +118,30 @@ A parameter an update restores over a removal is appended to the merged line, si
 - WHEN they are merged in either order
 - THEN the merged card carries `PREF=2` and one conflict is reported
 
-### Requirement: The winning side is chosen, not implied
+### Requirement: Ours wins, and the collision is still reported
 
-A caller SHALL be able to say which side's value the merged card carries when both sides changed one field to different things, independently of which side supplies the baseline bytes. Where the caller says nothing, the left side wins, which is what a merge has always done.
+The left side SHALL be `ours` and the right side `theirs`, in git's sense. The merged card SHALL be built from the left side's bytes, and where both sides changed one field to different things it SHALL carry the left side's value. Neither is a caller's to choose.
 
-The two are different questions. Which side is the baseline decides whose folding, whose parameter casing and whose property order survive untouched, and is answered by whichever copy the caller would rather not churn. Which side wins a collision is a statement about two people disagreeing, and is answered by what the caller knows about them. Deciding the second by the first makes a byte-fidelity choice settle a data-loss one.
+One side answers both questions on purpose. A caller reaches for a merge holding the version it is merging into, and that version is the one it would rather not churn and the one it means to keep. Every collision is reported either way, so a caller wanting the other value resolves it from the report rather than asking the merge to guess.
 
-The preference SHALL decide only the case where both sides wrote a value. An update still beats a removal whichever side it came from and whatever the preference, a field one side alone touched is still taken from that side, an untouched line still comes out byte for byte, and the report still names both actions and the same fields whichever way the preference falls.
+The rule SHALL decide only the case where both sides wrote a value. An update still beats a removal whichever side it came from, a field one side alone touched is still taken from that side, an untouched line still comes out byte for byte, and the report still names both actions and the same fields.
 
-A parameter or a property the preferred side's action beats SHALL be replaced rather than joined, so a name a version allows at most once is never written twice.
+A parameter or a property that loses SHALL NOT be written beside the one that beat it, so a name a version allows at most once is never written twice.
 
-#### Scenario: The right side is preferred
-- GIVEN two copies setting a different `FN`, and a caller preferring the right side
-- WHEN they are merged
-- THEN the merged card carries the right side's `FN` and the collision is reported as it always was
-
-#### Scenario: The left preference stated is the preference left unsaid
-- GIVEN any two copies and a caller stating the left side
-- WHEN they are merged
-- THEN the merged bytes and the report are what saying nothing gives
-
-#### Scenario: The preference does not reach an uncontested field
-- GIVEN a field only the left copy changed, and a caller preferring the right side
+#### Scenario: A field one side alone touched
+- GIVEN a field only the left copy changed, beside a field both copies changed
 - WHEN they are merged
 - THEN the left copy's change survives and nothing is reported for it
 
-#### Scenario: An update beats a removal under either preference
-- GIVEN one copy removing a property and the other changing it
-- WHEN they are merged under either preference, in either order
-- THEN the changed property survives and the collision is reported
+#### Scenario: A parameter both sides rewrote
+- GIVEN a base `TEL;PREF=1`, a left copy holding `PREF=2` and a right copy holding `PREF=3`
+- WHEN they are merged
+- THEN the merged card carries `PREF=2` alone and the collision is reported
+
+#### Scenario: Two additions of a name allowed at most once
+- GIVEN a base without `UID`, and two copies each adding a different one
+- WHEN they are merged
+- THEN the merged card carries the left copy's `UID` alone and the collision is reported
 
 ### Requirement: Every change either lands or is reported
 
@@ -161,9 +156,7 @@ The field granularities are the ones the merge diffs at: the whole property, the
 
 ### Requirement: The merge obeys its algebraic laws
 
-`merge(base, x, x)` SHALL yield `x` byte for byte and report nothing, `merge(base, x, base)` SHALL yield `x` byte for byte, `merge(base, base, y)` SHALL yield `y`, and `merge(base, base, base)` SHALL yield the base. The merged card SHALL parse again to a byte-stable fixpoint. Swapping the two sides SHALL report the same collided fields, and as many conflicts, though the merged bytes differ, since the preferred side's action wins. Re-merging the merged card against the base and either side SHALL change nothing.
-
-Every law here SHALL hold under either preference: none of them is a statement about who wins.
+`merge(base, x, x)` SHALL yield `x` byte for byte and report nothing, `merge(base, x, base)` SHALL yield `x` byte for byte, `merge(base, base, y)` SHALL yield `y`, and `merge(base, base, base)` SHALL yield the base. The merged card SHALL parse again to a byte-stable fixpoint. Swapping the two sides SHALL report the same collided fields, and as many conflicts, though the merged bytes differ, since the left side's action wins. Re-merging the merged card against the base and either side SHALL change nothing.
 
 #### Scenario: An untouched side
 - GIVEN a base card and one copy that changed nothing
@@ -185,6 +178,26 @@ Two components agree when they decode to the same list of items, so a difference
 - GIVEN a base `TITLE:boss;of;nothing` and two copies rewriting what follows the second `;`
 - WHEN they are merged
 - THEN the divergence is reported
+
+### Requirement: A whole-value change reports the whole value
+
+The `old` and `new` payloads of a `ValueChanged` action SHALL say what the two raw value nodes say. A value whose decoded projection does not encode back to what its node holds SHALL be reported as the node's raw components (`VcardValue::Unknown`), since a non-structured value decodes its first `;`-component alone and would otherwise be reported truncated, with its old and its new equal. A value the model reads whole SHALL keep its decoded kind.
+
+#### Scenario: A note changed past its first semicolon
+- GIVEN a base and a left copy holding `NOTE:a;b`, and a right copy holding `NOTE:a;CHANGED`
+- WHEN they are merged
+- THEN the reported change holds both values whole, and the merged card carries the new one
+
+### Requirement: Each parameter occurrence is a field of its own
+
+One parameter name may be written more than once on a property (`TEL;TYPE=work;TYPE=voice`, RFC 2426 section 4), and the field a parameter action occupies SHALL be addressed by the parameter's key and by its position among the property's parameters of that key. Two sides editing two different occurrences of one name SHALL both land, uncontested.
+
+Each parameter action SHALL carry that position, so a caller reading the report can tell one occurrence from another, and the replay SHALL resolve the occurrence the action names rather than the first parameter of that name.
+
+#### Scenario: Two sides editing two parameters of one name
+- GIVEN a base `TEL;TYPE=work;TYPE=voice`, a left copy rewriting the first `TYPE` and a right copy rewriting the second
+- WHEN they are merged
+- THEN the merged card carries both edits and nothing is reported
 
 ### Requirement: A change both sides made is never a conflict
 

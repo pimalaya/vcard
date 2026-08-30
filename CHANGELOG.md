@@ -6,11 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the collision preference: the `prefer` field on `VcardMerge` and the `VcardMergeSide` enum. The left side is git's `ours` and always wins; the right side is `theirs`.
+
+  The split was argued as two separately answered questions, the baseline being about bytes and the winner about policy, but no caller ever answered them differently: tCard and neverest both passed `Left`, and nothing in the ecosystem passed `Right`. Git already names the arrangement and everybody reads it the same way, so it is the convention rather than a switch with one setting. Hard-coding it also retires a mechanism that had quietly become unreachable: a parameter or an addition could only replace the one it beat while the right side was able to win, so the merged card now simply keeps the left side's and reports the collision. An update still beats a removal whichever side it came from, which was never the caller's to invert, and a caller wanting the other value still has both actions in the report.
+
 ### Added
 
 - Added the `identity` field on `VcardPropPath`, naming which member of a group of same-named properties an action addresses.
 
-- Added `tree::merge::VcardMerge`, a struct carrying the three cards and a collision preference, with a `merge` method replacing the free `merge` function.
+- Added `tree::merge::VcardMerge`, a struct carrying the three cards, with a `merge` method replacing the free `merge` function.
 
   The free function stays as a deprecated shim over it, keeping the left preference, so an existing caller keeps building. It is due for removal once its callers, tCard and neverest among them, build the struct instead.
 
@@ -37,6 +43,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   A card exported by Apple, iOS or Google folds heavily, so an untouched round trip used to rewrite every folded line of it. Every layer above the parser still sees one logical line, and every one of the 146 corpus fixtures now comes back identical.
 
 ### Fixed
+
+- Fixed the merge collapsing two parameters of one name into one field, so a side's edit of the second was dropped and a conflict was reported where the two sides had touched nothing in common.
+
+  A property may write one parameter name more than once, `TEL;TYPE=work;TYPE=voice` being the RFC 2426 section 4 example, and the field an action occupied was keyed on the parameter name alone. A side rewriting the first `TYPE` and a side rewriting the second therefore contested one field: the preferred side won it, and the other side's edit never reached the merged card. Each occurrence is now a field of its own, addressed by its name and by its position among the property's parameters of that name, so both edits land and neither is reported. The five parameter-carrying actions (`ParamAdded`, `ParamRemoved`, `ParamChanged`, `ParamItemAdded`, `ParamItemRemoved`) carry that position in a new `index` field.
+
+- Fixed a whole-value change reporting a payload truncated at the value's first `;`, which could make its old and its new read the same.
+
+  Two values are compared on their raw nodes, which is what makes a change past the first `;`-component visible at all, but the reported action was built from the decoded values, and a non-structured value decodes its first `;`-component alone. A `NOTE:a;b` changed to `NOTE:a;CHANGED` came back as `ValueChanged { old: Text("a"), new: Text("a") }`, leaving a caller resolving the report unable to see either value, while the merged bytes were right throughout. A value whose decoding does not say what its node says is now reported as the node's raw components (`VcardValue::Unknown`), so the report says what the merged card carries.
+
+- A URI value was truncated at its first `;`, and escaped on the way back out.
+
+  RFC 6350 section 4.2 gives a URI no structure and no escaping, but the codec read it as a structured value and kept only the first `;`-component, so `PHOTO:data:image/png;base64,AAAA` decoded to `data:image/png` and the payload was gone. Encoding then escaped the semicolon it had just used as a separator, so a value that did survive decoding did not survive its own round trip. A URI is now read whole and written back exactly as it is held, which is also what makes an inline data URI comparable between two sides of a merge.
+
+
+- A phone number or an email address edited differently on both sides was kept twice instead of being reported as a collision.
+
+  A property that may repeat and whose value names a thing outside the card is identified by that value, so the matching cannot see such a property change: it reads the edit as the old instance leaving and a new one arriving. Two arrivals then merged as a set, which is right for two additions and wrong for one instance edited two ways, and the card came back holding both numbers with nothing recorded against them. Two arrivals standing over one departure both sides agreed on are now a collision, resolved for the preferred side like any other, while two arrivals over nothing are still two additions and still merge as a set.
 
 - Fixed the three-way merge losing a value edit past the first `;` or `,` of a non-structured value, silently.
 

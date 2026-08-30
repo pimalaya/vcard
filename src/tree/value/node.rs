@@ -163,6 +163,42 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
+    /// Decode the whole value as one string, its `;` and `,` kept literal.
+    ///
+    /// For a value the specification gives no structure of its own, a URI
+    /// above all: its semicolon separates nothing (RFC 6350 section 4.2), so
+    /// reading one component alone truncates `data:text/plain;base64,AAA` at
+    /// the media type and drops the payload.
+    pub fn decode_joined(&self) -> Cow<'_, str> {
+        match self.component_count() {
+            0 => Cow::Borrowed(""),
+            1 => self.decode_joined_at(0),
+            count => {
+                let mut out = String::new();
+
+                for i in 0..count {
+                    if i > 0 {
+                        out.push(';');
+                    }
+
+                    out.push_str(&self.decode_joined_at(i));
+                }
+
+                Cow::Owned(out)
+            }
+        }
+    }
+
+    /// Wrap owned value bytes unsplit, so they go back on the wire exactly as
+    /// given. Backs the value kinds that carry no escaping of their own.
+    pub(crate) fn from_raw(bytes: Vec<u8>, escaper: VcardEscaper) -> VcardValueNode<'static> {
+        VcardValueNode {
+            raw: Some(Cow::Owned(bytes)),
+            components: Vec::new(),
+            escaper,
+        }
+    }
+
     /// The raw (still-escaped) bytes of the first component's first value, for
     /// the simple single-value lines (the envelope values and diagnostics).
     pub(crate) fn first_value_bytes(&self) -> &[u8] {

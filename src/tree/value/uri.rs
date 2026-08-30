@@ -1,11 +1,12 @@
 //! # URI value codec (RFC 6350 4.2)
 //!
-//! [`VcardCodec`] for a URI value. A URI's comma is literal, not a list
-//! separator, so the whole component is kept (not truncated at `,`).
+//! [`VcardCodec`] for a URI value. RFC 6350 section 4.2 gives a URI no
+//! escaping and no structure, so its `;` and `,` are part of the reference:
+//! the whole value is read, and written back exactly as it is held.
 
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::scalar_node, mode::VcardEscaper},
+        codec::{VcardCodec, encode::verbatim_node, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::uri::VcardUri,
@@ -13,10 +14,10 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardUri<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardUri(node.decode_joined_at(0))
+        VcardUri(node.decode_joined())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        scalar_node(&self.0, escaper)
+        verbatim_node(&self.0, escaper)
     }
 }

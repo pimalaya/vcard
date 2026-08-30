@@ -12,17 +12,18 @@
 //! ([`crate::tree::value`]), so every field the right side did not touch keeps
 //! its exact bytes.
 //!
-//! ## The baseline side and the winning side
+//! ## Ours and theirs
 //!
-//! Which side supplies the baseline and which side wins a collision are two
-//! questions, and they are answered separately. The baseline is a question
-//! about bytes: it decides whose folding, whose parameter casing and whose
-//! property order come out untouched, so a caller answers it with the version
-//! it would rather not churn. The winner is a question about policy: it decides
-//! whose value survives where two people wrote different things into one field,
-//! so a caller answers it with what it knows about those two people.
-//! [`prefer`](VcardMerge::prefer) states the second, and left alone it keeps
-//! the left side winning, as a merge has always done.
+//! The left side is git's `ours` and the right side is git's `theirs`. The
+//! left side supplies the baseline, so its folding, its parameter casing and
+//! its property order come out untouched, and it keeps its own value where
+//! both sides wrote one into a single field.
+//!
+//! One side answers both questions on purpose. A caller reaches for a merge
+//! holding the version it is merging into, and that version is the one it
+//! would rather not churn and the one it means to keep. Every collision is
+//! reported either way, so a caller wanting the other value puts it to
+//! somebody rather than asking the merge to guess.
 //!
 //! ## What is matched with what
 //!
@@ -54,14 +55,21 @@
 //! parameter, one item of a list parameter. List items merge as a set (both
 //! sides' additions and removals all apply), so they never conflict, and the
 //! items of a `TYPE` or `PID` parameter compare as one too, since RFC 6350
-//! gives them no order.
+//! gives them no order. One parameter name may be written more than once
+//! (`TEL;TYPE=work;TYPE=voice`, RFC 2426 section 4), and each occurrence is a
+//! field of its own, so two sides rewriting two of them agree.
+//!
+//! A whole-value change reports what the two nodes say rather than what they
+//! decode to, so a value the model reads truncated comes back as its raw
+//! components instead of as a decoded value missing everything past its first
+//! `;`-component.
 //!
 //! Divergent changes to the same field are conflicts ([`VcardMergeConflict`]):
-//! the preferred side's action wins in the merged card, the left side's unless
-//! the caller says otherwise, except when a removal meets an update, where the
-//! update wins at every granularity and whatever the preference (data survives
-//! over silent loss). A change both sides made is no conflict at all. Every
-//! conflict is reported either way, so a caller can resolve differently.
+//! the left side's action wins in the merged card, except when a removal meets
+//! an update, where the update wins at every granularity and whichever side it
+//! came from (data survives over silent loss). A change both sides made is no
+//! conflict at all. Every conflict is reported, so a caller can resolve
+//! differently.
 //!
 //! The merged card keeps the left card's `VERSION`; a version change is not
 //! reconciled, but a value replayed from a card of another version is
@@ -84,7 +92,7 @@ use crate::{
     param::VcardParam,
     prop::{VcardProp, VcardPropKind},
     tree::{
-        codec::{mode::VcardEscaper, unescape::unescape},
+        codec::{VcardCodec, mode::VcardEscaper, unescape::unescape},
         cst::VcardCst,
         leaf::VcardLeaf,
         line::VcardLine,
@@ -92,39 +100,23 @@ use crate::{
         prop::{cardinality::VcardPropCardinality, spec::prop_spec},
         value::node::VcardValueNode,
     },
-    value::{VcardValue, VcardValueKind},
+    value::{VcardValue, VcardValueKind, VcardValueUnknown},
     version::VcardVersion,
 };
 
 /// A three-way merge waiting to run.
 ///
-/// The three cards, plus which side wins a collision. See the module
-/// documentation for the matching, granularity and conflict rules.
+/// See the module documentation for the matching, granularity and conflict
+/// rules.
 pub struct VcardMerge<'a> {
     /// The common ancestor both sides were derived from.
     pub base: &'a VcardCst<'a>,
-    /// One side. Its bytes are the ones the merged card is built from, which
-    /// is a statement about bytes alone: which side wins a collision is
-    /// [`prefer`](Self::prefer).
+    /// The side being merged into, git's `ours`. The merged card is built from
+    /// its bytes, and a collision neither side settles keeps its value.
     pub left: &'a VcardCst<'a>,
-    /// The other side. Its changes are replayed onto the left's bytes.
+    /// The side being merged in, git's `theirs`. Its changes are replayed onto
+    /// the left's bytes.
     pub right: &'a VcardCst<'a>,
-    /// Whose value the merged card carries where both sides changed one field
-    /// to different things. The left side by default, which is what a merge
-    /// has always done. It decides that case and no other: a field one side
-    /// alone touched is still taken from that side, and an update still beats
-    /// a removal whichever side it came from.
-    pub prefer: VcardMergeSide,
-}
-
-/// One of the two sides of a merge.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum VcardMergeSide {
-    /// The side the merged card is built from, whose untouched bytes it keeps.
-    #[default]
-    Left,
-    /// The side whose actions are replayed onto the merged card.
-    Right,
 }
 
 impl<'a> VcardMerge<'a> {
@@ -154,12 +146,13 @@ impl<'a> VcardMerge<'a> {
 
         let mut merger = Merger {
             escaper: VcardEscaper::for_version(self.left.version()),
-            prefer: self.prefer,
             left: self.left,
             right: self.right,
+            base_insts: &base_insts,
             left_insts: &left_insts,
             right_insts: &right_insts,
             left_matching: &left_matching,
+            right_matching: &right_matching,
             left_ops: &left_ops,
             merged: self.left.clone(),
             conflicts: Vec::new(),
@@ -183,23 +176,6 @@ impl<'a> VcardMerge<'a> {
     }
 }
 
-/// Three-way merge `left` and `right` against their common `base`, keeping the
-/// left side's value where both sides wrote one.
-#[deprecated(note = "build a VcardMerge and call merge on it")]
-pub fn merge<'a>(
-    base: &'a VcardCst<'a>,
-    left: &'a VcardCst<'a>,
-    right: &'a VcardCst<'a>,
-) -> VcardMergeReport<'a> {
-    VcardMerge {
-        base,
-        left,
-        right,
-        prefer: VcardMergeSide::Left,
-    }
-    .merge()
-}
-
 /// The outcome of a three-way [`VcardMerge::merge`]: the merged card, each
 /// side's actions relative to the base, and the conflicts between them.
 #[derive(Clone, Debug)]
@@ -217,9 +193,9 @@ pub struct VcardMergeReport<'a> {
 
 /// Two actions that collided on the same field, one per side.
 ///
-/// The merged card kept the preferred side's outcome, the left one unless the
-/// caller said otherwise, except for a removal against an update, where the
-/// update's outcome was kept (whichever side it came from).
+/// The merged card kept the left side's outcome, except for a removal against
+/// an update, where the update's outcome was kept (whichever side it came
+/// from).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VcardMergeConflict<'a> {
     /// The left card's action on the field.
@@ -276,9 +252,11 @@ pub enum VcardMergeAction<'a> {
     ValueChanged {
         /// The changed base instance.
         at: VcardPropPath<'a>,
-        /// The base value.
+        /// The base value, as [`Unknown`](VcardValue::Unknown) raw components
+        /// where the model reads the node truncated.
         old: VcardValue<'a>,
-        /// The changed value.
+        /// The changed value, as [`Unknown`](VcardValue::Unknown) raw
+        /// components where the model reads the node truncated.
         new: VcardValue<'a>,
     },
     /// One `;`-component of a structured value (`N`, `ADR`, `GENDER`, `ORG`,
@@ -311,6 +289,9 @@ pub enum VcardMergeAction<'a> {
     ParamAdded {
         /// The changed base instance.
         at: VcardPropPath<'a>,
+        /// The parameter's position among the property's parameters of that
+        /// name, since one name may be written more than once.
+        index: usize,
         /// The added parameter, decoded.
         param: VcardParam<'a>,
     },
@@ -318,6 +299,9 @@ pub enum VcardMergeAction<'a> {
     ParamRemoved {
         /// The changed base instance.
         at: VcardPropPath<'a>,
+        /// The parameter's position among the property's parameters of that
+        /// name, since one name may be written more than once.
+        index: usize,
         /// The removed parameter, decoded.
         param: VcardParam<'a>,
     },
@@ -325,6 +309,9 @@ pub enum VcardMergeAction<'a> {
     ParamChanged {
         /// The changed base instance.
         at: VcardPropPath<'a>,
+        /// The parameter's position among the property's parameters of that
+        /// name, since one name may be written more than once.
+        index: usize,
         /// The base parameter.
         old: VcardParam<'a>,
         /// The changed parameter.
@@ -334,6 +321,9 @@ pub enum VcardMergeAction<'a> {
     ParamItemAdded {
         /// The changed base instance.
         at: VcardPropPath<'a>,
+        /// The parameter's position among the property's parameters of that
+        /// name, since one name may be written more than once.
+        index: usize,
         /// The parameter's canonical name.
         param: Cow<'a, str>,
         /// The added item.
@@ -343,6 +333,9 @@ pub enum VcardMergeAction<'a> {
     ParamItemRemoved {
         /// The changed base instance.
         at: VcardPropPath<'a>,
+        /// The parameter's position among the property's parameters of that
+        /// name, since one name may be written more than once.
+        index: usize,
         /// The parameter's canonical name.
         param: Cow<'a, str>,
         /// The removed item.
@@ -351,17 +344,6 @@ pub enum VcardMergeAction<'a> {
 }
 
 impl VcardMergeAction<'_> {
-    /// Whether the action takes something away.
-    fn is_removal(&self) -> bool {
-        matches!(
-            self,
-            Self::PropRemoved { .. }
-                | Self::ValueItemRemoved { .. }
-                | Self::ParamRemoved { .. }
-                | Self::ParamItemRemoved { .. }
-        )
-    }
-
     /// The field the action occupies, the granularity at which two sides'
     /// actions collide.
     fn slot(&self) -> Slot {
@@ -370,13 +352,21 @@ impl VcardMergeAction<'_> {
             Self::ValueChanged { .. } => Slot::Value,
             Self::ValueComponentChanged { component, .. } => Slot::Component(*component),
             Self::ValueItemAdded { .. } | Self::ValueItemRemoved { .. } => Slot::Items,
-            Self::ParamAdded { param, .. } | Self::ParamRemoved { param, .. } => {
-                Slot::Param(param_key(param))
+            Self::ParamAdded { index, param, .. } | Self::ParamRemoved { index, param, .. } => {
+                Slot::Param {
+                    name: param_key(param),
+                    at: *index,
+                }
             }
-            Self::ParamChanged { new, .. } => Slot::Param(param_key(new)),
-            Self::ParamItemAdded { param, .. } | Self::ParamItemRemoved { param, .. } => {
-                Slot::ParamItems(param.to_ascii_uppercase())
-            }
+            Self::ParamChanged { index, new, .. } => Slot::Param {
+                name: param_key(new),
+                at: *index,
+            },
+            Self::ParamItemAdded { index, param, .. }
+            | Self::ParamItemRemoved { index, param, .. } => Slot::ParamItems {
+                name: param.to_ascii_uppercase(),
+                at: *index,
+            },
         }
     }
 }
@@ -393,10 +383,21 @@ enum Slot {
     /// The items of a list value (item edits merge as a set, so they never
     /// collide).
     Items,
-    /// One whole parameter, by key.
-    Param(String),
-    /// The items of a list parameter, by key.
-    ParamItems(String),
+    /// One whole parameter, by key and by its position among the property's
+    /// parameters of that key.
+    Param {
+        /// The parameter key.
+        name: String,
+        /// The position among the property's parameters of that key.
+        at: usize,
+    },
+    /// The items of a list parameter, by key and position.
+    ParamItems {
+        /// The parameter key.
+        name: String,
+        /// The position among the property's parameters of that key.
+        at: usize,
+    },
 }
 
 impl Slot {
@@ -404,12 +405,29 @@ impl Slot {
     /// `right`. Two item edits never collide: they merge as a set. An item
     /// edit does collide with a whole-value change on the other side, either
     /// way round, since one of the two values has to go.
+    ///
+    /// Two parameters of one name are two slots: RFC 2426 section 4 writes
+    /// `TEL;TYPE=work;TYPE=voice`, and a side rewriting the first contests
+    /// nothing a side rewriting the second wrote.
     fn collides_with(&self, right: &Slot) -> bool {
         match (self, right) {
             (Self::Value, Self::Value | Self::Component(_) | Self::Items) => true,
             (Self::Component(_) | Self::Items, Self::Value) => true,
             (Self::Component(left), Self::Component(right)) => left == right,
-            (Self::Param(left) | Self::ParamItems(left), Self::Param(right)) => left == right,
+            (
+                Self::Param {
+                    name: left,
+                    at: left_at,
+                }
+                | Self::ParamItems {
+                    name: left,
+                    at: left_at,
+                },
+                Self::Param {
+                    name: right,
+                    at: right_at,
+                },
+            ) => left == right && left_at == right_at,
             _ => false,
         }
     }
@@ -813,10 +831,27 @@ fn diff_pair<'a>(
         }
         (old, new) => out.push(VcardMergeAction::ValueChanged {
             at: at.clone(),
-            old: old.clone(),
-            new: new.clone(),
+            old: whole(old, old_node),
+            new: whole(new, new_node),
         }),
     }
+}
+
+/// What a value node says, reported whole.
+///
+/// A decoded value reads its own kind's shape, and the shape of every
+/// unstructured kind is one `;`-component, so the rest of the node never
+/// reaches the decoded value: `NOTE:a;b` decodes to the text `a`, and two
+/// notes differing past their first component decode alike, which would report
+/// a change whose old and new are the same truncated text. A value whose
+/// decoding does not say what its node says is reported as the node's raw
+/// components instead, which is what the merged bytes carry.
+fn whole<'a>(value: &VcardValue<'a>, node: &'a VcardValueNode<'a>) -> VcardValue<'a> {
+    if value_eq(&value.encode(node.escaper), node) {
+        return value.clone();
+    }
+
+    VcardValue::Unknown(VcardValueUnknown::decode(node))
 }
 
 /// Whether a value kind is structured into `;`-components that carry
@@ -905,9 +940,11 @@ fn raw_value(node: &VcardValueNode<'_>) -> Vec<u8> {
     out
 }
 
-/// Diff two matched properties' parameter lists, keyed by parameter name. A
-/// single `TYPE` / `PID` on both sides diffs per item (they are sets);
-/// everything else diffs as whole parameters.
+/// Diff two matched properties' parameter lists, keyed by parameter name and,
+/// within a name, paired by position: one name may be written more than once
+/// (RFC 2426 section 4 gives `TEL;TYPE=work;TYPE=voice`), and each occurrence
+/// is a field of its own. A single `TYPE` / `PID` on both sides diffs per item
+/// (they are sets); everything else diffs as whole parameters.
 fn diff_params<'a>(
     old: &[VcardParam<'a>],
     new: &[VcardParam<'a>],
@@ -938,6 +975,7 @@ fn diff_params<'a>(
                     for item in removed {
                         out.push(VcardMergeAction::ParamItemRemoved {
                             at: at.clone(),
+                            index: 0,
                             param: Cow::Owned(key.clone()),
                             item,
                         });
@@ -945,6 +983,7 @@ fn diff_params<'a>(
                     for item in added {
                         out.push(VcardMergeAction::ParamItemAdded {
                             at: at.clone(),
+                            index: 0,
                             param: Cow::Owned(key.clone()),
                             item,
                         });
@@ -960,20 +999,23 @@ fn diff_params<'a>(
             if olds[i] != news[i] {
                 out.push(VcardMergeAction::ParamChanged {
                     at: at.clone(),
+                    index: i,
                     old: olds[i].clone(),
                     new: news[i].clone(),
                 });
             }
         }
-        for &param in &news[shared..] {
+        for (i, &param) in news.iter().enumerate().skip(shared) {
             out.push(VcardMergeAction::ParamAdded {
                 at: at.clone(),
+                index: i,
                 param: param.clone(),
             });
         }
-        for &param in &olds[shared..] {
+        for (i, &param) in olds.iter().enumerate().skip(shared) {
             out.push(VcardMergeAction::ParamRemoved {
                 at: at.clone(),
+                index: i,
                 param: param.clone(),
             });
         }
@@ -992,36 +1034,47 @@ fn same_change(left: &VcardMergeAction<'_>, right: &VcardMergeAction<'_>) -> boo
         (
             ParamAdded {
                 at: left_at,
+                index: left_index,
                 param: left,
             },
             ParamAdded {
                 at: right_at,
+                index: right_index,
                 param: right,
             },
         )
         | (
             ParamRemoved {
                 at: left_at,
+                index: left_index,
                 param: left,
             },
             ParamRemoved {
                 at: right_at,
+                index: right_index,
                 param: right,
             },
-        ) => left_at == right_at && param_eq(left, right),
+        ) => left_at == right_at && left_index == right_index && param_eq(left, right),
 
         (
             ParamChanged {
                 at: left_at,
+                index: left_index,
                 old: left_old,
                 new: left_new,
             },
             ParamChanged {
                 at: right_at,
+                index: right_index,
                 old: right_old,
                 new: right_new,
             },
-        ) => left_at == right_at && param_eq(left_old, right_old) && param_eq(left_new, right_new),
+        ) => {
+            left_at == right_at
+                && left_index == right_index
+                && param_eq(left_old, right_old)
+                && param_eq(left_new, right_new)
+        }
 
         (left, right) => left == right,
     }
@@ -1086,12 +1139,13 @@ fn list_diff<'a>(
 /// and additions are deferred to [`finish`](Self::finish)).
 struct Merger<'o, 'a> {
     escaper: VcardEscaper,
-    prefer: VcardMergeSide,
     left: &'a VcardCst<'a>,
     right: &'a VcardCst<'a>,
+    base_insts: &'o [Instance<'a>],
     left_insts: &'o [Instance<'a>],
     right_insts: &'o [Instance<'a>],
     left_matching: &'o Matching,
+    right_matching: &'o Matching,
     left_ops: &'o [(Target, VcardMergeAction<'a>)],
     merged: VcardCst<'a>,
     conflicts: Vec<VcardMergeConflict<'a>>,
@@ -1142,12 +1196,8 @@ impl<'a> Merger<'_, 'a> {
 
                 if let Some(colliding) = self.colliding(b, &Slot::Value) {
                     let colliding = colliding.clone();
-                    let replaces = self.replaces(&colliding, action);
                     self.record(colliding, action);
-
-                    if !replaces {
-                        return;
-                    }
+                    return;
                 }
 
                 self.merged.props[line].value = transcode(right_value, self.escaper);
@@ -1160,12 +1210,8 @@ impl<'a> Merger<'_, 'a> {
 
                 if let Some(colliding) = self.colliding(b, &Slot::Component(*component)) {
                     let colliding = colliding.clone();
-                    let replaces = self.replaces(&colliding, action);
                     self.record(colliding, action);
-
-                    if !replaces {
-                        return;
-                    }
+                    return;
                 }
 
                 self.merged.props[line].value.set_at(*component, new);
@@ -1174,12 +1220,8 @@ impl<'a> Merger<'_, 'a> {
             VcardMergeAction::ValueItemAdded { item, .. } => {
                 if let Some(colliding) = self.colliding(b, &Slot::Items) {
                     let colliding = colliding.clone();
-                    let replaces = self.replaces(&colliding, action);
                     self.record(colliding, action);
-
-                    if !replaces {
-                        return;
-                    }
+                    return;
                 }
 
                 let value = &mut self.merged.props[line].value;
@@ -1203,12 +1245,8 @@ impl<'a> Merger<'_, 'a> {
 
                 if let Some(colliding) = self.colliding(b, &Slot::Items) {
                     let colliding = colliding.clone();
-                    let replaces = self.replaces(&colliding, action);
                     self.record(colliding, action);
-
-                    if !replaces {
-                        return;
-                    }
+                    return;
                 }
 
                 let value = &mut self.merged.props[line].value;
@@ -1222,7 +1260,7 @@ impl<'a> Merger<'_, 'a> {
                 }
             }
 
-            VcardMergeAction::ParamAdded { param, .. } => {
+            VcardMergeAction::ParamAdded { index, param, .. } => {
                 if self.already_made(b, action) {
                     return;
                 }
@@ -1230,15 +1268,17 @@ impl<'a> Merger<'_, 'a> {
                 // NOTE: an update beats a removal here as it does at property
                 // granularity, so the addition still lands when all the left
                 // side did was remove the parameter.
-                let mut beat = false;
+                let slot = Slot::Param {
+                    name: param_key(param),
+                    at: *index,
+                };
 
-                if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(param))) {
-                    let colliding = colliding.clone();
+                if let Some(colliding) = self.colliding(b, &slot) {
                     let removed = matches!(colliding, VcardMergeAction::ParamRemoved { .. });
-                    beat = !removed && self.replaces(&colliding, action);
+                    let colliding = colliding.clone();
                     self.record(colliding, action);
 
-                    if !removed && !beat {
+                    if !removed {
                         return;
                     }
                 }
@@ -1247,31 +1287,23 @@ impl<'a> Merger<'_, 'a> {
                     return;
                 };
 
-                // NOTE: the parameter this addition beat is replaced where it
-                // stood, so the winner does not join the loser on the line.
-                let beaten = beat
-                    .then(|| param_position(&self.merged.props[line], &param_key(param)))
-                    .flatten();
-
-                match beaten {
-                    Some(i) => self.merged.props[line].params[i] = node,
-                    None => self.merged.props[line].params.push(node),
-                }
+                self.merged.props[line].params.push(node);
             }
 
-            VcardMergeAction::ParamRemoved { param, .. } => {
+            VcardMergeAction::ParamRemoved { index, param, .. } => {
                 if self.already_made(b, action) {
                     return;
                 }
 
-                if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(param))) {
-                    let colliding = colliding.clone();
-                    let replaces = self.replaces(&colliding, action);
-                    self.record(colliding, action);
+                let slot = Slot::Param {
+                    name: param_key(param),
+                    at: *index,
+                };
 
-                    if !replaces {
-                        return;
-                    }
+                if let Some(colliding) = self.colliding(b, &slot) {
+                    let colliding = colliding.clone();
+                    self.record(colliding, action);
+                    return;
                 }
 
                 let position = self.merged.props[line]
@@ -1284,35 +1316,33 @@ impl<'a> Merger<'_, 'a> {
                 }
             }
 
-            VcardMergeAction::ParamChanged { old, new, .. } => {
+            VcardMergeAction::ParamChanged {
+                index, old, new, ..
+            } => {
                 if self.already_made(b, action) {
                     return;
                 }
 
                 let mut restore = false;
-                let mut beat = false;
+                let slot = Slot::Param {
+                    name: param_key(new),
+                    at: *index,
+                };
 
-                if let Some(colliding) = self.colliding(b, &Slot::Param(param_key(new))) {
+                if let Some(colliding) = self.colliding(b, &slot) {
                     let colliding = colliding.clone();
                     restore = matches!(colliding, VcardMergeAction::ParamRemoved { .. });
-                    beat = !restore && self.replaces(&colliding, action);
                     self.record(colliding, action);
 
-                    if !restore && !beat {
+                    if !restore {
                         return;
                     }
                 }
 
-                // NOTE: the parameter this update beat holds neither the base
-                // value nor the right side's, so it is found by its key.
                 let position = self.merged.props[line]
                     .params
                     .iter()
-                    .position(|node| node.decode() == *old)
-                    .or_else(|| {
-                        beat.then(|| param_position(&self.merged.props[line], &param_key(new)))
-                            .flatten()
-                    });
+                    .position(|node| node.decode() == *old);
 
                 if let Some(node) = self.right_param_node(r, new) {
                     match (position, restore) {
@@ -1325,15 +1355,17 @@ impl<'a> Merger<'_, 'a> {
                 }
             }
 
-            VcardMergeAction::ParamItemAdded { param, item, .. } => {
+            VcardMergeAction::ParamItemAdded {
+                index, param, item, ..
+            } => {
                 // NOTE: a parameter value is read through the value unescaper
                 // and written back verbatim, so the item has to land as the
                 // right card spelled it: written decoded, a `\n` would become
                 // a real line break and cut the line in two.
-                let leaf = self.right_param_item(r, param, item);
+                let leaf = self.right_param_item(r, param, *index, item);
 
-                let Some(node) = param_node_mut(&mut self.merged.props[line], param) else {
-                    self.restore_param(b, r, param, action);
+                let Some(node) = param_node_mut(&mut self.merged.props[line], param, *index) else {
+                    self.restore_param(b, r, param, *index, action);
                     return;
                 };
 
@@ -1349,15 +1381,17 @@ impl<'a> Merger<'_, 'a> {
                 }
             }
 
-            VcardMergeAction::ParamItemRemoved { param, item, .. } => {
+            VcardMergeAction::ParamItemRemoved {
+                index, param, item, ..
+            } => {
                 // NOTE: as above, a parameter may hold one item twice, and
                 // `TYPE=work,,` is exactly that.
                 if self.already_made(b, action) {
                     return;
                 }
 
-                let Some(node) = param_node_mut(&mut self.merged.props[line], param) else {
-                    self.restore_param(b, r, param, action);
+                let Some(node) = param_node_mut(&mut self.merged.props[line], param, *index) else {
+                    self.restore_param(b, r, param, *index, action);
                     return;
                 };
 
@@ -1396,6 +1430,42 @@ impl<'a> Merger<'_, 'a> {
         self.removals.push(line);
     }
 
+    /// The left arrival standing over the same base instance as the right
+    /// arrival `s`, when both sides took that instance away.
+    ///
+    /// A property whose identity is its own value cannot be seen to change, so
+    /// an edit of one is reported as a departure and an arrival. Within one
+    /// side those pair off in order, and two arrivals over one departure both
+    /// sides agreed on are one instance edited twice, which collides. An
+    /// arrival over a departure only one side made replaces nothing the other
+    /// side also replaced, so it merges as a set.
+    fn paired_arrival(&self, key: &str, s: usize) -> Option<usize> {
+        let gone = |matching: &Matching| {
+            matching
+                .removed
+                .iter()
+                .copied()
+                .filter(|b| self.base_insts[*b].key == key)
+                .collect::<Vec<_>>()
+        };
+        let new = |matching: &Matching, insts: &[Instance<'a>]| {
+            matching
+                .added
+                .iter()
+                .copied()
+                .filter(|a| insts[*a].key == key)
+                .collect::<Vec<_>>()
+        };
+
+        let rank = new(self.right_matching, self.right_insts)
+            .iter()
+            .position(|&a| a == s)?;
+        let base = *gone(self.right_matching).get(rank)?;
+        let ours = gone(self.left_matching).iter().position(|&b| b == base)?;
+
+        new(self.left_matching, self.left_insts).get(ours).copied()
+    }
+
     /// Replay a right-side property addition.
     fn apply_added(&mut self, s: usize, action: &VcardMergeAction<'a>) {
         let VcardMergeAction::PropAdded { .. } = action else {
@@ -1412,30 +1482,32 @@ impl<'a> Merger<'_, 'a> {
             return;
         }
 
-        // NOTE: both sides added different content under a name allowed at
-        // most once: the preferred side's copy is the one the card keeps, and
-        // the winner replaces the loser rather than joining it, since the name
-        // may not appear twice.
-        if at_most_one(&inst.key, self.merged.version()) {
+        // NOTE: both sides wrote over one slot: a name allowed at most once,
+        // or an instance both sides took away and each replaced. The left
+        // side's copy is the one the card keeps, and the loser does not join
+        // it on the card.
+        let contested = self.paired_arrival(&inst.key, s).or_else(|| {
+            match at_most_one(&inst.key, self.merged.version()) {
+                true => self
+                    .left_matching
+                    .added
+                    .iter()
+                    .copied()
+                    .find(|l| self.left_insts[*l].key == inst.key),
+                false => None,
+            }
+        });
+
+        if let Some(l) = contested {
             let colliding = self
                 .left_ops
                 .iter()
-                .find(|(target, _)| {
-                    matches!(target, Target::Added(l) if self.left_insts[*l].key == inst.key)
-                })
-                .map(|(target, action)| (target, action.clone()));
+                .find(|(target, _)| matches!(target, Target::Added(x) if *x == l))
+                .map(|(_, action)| action.clone());
 
-            if let Some((target, colliding)) = colliding {
-                let replaces = self.replaces(&colliding, action);
+            if let Some(colliding) = colliding {
                 self.record(colliding, action);
-
-                if !replaces {
-                    return;
-                }
-
-                if let Target::Added(l) = target {
-                    self.removals.push(self.left_insts[*l].line);
-                }
+                return;
             }
         }
 
@@ -1515,17 +1587,6 @@ impl<'a> Merger<'_, 'a> {
             .map(|(_, action)| action)
     }
 
-    /// Whether a right action a left one collided with still lands.
-    ///
-    /// The caller's preference decides, except where the right action takes
-    /// away what the left one wrote: keeping data beats losing it silently,
-    /// which is not the caller's to invert.
-    fn replaces(&self, left: &VcardMergeAction<'a>, right: &VcardMergeAction<'a>) -> bool {
-        let scraps = right.is_removal() && !left.is_removal();
-
-        !scraps && self.prefer == VcardMergeSide::Right
-    }
-
     /// The left side's removal action of a base instance.
     fn left_removed_action(&self, b: usize) -> VcardMergeAction<'a> {
         self.left_ops
@@ -1543,18 +1604,27 @@ impl<'a> Merger<'_, 'a> {
         line
     }
 
-    /// The right card's raw leaf for one decoded item of a list parameter.
+    /// The right card's raw leaf for one decoded item of the `index`th list
+    /// parameter of that name.
     ///
     /// The item was decoded from that very node, so the leaf is there; without
     /// it there is no wire form to write, and the decoded text is not one: a
     /// parameter value is unescaped on the way in and copied verbatim on the
     /// way out, so writing it back decoded can put a line break in the head.
-    fn right_param_item(&self, r: usize, param: &str, item: &str) -> Option<VcardLeaf<'a>> {
+    fn right_param_item(
+        &self,
+        r: usize,
+        param: &str,
+        index: usize,
+        item: &str,
+    ) -> Option<VcardLeaf<'a>> {
         self.right.props[self.right_insts[r].line]
             .params
             .iter()
             .filter(|node| node.name.get().eq_ignore_ascii_case(param))
-            .flat_map(|node| node.values.iter())
+            .nth(index)?
+            .values
+            .iter()
             .find(|value| unescape(value.get()) == item)
             .cloned()
     }
@@ -1572,14 +1642,22 @@ impl<'a> Merger<'_, 'a> {
     /// update beats the removal, so the right side's whole parameter comes
     /// back and the collision is reported. Without a left culprit there is
     /// nothing to restore over, and the edit is dropped.
-    fn restore_param(&mut self, b: usize, r: usize, param: &str, action: &VcardMergeAction<'a>) {
+    fn restore_param(
+        &mut self,
+        b: usize,
+        r: usize,
+        param: &str,
+        index: usize,
+        action: &VcardMergeAction<'a>,
+    ) {
         let key = param.to_ascii_uppercase();
         let culprit = self
             .left_ops_on(b)
             .find(|(_, action)| {
                 matches!(
                     action.slot(),
-                    Slot::Param(k) | Slot::ParamItems(k) if k == key,
+                    Slot::Param { name, at } | Slot::ParamItems { name, at }
+                        if name == key && at == index,
                 )
             })
             .map(|(_, action)| action.clone());
@@ -1591,7 +1669,8 @@ impl<'a> Merger<'_, 'a> {
         let node = self.right.props[self.right_insts[r].line]
             .params
             .iter()
-            .find(|node| node.name.get().eq_ignore_ascii_case(param))
+            .filter(|node| node.name.get().eq_ignore_ascii_case(param))
+            .nth(index)
             .cloned();
 
         if let Some(node) = node {
@@ -1657,22 +1736,17 @@ fn terminate_lines(cst: &mut VcardCst<'_>) {
     }
 }
 
-/// Where the first parameter of that key sits among a line's parameters.
-fn param_position(line: &VcardLine<'_>, key: &str) -> Option<usize> {
-    line.params
-        .iter()
-        .position(|node| param_key(&node.decode()) == key)
-}
-
-/// The first parameter node of a line whose name matches the given key,
+/// The `at`th parameter node of a line whose name matches the given key,
 /// mutably, for item-level replay.
 fn param_node_mut<'l, 'a>(
     line: &'l mut VcardLine<'a>,
     key: &str,
+    at: usize,
 ) -> Option<&'l mut VcardParamNode<'a>> {
     line.params
         .iter_mut()
-        .find(|node| node.name.get().eq_ignore_ascii_case(key))
+        .filter(|node| node.name.get().eq_ignore_ascii_case(key))
+        .nth(at)
 }
 
 /// Whether a property name may appear at most once in a card of the given
@@ -1690,15 +1764,32 @@ fn at_most_one(key: &str, version: VcardVersion) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
+    use alloc::{borrow::Cow, string::ToString};
 
-    use crate::tree::{
-        cst::VcardCst,
-        merge::{VcardMerge, VcardMergeAction, VcardMergeReport, VcardMergeSide},
+    use crate::{
+        tree::{
+            cst::VcardCst,
+            merge::{VcardMerge, VcardMergeAction, VcardMergeReport},
+        },
+        value::{VcardValue, VcardValueUnknown},
     };
 
     fn card(props: &str) -> alloc::string::String {
         alloc::format!("BEGIN:VCARD\r\nVERSION:4.0\r\n{props}END:VCARD\r\n")
+    }
+
+    fn components(components: &[&[&str]]) -> VcardValue<'static> {
+        let components = components
+            .iter()
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|value| Cow::Owned(value.to_string()))
+                    .collect()
+            })
+            .collect();
+
+        VcardValue::Unknown(VcardValueUnknown { components })
     }
 
     fn merge<'a>(
@@ -1706,28 +1797,7 @@ mod tests {
         left: &'a VcardCst<'a>,
         right: &'a VcardCst<'a>,
     ) -> VcardMergeReport<'a> {
-        VcardMerge {
-            base,
-            left,
-            right,
-            prefer: VcardMergeSide::Left,
-        }
-        .merge()
-    }
-
-    fn merge_preferring<'a>(
-        base: &'a VcardCst<'a>,
-        left: &'a VcardCst<'a>,
-        right: &'a VcardCst<'a>,
-        prefer: VcardMergeSide,
-    ) -> VcardMergeReport<'a> {
-        VcardMerge {
-            base,
-            left,
-            right,
-            prefer,
-        }
-        .merge()
+        VcardMerge { base, left, right }.merge()
     }
 
     #[test]
@@ -1805,6 +1875,30 @@ mod tests {
             &report.conflicts[0].right,
             VcardMergeAction::ValueChanged { at, .. } if at.name == "FN",
         ));
+    }
+
+    #[test]
+    fn a_value_change_past_the_first_component_reports_both_values() {
+        let base = card("NOTE:a;b\r\n");
+        let left = card("NOTE:a;b\r\n");
+        let right = card("NOTE:a;CHANGED\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(merged, card("NOTE:a;CHANGED\r\n"), "got: {merged}");
+        assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+
+        let VcardMergeAction::ValueChanged { old, new, .. } = &report.right[0] else {
+            panic!("expected a value change, got: {:?}", report.right[0]);
+        };
+
+        assert_eq!(old, &components(&[&["a"], &["b"]]));
+        assert_eq!(new, &components(&[&["a"], &["CHANGED"]]));
     }
 
     #[test]
@@ -1945,6 +2039,69 @@ mod tests {
         assert_eq!(report.conflicts.len(), 1);
     }
 
+    /// A repeatable property whose identity is its value cannot be seen to
+    /// change, so the matching reads an edit as a departure and an arrival.
+    /// Two arrivals over one agreed departure are one instance edited twice.
+    #[test]
+    fn divergent_edits_of_an_identity_keyed_property_conflict() {
+        let base = card("FN:A\r\nTEL:+1\r\n");
+        let left = card("FN:A\r\nTEL:+2\r\n");
+        let right = card("FN:A\r\nTEL:+3\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(report.conflicts.len(), 1, "{:?}", report.conflicts);
+        assert!(merged.contains("TEL:+2\r\n"), "got: {merged}");
+        assert!(
+            !merged.contains("TEL:+3\r\n"),
+            "the loser does not join the winner: {merged}",
+        );
+    }
+
+    /// Nothing departed, so the two arrivals are two additions and the set
+    /// keeps both. This is the case the collision rule must not swallow.
+    #[test]
+    fn divergent_additions_beside_an_untouched_instance_merge_as_a_set() {
+        let base = card("FN:A\r\nTEL:+1\r\n");
+        let left = card("FN:A\r\nTEL:+1\r\nTEL:+2\r\n");
+        let right = card("FN:A\r\nTEL:+1\r\nTEL:+3\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+        assert!(merged.contains("TEL:+2\r\n"), "got: {merged}");
+        assert!(merged.contains("TEL:+3\r\n"), "got: {merged}");
+    }
+
+    /// One side edited the instance and the other left it alone, so there is
+    /// no contest: the edit stands and the addition joins it.
+    #[test]
+    fn an_edit_on_one_side_alone_does_not_contest_the_other_s_addition() {
+        let base = card("FN:A\r\nTEL:+1\r\n");
+        let left = card("FN:A\r\nTEL:+2\r\n");
+        let right = card("FN:A\r\nTEL:+1\r\nTEL:+3\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+        assert!(merged.contains("TEL:+3\r\n"), "got: {merged}");
+    }
+
     #[test]
     fn an_identical_addition_lands_once() {
         let base = card("FN:X\r\n");
@@ -2034,6 +2191,34 @@ mod tests {
         assert!(matches!(
             &report.right[0],
             VcardMergeAction::ParamChanged { .. },
+        ));
+    }
+
+    #[test]
+    fn two_parameters_of_one_name_are_two_fields() {
+        // NOTE: RFC 2426 section 4 writes a repeated parameter name as
+        // `TEL;TYPE=work;TYPE=voice`, so the side rewriting the first
+        // parameter contests nothing the side rewriting the second wrote.
+        let base = card("TEL;TYPE=work;TYPE=voice:+1\r\n");
+        let left = card("TEL;TYPE=home;TYPE=voice:+1\r\n");
+        let right = card("TEL;TYPE=work;TYPE=fax:+1\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(
+            merged,
+            card("TEL;TYPE=home;TYPE=fax:+1\r\n"),
+            "got: {merged}",
+        );
+        assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+        assert!(matches!(
+            &report.right[0],
+            VcardMergeAction::ParamChanged { index: 1, .. },
         ));
     }
 
@@ -2164,41 +2349,10 @@ mod tests {
         assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
     }
 
+    /// A field only one side touched is taken from that side, whether or not
+    /// another field of the same card collided.
     #[test]
-    fn the_preferred_side_wins_a_divergent_value() {
-        let base = card("FN:A\r\n");
-        let left = card("FN:B\r\n");
-        let right = card("FN:C\r\n");
-
-        let base = VcardCst::parse(&base).unwrap();
-        let left = VcardCst::parse(&left).unwrap();
-        let right = VcardCst::parse(&right).unwrap();
-
-        let report = merge_preferring(&base, &left, &right, VcardMergeSide::Right);
-
-        assert_eq!(report.merged.to_string(), card("FN:C\r\n"));
-        assert_eq!(report.conflicts.len(), 1);
-    }
-
-    #[test]
-    fn the_left_preference_stated_is_the_preference_left_unsaid() {
-        let base = card("FN:A\r\nTEL;PREF=1:+1\r\n");
-        let left = card("FN:B\r\nTEL;PREF=2:+1\r\n");
-        let right = card("FN:C\r\nTEL;PREF=3:+1\r\n");
-
-        let base = VcardCst::parse(&base).unwrap();
-        let left = VcardCst::parse(&left).unwrap();
-        let right = VcardCst::parse(&right).unwrap();
-
-        let stated = merge_preferring(&base, &left, &right, VcardMergeSide::Left);
-        let unsaid = merge(&base, &left, &right);
-
-        assert_eq!(stated.merged.to_bytes(), unsaid.merged.to_bytes());
-        assert_eq!(stated.conflicts.len(), unsaid.conflicts.len());
-    }
-
-    #[test]
-    fn the_preference_does_not_reach_an_uncontested_field() {
+    fn an_uncontested_field_keeps_the_change_its_one_side_made() {
         let base = card("FN:A\r\nNOTE:x\r\n");
         let left = card("FN:B\r\nNOTE:x\r\n");
         let right = card("FN:A\r\nNOTE:x\r\n");
@@ -2207,14 +2361,17 @@ mod tests {
         let left = VcardCst::parse(&left).unwrap();
         let right = VcardCst::parse(&right).unwrap();
 
-        let report = merge_preferring(&base, &left, &right, VcardMergeSide::Right);
+        let report = merge(&base, &left, &right);
 
         assert_eq!(report.merged.to_string(), card("FN:B\r\nNOTE:x\r\n"));
         assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
     }
 
+    /// Keeping data beats losing it silently, so the update wins from either
+    /// side, which is the one rule the ours-and-theirs convention does not
+    /// settle.
     #[test]
-    fn an_update_still_beats_a_removal_under_either_preference() {
+    fn an_update_still_beats_a_removal() {
         let base = card("FN:X\r\nNOTE:a\r\n");
         let removed = card("FN:X\r\n");
         let updated = card("FN:X\r\nNOTE:b\r\n");
@@ -2223,46 +2380,10 @@ mod tests {
         let removed = VcardCst::parse(&removed).unwrap();
         let updated = VcardCst::parse(&updated).unwrap();
 
-        for prefer in [VcardMergeSide::Left, VcardMergeSide::Right] {
-            let report = merge_preferring(&base, &removed, &updated, prefer);
-            assert!(report.merged.to_string().contains("NOTE:b\r\n"));
+        let report = merge(&base, &removed, &updated);
+        assert!(report.merged.to_string().contains("NOTE:b\r\n"));
 
-            let report = merge_preferring(&base, &updated, &removed, prefer);
-            assert!(report.merged.to_string().contains("NOTE:b\r\n"));
-        }
-    }
-
-    #[test]
-    fn a_preferred_parameter_replaces_the_one_it_beat() {
-        let base = card("TEL;PREF=1:+1\r\n");
-        let left = card("TEL;PREF=2:+1\r\n");
-        let right = card("TEL;PREF=3:+1\r\n");
-
-        let base = VcardCst::parse(&base).unwrap();
-        let left = VcardCst::parse(&left).unwrap();
-        let right = VcardCst::parse(&right).unwrap();
-
-        let report = merge_preferring(&base, &left, &right, VcardMergeSide::Right);
-        let merged = report.merged.to_string();
-
-        assert_eq!(merged, card("TEL;PREF=3:+1\r\n"), "got: {merged}");
-        assert_eq!(report.conflicts.len(), 1);
-    }
-
-    #[test]
-    fn a_preferred_addition_replaces_the_one_it_beat() {
-        let base = card("FN:X\r\n");
-        let left = card("FN:X\r\nUID:urn:a\r\n");
-        let right = card("FN:X\r\nUID:urn:b\r\n");
-
-        let base = VcardCst::parse(&base).unwrap();
-        let left = VcardCst::parse(&left).unwrap();
-        let right = VcardCst::parse(&right).unwrap();
-
-        let report = merge_preferring(&base, &left, &right, VcardMergeSide::Right);
-        let merged = report.merged.to_string();
-
-        assert_eq!(merged, card("FN:X\r\nUID:urn:b\r\n"), "got: {merged}");
-        assert_eq!(report.conflicts.len(), 1);
+        let report = merge(&base, &updated, &removed);
+        assert!(report.merged.to_string().contains("NOTE:b\r\n"));
     }
 }

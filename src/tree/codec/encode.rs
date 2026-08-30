@@ -125,6 +125,15 @@ pub(crate) fn scalar_node(value: &str, escaper: VcardEscaper) -> VcardValueNode<
     VcardValueNode::from_components(vec![encode_component(&[value], escaper)], escaper)
 }
 
+/// Own one value exactly as given, with no escaping at all.
+///
+/// A URI is not text: RFC 6350 section 4.2 gives it no escapes, so escaping
+/// its `;` or `,` on the way out would rewrite the reference the value is,
+/// and a value that decoded whole would not survive its own round trip.
+pub(crate) fn verbatim_node(value: &str, escaper: VcardEscaper) -> VcardValueNode<'static> {
+    VcardValueNode::from_raw(value.as_bytes().to_vec(), escaper)
+}
+
 /// Escape and own a clean value list into one component, by escaping mode.
 pub(crate) fn encode_component<S: AsRef<str>>(
     values: &[S],

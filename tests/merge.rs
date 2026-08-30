@@ -71,44 +71,25 @@ use proptest::{prelude::*, strategy::ValueTree, test_runner::TestRunner};
 use vcard::{
     param::VcardParam,
     tree::{
+        codec::VcardCodec,
         cst::VcardCst,
         leaf::VcardLeaf,
         line::VcardLine,
-        merge::{VcardMerge, VcardMergeAction, VcardMergeReport, VcardMergeSide},
+        merge::{VcardMerge, VcardMergeAction, VcardMergeReport},
         param::node::VcardParamNode,
         value::node::VcardValueNode,
     },
-    value::VcardValueKind,
+    value::{VcardValueKind, uri::VcardUri},
 };
 
-/// Both preferences, so every law that does not read the reference is stated
-/// under each of them.
-const PREFERENCES: [VcardMergeSide; 2] = [VcardMergeSide::Left, VcardMergeSide::Right];
-
-/// Merge three cards with the left side winning collisions, the default and
-/// the shape every law below is stated at.
+/// Merge three cards, the shape every law below is stated at: the left side is
+/// `ours` and wins a collision, the right side is `theirs`.
 fn merge<'a>(
     base: &'a VcardCst<'a>,
     left: &'a VcardCst<'a>,
     right: &'a VcardCst<'a>,
 ) -> VcardMergeReport<'a> {
-    merge_preferring(base, left, right, VcardMergeSide::Left)
-}
-
-/// The same, with the winning side stated.
-fn merge_preferring<'a>(
-    base: &'a VcardCst<'a>,
-    left: &'a VcardCst<'a>,
-    right: &'a VcardCst<'a>,
-    prefer: VcardMergeSide,
-) -> VcardMergeReport<'a> {
-    VcardMerge {
-        base,
-        left,
-        right,
-        prefer,
-    }
-    .merge()
+    VcardMerge { base, left, right }.merge()
 }
 
 /// How the merge diffs a property's value, read off its decoded value kind.
@@ -1373,17 +1354,12 @@ fn counts(items: &[String]) -> BTreeMap<String, usize> {
 
 /// Parse the three cards, merge them, and run every law that does not need
 /// instance identity. Returns the merged card's text and the conflict keys.
-fn check_laws(
-    base: &str,
-    left: &str,
-    right: &str,
-    prefer: VcardMergeSide,
-) -> Result<(String, usize), String> {
+fn check_laws(base: &str, left: &str, right: &str) -> Result<(String, usize), String> {
     let base_cst = VcardCst::parse(base).map_err(|e| format!("parse base: {e}"))?;
     let left_cst = VcardCst::parse(left).map_err(|e| format!("parse left: {e}"))?;
     let right_cst = VcardCst::parse(right).map_err(|e| format!("parse right: {e}"))?;
 
-    let report = merge_preferring(&base_cst, &left_cst, &right_cst, prefer);
+    let report = merge(&base_cst, &left_cst, &right_cst);
     let merged = report.merged.to_string();
 
     // The merged card always parses again, unless the right side removed
@@ -1431,7 +1407,7 @@ fn check_laws(
     }
 
     // The identity laws, on the cards as they are.
-    let twin = merge_preferring(&base_cst, &left_cst, &left_cst, prefer);
+    let twin = merge(&base_cst, &left_cst, &left_cst);
     if twin.merged.to_bytes() != left_cst.to_bytes() || !twin.conflicts.is_empty() {
         return Err(format!(
             "two identical edits disagreed: {:?}",
@@ -1439,7 +1415,7 @@ fn check_laws(
         ));
     }
 
-    let untouched = merge_preferring(&base_cst, &left_cst, &base_cst, prefer);
+    let untouched = merge(&base_cst, &left_cst, &base_cst);
     if untouched.merged.to_bytes() != left_cst.to_bytes() || !untouched.conflicts.is_empty() {
         return Err(format!(
             "an untouched right side contributed something: {:?}",
@@ -1469,8 +1445,8 @@ fn check_laws(
 
     // Conflict symmetry: swapping the sides reports the same collided fields,
     // and as many pairs. The merged bytes legitimately differ, since the
-    // preferred side's action wins.
-    let swapped = merge_preferring(&base_cst, &right_cst, &left_cst, prefer);
+    // left side's action wins.
+    let swapped = merge(&base_cst, &right_cst, &left_cst);
     let (forward, backward) = (
         conflict_keys(&report, &base_model),
         conflict_keys(&swapped, &base_model),
@@ -1491,7 +1467,7 @@ fn check_laws(
 
     // Idempotence: replaying the right side onto the merged card changes
     // nothing.
-    let again = merge_preferring(&base_cst, &reparsed, &right_cst, prefer);
+    let again = merge(&base_cst, &reparsed, &right_cst);
     if canon(&model_of(&again.merged)) != canon(&model_of(&reparsed)) {
         return Err(format!(
             "merging the merged card again thrashed:\n{}\n{}",
@@ -1680,9 +1656,7 @@ proptest! {
     fn the_merge_laws_hold(case in arb_case()) {
         let (base, left, right) = case.cards();
 
-        for prefer in PREFERENCES {
-            check_laws(&base, &left, &right, prefer).map_err(TestCaseError::fail)?;
-        }
+        check_laws(&base, &left, &right).map_err(TestCaseError::fail)?;
     }
 
     /// Every change either lands or is reported, and the merged content and
@@ -1691,30 +1665,6 @@ proptest! {
     fn every_change_lands_or_is_reported(case in arb_case()) {
         let (base, left, right) = case.cards();
         check_case(&base, &left, &right).map_err(TestCaseError::fail)?;
-    }
-
-    /// The preference decides whose value a collision leaves behind, and
-    /// nothing else: each side's actions and the collided fields are what
-    /// they were.
-    #[test]
-    fn the_preference_changes_no_report(case in arb_case()) {
-        let (base, left, right) = case.cards();
-
-        let base_cst = VcardCst::parse(&base).map_err(|e| TestCaseError::fail(e.to_string()))?;
-        let left_cst = VcardCst::parse(&left).map_err(|e| TestCaseError::fail(e.to_string()))?;
-        let right_cst = VcardCst::parse(&right).map_err(|e| TestCaseError::fail(e.to_string()))?;
-
-        let base_model = model_of(&base_cst);
-        let kept = merge_preferring(&base_cst, &left_cst, &right_cst, VcardMergeSide::Left);
-        let taken = merge_preferring(&base_cst, &left_cst, &right_cst, VcardMergeSide::Right);
-
-        prop_assert_eq!(
-            conflict_keys(&kept, &base_model),
-            conflict_keys(&taken, &base_model),
-        );
-        prop_assert_eq!(kept.conflicts.len(), taken.conflicts.len());
-        prop_assert_eq!(&kept.left, &taken.left);
-        prop_assert_eq!(&kept.right, &taken.right);
     }
 }
 
@@ -1923,7 +1873,7 @@ fn the_laws_hold_over_the_whole_corpus() {
 
             total += 1;
 
-            match check_laws(&base_text, &left_text, &right_text, VcardMergeSide::Left) {
+            match check_laws(&base_text, &left_text, &right_text) {
                 Ok((_, conflicts)) => {
                     if conflicts > 0 {
                         conflicting += 1;
@@ -2135,19 +2085,58 @@ fn divergent_changes_past_a_semicolon_of_a_value_conflict() {
 }
 
 #[test]
-fn two_sides_replacing_one_photo_keep_both() {
-    // A `PHOTO` is its URI, so neither side renamed the base photo: each
-    // dropped it and added one of its own, and a card may carry several. Both
-    // survive rather than one being contested away.
+fn two_sides_replacing_one_photo_contest_it() {
+    // A `PHOTO` is its URI, so neither side can be seen to rename the base
+    // photo: each dropped it and added one of its own. Both arrivals stand
+    // over one departure the two sides agreed on, which is one photo replaced
+    // two ways and a decision somebody has to make, not two photos.
     let base = card("PHOTO:data:image/png;base64,AAAA\r\n");
     let left = card("PHOTO:data:image/png;base64,BBBB\r\n");
     let right = card("PHOTO:data:image/png;base64,CCCC\r\n");
 
     let (merged, conflicts) = merge_text(&base, &left, &right);
 
+    assert_eq!(conflicts, 1, "got: {merged}");
+    assert!(merged.contains("BBBB"), "the left side wins: {merged}");
+    assert!(
+        !merged.contains("CCCC"),
+        "the loser does not join it: {merged}"
+    );
+}
+
+#[test]
+fn a_photo_added_beside_an_untouched_one_joins_it() {
+    // Nothing departed, so the two arrivals are two photos and the card keeps
+    // both. This is the boundary the contest must not cross.
+    let base = card("PHOTO:data:image/png;base64,AAAA\r\n");
+    let left = card("PHOTO:data:image/png;base64,AAAA\r\nPHOTO:data:image/png;base64,BBBB\r\n");
+    let right = card("PHOTO:data:image/png;base64,AAAA\r\nPHOTO:data:image/png;base64,CCCC\r\n");
+
+    let (merged, conflicts) = merge_text(&base, &left, &right);
+
+    assert_eq!(conflicts, 0, "got: {merged}");
     assert!(merged.contains("BBBB"), "got: {merged}");
     assert!(merged.contains("CCCC"), "got: {merged}");
-    assert_eq!(conflicts, 0);
+}
+
+#[test]
+fn a_uri_keeps_everything_past_its_first_semicolon() {
+    // The value is one reference, not a structured value: reading its first
+    // `;`-component alone would decode a data URI to its media type and drop
+    // the payload, and writing it back escaped would rewrite it.
+    let base = card("PHOTO:data:text/plain;base64,QUFB\r\n");
+
+    let cst = VcardCst::parse(&base).expect("a base card");
+    let photo = cst
+        .props
+        .iter()
+        .find(|line| line.name.get().eq_ignore_ascii_case("PHOTO"))
+        .expect("a photo");
+
+    let uri = VcardUri::decode(&photo.value);
+
+    assert_eq!(uri.0, "data:text/plain;base64,QUFB");
+    assert_eq!(cst.to_string(), base, "and the card round trips");
 }
 
 /// One side of a matching case: the order it lists the three `PID`-tagged
@@ -2459,10 +2448,10 @@ fn action_path<'a>(action: &'a VcardMergeAction<'_>) -> (&'a str, usize) {
 #[test]
 fn identical_edits_of_a_repeated_parameter_do_not_conflict() {
     // `TEL;TYPE=WORK;TYPE=VOICE` is ordinary in 2.1 and 3.0 cards, and the
-    // corpus carries it. Two parameters of one name make `diff_params` emit
-    // two actions on the one `Slot::Param`, so a side's second action has to
-    // be matched against the left action it repeats rather than against the
-    // first action on that slot.
+    // corpus carries it. Two parameters of one name are two slots, one per
+    // occurrence, so a side's second action has to be matched against the
+    // left action on that same occurrence rather than against the first
+    // action of that name.
     let base = "BEGIN:VCARD\r\nVERSION:3.0\r\nTEL;TYPE=work;TYPE=home:+1\r\nEND:VCARD\r\n";
     let side = "BEGIN:VCARD\r\nVERSION:3.0\r\nTEL;TYPE=cell;TYPE=fax:+1\r\nEND:VCARD\r\n";
 

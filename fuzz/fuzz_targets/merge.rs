@@ -18,23 +18,17 @@ use libfuzzer_sys::fuzz_target;
 use vcard::tree::{
     cst::VcardCst,
     line::VcardLine,
-    merge::{VcardMerge, VcardMergeReport, VcardMergeSide},
+    merge::{VcardMerge, VcardMergeReport},
 };
 
-/// Merge three cards with the left side winning collisions, the shape every
-/// law below is stated at.
+/// Merge three cards, the shape every law below is stated at: the left side
+/// is `ours` and wins a collision, the right side is `theirs`.
 fn merge<'a>(
     base: &'a VcardCst<'a>,
     left: &'a VcardCst<'a>,
     right: &'a VcardCst<'a>,
 ) -> VcardMergeReport<'a> {
-    VcardMerge {
-        base,
-        left,
-        right,
-        prefer: VcardMergeSide::Left,
-    }
-    .merge()
+    VcardMerge { base, left, right }.merge()
 }
 
 /// Whether a card carries two interchangeable instances of one property: the
