@@ -1,4 +1,4 @@
-//! # Validation
+//! # Validator
 //!
 //! The strict half of "liberal in, strict out", as a runtime predicate rather
 //! than a second data model.
@@ -17,7 +17,7 @@
 //! holding a `VcardValid<Vcard>` is proof the check passed. The same
 //! per-property check backs the [`VcardPropBuilder`]'s strict construction.
 //!
-//! [`VcardPropBuilder`]: crate::tree::vcard::builder::VcardPropBuilder
+//! [`VcardPropBuilder`]: crate::tree::builder::VcardPropBuilder
 //!
 //! ## Example
 //!
@@ -183,7 +183,7 @@ impl<'a> Vcard<'a> {
 /// Check one property against its spec for the version, pushing any violations.
 /// An unknown (extension) property is always conformant. Shared by
 /// [`Vcard::validate`] and the
-/// [`VcardPropBuilder`](crate::tree::vcard::builder::VcardPropBuilder).
+/// [`VcardPropBuilder`](crate::tree::builder::VcardPropBuilder).
 pub(crate) fn validate_prop(
     prop: &VcardProp<'_>,
     version: VcardVersion,
@@ -326,7 +326,7 @@ mod tests {
         tree::{
             cst::VcardCst,
             prop::cardinality::VcardPropCardinality,
-            vcard::validate::{VcardValid, VcardValidateError},
+            validator::{VcardValid, VcardValidateError},
         },
         value::{VcardValue, VcardValueKind, n::VcardN, text::VcardText, uri::VcardUri},
         vcard::Vcard,
@@ -383,11 +383,10 @@ mod tests {
         assert!(matches!(errors[0], VcardValidateError::ValueKind { .. }));
     }
 
+    /// N and FN make the envelope conformant in both versions, so only the
+    /// CHARSET parameter, legal in 2.1 but not in 4.0, decides the outcome.
     #[test]
     fn allows_charset_in_2_1_but_not_4_0() {
-        // NOTE: N and FN make the envelope conformant in both versions, so
-        // only the CHARSET parameter (legal in 2.1, not 4.0) decides the
-        // outcome.
         let with_charset = |version| {
             card(
                 version,
@@ -412,9 +411,9 @@ mod tests {
         assert!(with_charset(VcardVersion::V4_0).is_err());
     }
 
+    /// 4.0 requires FN one or more times, so a card without it fails.
     #[test]
     fn flags_a_required_property_that_is_absent() {
-        // NOTE: 4.0 requires FN (one-or-more); a card without it fails.
         let errors = card(VcardVersion::V4_0, vec![]).validate().unwrap_err();
         assert!(errors.iter().any(|error| matches!(
             error,
@@ -425,9 +424,9 @@ mod tests {
         )));
     }
 
+    /// AGENT is 2.1 and 3.0 only, so in 4.0 it is undefined.
     #[test]
     fn flags_a_property_absent_from_the_version() {
-        // NOTE: AGENT is 2.1 / 3.0 only, so in 4.0 it is undefined.
         let errors = card(
             VcardVersion::V4_0,
             vec![
@@ -454,9 +453,9 @@ mod tests {
         )));
     }
 
+    /// FN is text-only and does not allow MEDIATYPE.
     #[test]
     fn flags_a_disallowed_parameter() {
-        // NOTE: FN is text-only and does not allow MEDIATYPE.
         let errors = card(
             VcardVersion::V4_0,
             vec![prop(
@@ -474,9 +473,9 @@ mod tests {
         );
     }
 
+    /// 4.0 makes N at most one, so two N properties are too many.
     #[test]
     fn flags_a_property_that_appears_too_often() {
-        // NOTE: 4.0 N is at-most-one; two N properties is too many.
         let errors = card(
             VcardVersion::V4_0,
             vec![
@@ -501,9 +500,9 @@ mod tests {
         )));
     }
 
+    /// PID is 4.0 only, so on a 2.1 property it is disallowed.
     #[test]
     fn rejects_a_v4_only_parameter_in_2_1() {
-        // NOTE: PID is 4.0-only, so on a 2.1 property it is disallowed.
         let errors = card(
             VcardVersion::V2_1,
             vec![
@@ -572,15 +571,12 @@ mod tests {
             )],
         );
 
-        // NOTE: TryFrom mints the proof; Deref reads through it.
         let valid = VcardValid::try_from(vcard.clone()).expect("a conformant card");
         assert_eq!(valid.version, VcardVersion::V4_0);
 
-        // NOTE: A proof converts back into a byte tree.
         let cst = VcardCst::from(valid);
         assert!(cst.to_string().contains("FN:John"));
 
-        // NOTE: into_inner yields the card back.
         let inner = vcard.validate().unwrap().into_inner();
         assert_eq!(inner.version, VcardVersion::V4_0);
     }

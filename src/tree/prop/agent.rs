@@ -83,9 +83,9 @@ impl VcardPropSpec for AGENT {
 mod tests {
     use crate::tree::{cst::VcardCst, prop::r#fn::FN};
 
+    /// A 3.0 AGENT embedding a card, its newlines backslash-escaped.
     #[test]
     fn parses_the_embedded_agent_card() {
-        // NOTE: A 3.0 AGENT embedding a card, its newlines backslash-escaped.
         let card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:3.0\r\n",

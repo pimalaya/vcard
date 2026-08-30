@@ -235,11 +235,12 @@ mod tests {
         assert!(card.to_bytes().windows(4).any(|window| window == latin1));
     }
 
+    /// The core does not resolve QUOTED-PRINTABLE, so bytes() is the raw wire
+    /// value.
     #[test]
     fn bytes_returns_the_raw_undecoded_value() {
         use crate::tree::prop::note::NOTE;
 
-        // NOTE: Core does not resolve QP: bytes() is the raw wire value.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -252,12 +253,11 @@ mod tests {
     }
 
     #[cfg(feature = "quoted-printable")]
+    /// `=E9` is the Latin-1 'é' octet, which the helper resolves to raw bytes.
     #[test]
     fn quoted_printable_helper_resolves_octets() {
         use crate::tree::prop::note::NOTE;
 
-        // NOTE: =E9 is the Latin-1 'é' octet; the helper resolves QP to raw
-        // bytes.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -273,12 +273,12 @@ mod tests {
     }
 
     #[cfg(all(feature = "encoding", feature = "quoted-printable"))]
+    /// "café" as ISO-8859-1 quoted-printable: the charset helper, composing
+    /// the QUOTED-PRINTABLE one, yields the UTF-8 string.
     #[test]
     fn charset_helper_transcodes_to_utf8() {
         use crate::tree::prop::note::NOTE;
 
-        // NOTE: ISO-8859-1 + quoted-printable "café": the charset helper
-        // (composing the QP helper) yields the UTF-8 string.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -299,13 +299,13 @@ mod tests {
         assert!(card.to_string().contains("ADR:;;New St;;;;\r\n"));
     }
 
+    /// `a\:b` is a redundant escape, `:` needing none. A whole-list rewrite
+    /// would decode and normalise it to `a:b`, while a per-item edit of a
+    /// different value leaves it byte for byte.
     #[test]
     fn walks_a_list_editing_items_without_reformatting_siblings() {
         use crate::tree::prop::nickname::NICKNAME;
 
-        // NOTE: `a\:b` is a redundant (non-canonical) escape: `:` need not be
-        // escaped. A whole-list rewrite would decode and normalise it to `a:b`;
-        // a per-item edit of a *different* value must leave it byte for byte.
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:4.0\r\n",
@@ -316,8 +316,6 @@ mod tests {
 
         card.prop_mut::<NICKNAME>().unwrap().list_mut().remove(1);
 
-        // NOTE: The surviving `a\:b` keeps its bytes; only `middle` and its
-        // comma go.
         let out = card.to_string();
         assert!(out.contains("NICKNAME:a\\:b,z\r\n"), "got: {out}");
     }

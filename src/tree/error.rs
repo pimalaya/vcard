@@ -39,10 +39,8 @@ impl fmt::Display for VcardParseError {
                 write!(f, "Content line is missing a value separator: {data}")
             }
             Self::NonUtf8Header(data) => {
-                write!(
-                    f,
-                    "Content line name or parameters are not valid UTF-8: {data}"
-                )
+                write!(f, "Content line name or parameters are not valid UTF-8: ")?;
+                write!(f, "{data}")
             }
             Self::ExpectedBegin(data) => {
                 write!(f, "Card does not open with a BEGIN line: {data}")

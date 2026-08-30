@@ -631,11 +631,11 @@ mod tests {
         assert_eq!(node.to_string(), "a;b,c;d;e");
     }
 
+    /// The un-indexed writers are the inverse of the un-indexed readers: a
+    /// value read whole and written back must come back as it went in, not
+    /// gain a tail from the components it replaced.
     #[test]
     fn a_whole_value_write_leaves_no_component_of_the_old_value_behind() {
-        // NOTE: The un-indexed writers are the inverse of the un-indexed
-        // readers: a value read whole and written back must come back as it
-        // went in, not gain a tail from the components it replaced.
         let mut node = VcardValueNode::parse(b"a;b,c;d");
         let whole = node.decode().into_owned();
         node.set(&[whole]);

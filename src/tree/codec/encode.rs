@@ -227,10 +227,11 @@ mod tests {
         assert_eq!(n.encode(VcardEscaper::V4_0).to_string(), "Doe;;;;");
     }
 
+    /// A 2.1 GEO decodes to a coordinate pair, and re-encoding for 2.1 must
+    /// write it back as a comma pair rather than the 3.0 semicolon form. The
+    /// same pair round-trips through 3.0 with a semicolon.
     #[test]
     fn encodes_the_geo_pair_in_the_cards_own_version() {
-        // NOTE: A 2.1 GEO decodes to a coordinate pair; re-encoding for 2.1
-        // must write it back as a comma pair, not the 3.0 semicolon form.
         let cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nGEO:37.0,-122.0\r\nEND:VCARD\r\n")
             .unwrap();
         let card = cst.decode();
@@ -240,7 +241,6 @@ mod tests {
             card.to_string(),
         );
 
-        // NOTE: The same pair round-trips through 3.0 with a semicolon.
         let cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nGEO:37.0;-122.0\r\nEND:VCARD\r\n")
             .unwrap();
         let card = cst.decode();
@@ -251,10 +251,10 @@ mod tests {
         );
     }
 
+    /// RFC 6868 section 3.1 read backwards, over the three characters a
+    /// parameter value cannot carry raw.
     #[test]
     fn encodes_the_rfc_6868_parameter_sequences() {
-        // NOTE: RFC 6868 section 3.1 read backwards, over the three characters
-        // a parameter value cannot carry raw.
         let param = VcardParam::Label(Cow::Borrowed("a\nb^c\"d"));
 
         assert_eq!(
@@ -263,11 +263,11 @@ mod tests {
         );
     }
 
+    /// The decoded model holds a parameter exactly as the wire spelled it, its
+    /// own delimiters included, so the surrounding pair is written back as a
+    /// pair rather than encoded as content.
     #[test]
     fn keeps_a_quoted_parameter_value_quoted() {
-        // NOTE: the decoded model holds a parameter exactly as the wire spelled
-        // it, its own delimiters included, so the surrounding pair is written
-        // back as a pair rather than encoded as content.
         let param = VcardParam::Geo(Cow::Borrowed("\"geo:37.386,-122.083\""));
 
         assert_eq!(

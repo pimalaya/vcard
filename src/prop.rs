@@ -13,7 +13,7 @@
 //!
 //! Build a property directly from its public fields; strict, spec-checked
 //! construction lives in the syntax layer
-//! ([`VcardPropBuilder`](crate::tree::vcard::builder::VcardPropBuilder)), which
+//! ([`VcardPropBuilder`](crate::tree::builder::VcardPropBuilder)), which
 //! this module does not depend on: pure model, no [`crate::tree`].
 
 use core::{error, fmt, ops, str};
@@ -432,8 +432,6 @@ mod tests {
         ] {
             assert_eq!(VcardPropKind::from_str(&kind).ok(), Some(kind));
         }
-        // NOTE: Case-insensitive on the way in; unknown names are not in the
-        // vocabulary.
         assert_eq!(VcardPropKind::from_str("fn").ok(), Some(VcardPropKind::Fn));
         assert!(VcardPropKind::from_str("X-CUSTOM").is_err());
     }

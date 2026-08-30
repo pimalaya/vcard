@@ -79,15 +79,18 @@ impl<'a> VcardLine<'a> {
 
         // NOTE: skip blank lines: real-world exports sometimes emit them.
         let mut head = rest;
+
         let (first, eol, mut tail) = loop {
             if head.is_empty() {
                 return Err(VcardParseError::MissingCrlf(lossy(rest)));
             }
+
             let (content, eol, next) = physical_line(head);
             if content.is_empty() {
                 head = next;
                 continue;
             }
+
             break (content, eol, next);
         };
 
@@ -119,6 +122,7 @@ impl<'a> VcardLine<'a> {
                 let (continuation, eol, next) = physical_line(tail);
                 last_eol = eol;
                 tail = next;
+
                 match continuation.strip_suffix(b"=") {
                     Some(head) => {
                         push_content(&mut logical, &mut wire, head);
@@ -142,12 +146,14 @@ impl<'a> VcardLine<'a> {
             let mut line = Self::parse(&logical, b"")?.into_static();
             line.eol = eol_leaf(last_eol);
             line.wire.prepend(wire.into_static());
+
             return Ok((line, tail));
         }
 
         if !starts_with_wsp(tail) {
             let mut line = Self::parse(first, eol)?;
             line.wire.prepend(wire);
+
             return Ok((line, tail));
         }
 
@@ -469,10 +475,10 @@ mod tests {
         assert_eq!(line.to_string(), "TEL;TYPE=work,home:123\r\n");
     }
 
+    /// RFC 6350 section 3.3 lets a quoted parameter value carry a colon and a
+    /// semicolon, and section 6.3.1 uses both in its ADR example.
     #[test]
     fn keeps_a_quoted_parameter_value_whole() {
-        // NOTE: RFC 6350 section 3.3 lets a quoted parameter value carry a
-        // colon and a semicolon; section 6.3.1 uses both in its ADR example.
         let raw = b"ADR;GEO=\"geo:12.3457,78.910\";TYPE=work:;;123 Main Street\r\n";
         let (line, _) = VcardLine::take(raw).unwrap();
 
@@ -484,10 +490,10 @@ mod tests {
         assert_eq!(line.to_string(), str::from_utf8(raw).unwrap());
     }
 
+    /// Quote tracking alone would swallow the rest of the line, so with no
+    /// colon outside quotes the scan falls back to the first one.
     #[test]
     fn an_unbalanced_quote_still_parses() {
-        // NOTE: quote tracking alone would swallow the rest of the line, so
-        // with no colon outside quotes the scan falls back to the first one.
         let (line, _) = VcardLine::take(b"TEL;TYPE=\"work:+1\r\n").unwrap();
 
         assert_eq!(line.name.get(), "TEL");
@@ -527,40 +533,39 @@ mod tests {
         assert_eq!(line.to_string(), "\r\n\r\nFN:John\r\n");
     }
 
+    /// The old offsets index bytes that are no longer there, so the edited
+    /// line goes out unfolded rather than folded in the wrong places.
     #[test]
     fn drops_the_fold_points_once_the_value_is_edited() {
-        // NOTE: The old offsets index bytes that are no longer there, so the
-        // edited line goes out unfolded rather than folded in the wrong places.
         let (mut line, _) = VcardLine::take(b"NOTE:foo\r\n bar\r\n").unwrap();
         line.value = VcardValueNode::parse(b"something else entirely");
         assert_eq!(line.to_string(), "NOTE:something else entirely\r\n");
     }
 
+    /// The edit keeps the length, so every offset still indexes what it did
+    /// and the line is folded exactly where it was.
     #[test]
     fn keeps_the_fold_points_when_an_edit_keeps_the_length() {
-        // NOTE: Same length, so every offset still indexes what it did: the
-        // line is folded exactly where it was.
         let (mut line, _) = VcardLine::take(b"NOTE:foo\r\n bar\r\n").unwrap();
         line.value = VcardValueNode::parse(b"BARFOO");
         assert_eq!(line.to_string(), "NOTE:BAR\r\n FOO\r\n");
     }
 
+    /// Only the first space of a continuation is the fold marker, so a
+    /// whitespace-only line followed by a doubly-indented one leaves the
+    /// leftover space in front of the name. Left there, the line folds back
+    /// into its predecessor on reparse and the card is not a fixpoint.
     #[test]
     fn a_continuation_of_a_blank_line_does_not_keep_its_whitespace() {
-        // NOTE: only the first space of a continuation is the fold marker, so
-        // a whitespace-only line followed by a doubly-indented one leaves the
-        // leftover space in front of the name. Left there, the line folds back
-        // into its predecessor on reparse and the card is not a fixpoint.
         let (line, _) = VcardLine::take(b"   \r\n  A:b\r\n").unwrap();
 
         assert_eq!(line.name.get(), "A");
         assert_eq!(line.to_string(), "   \r\n  A:b\r\n");
     }
 
+    /// Only the first space is the fold marker; the rest is value content.
     #[test]
     fn keeps_whitespace_beyond_the_single_fold_indicator() {
-        // NOTE: only the first space is the fold marker; the rest is value
-        // content.
         let (line, _) = VcardLine::take(b"NOTE:foo\r\n  bar\r\n").unwrap();
         assert_eq!(line.raw_value_str(), "foo bar");
     }
@@ -580,10 +585,10 @@ mod tests {
         assert_eq!(rest, b"");
     }
 
+    /// Two soft breaks, so both join arms run: the first continuation itself
+    /// ends with `=`, the second does not.
     #[test]
     fn joins_a_quoted_printable_soft_broken_line() {
-        // NOTE: Two soft breaks: the first continuation itself ends with `=`
-        // (the Some arm), the second does not (the None arm).
         let raw = b"NOTE;ENCODING=QUOTED-PRINTABLE:caf=\r\n=C3=\r\n=A9\r\n";
         let (line, _) = VcardLine::take(raw).unwrap();
         assert_eq!(line.name.get(), "NOTE");
@@ -614,18 +619,18 @@ mod tests {
         assert!(line.param_mut::<TYPE>().is_some());
     }
 
+    /// `abc=` ends with `=` but has no colon, so the QUOTED-PRINTABLE
+    /// soft-break check bails and the line then fails for want of a value
+    /// separator.
     #[test]
     fn a_trailing_equals_without_a_colon_is_not_quoted_printable() {
-        // NOTE: `abc=` ends with `=` but has no colon, so the QP soft-break
-        // check bails and the line then fails for want of a value separator.
         assert!(VcardLine::take(b"abc=\r\n").is_err());
     }
 
+    /// The final continuation ends with `=` and nothing follows, so the join
+    /// loop exits through the empty-tail guard rather than a non-`=` line.
     #[test]
     fn quoted_printable_join_stops_at_an_empty_tail() {
-        // NOTE: The final continuation ends with `=` and nothing follows, so
-        // the join loop exits via the empty-tail guard rather than a non-`=`
-        // line.
         let raw = b"NOTE;ENCODING=QUOTED-PRINTABLE:a=\r\nb=\r\n";
         let (line, rest) = VcardLine::take(raw).unwrap();
         assert_eq!(line.raw_value_str(), "ab");

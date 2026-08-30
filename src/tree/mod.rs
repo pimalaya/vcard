@@ -11,15 +11,15 @@
 //! carrying its lens contract and, for a property, its `VcardPropSpec`, plus
 //! the in-place edit cursor in [`value`].
 //!
-//! The [`codec`] projects between tree and decoded model, [`vcard`] is the
-//! strict way out (the spec-driven builder and validation), and the three-way
-//! [`merge`](mod@merge) reconciles two divergent edits against their common
-//! base.
+//! The [`codec`] projects between tree and decoded model, [`builder`] and
+//! [`validator`] are the strict way out, and the three-way [`merge`](mod@merge)
+//! reconciles two divergent edits against their common base.
 //!
 //! Parsing is the only fallible step, so its [`error`] type lives here too.
 //! This whole layer is gated behind the `parser` feature, so the decoded model
 //! can be depended on without it.
 
+pub mod builder;
 pub mod codec;
 pub mod cst;
 pub mod error;
@@ -28,6 +28,6 @@ pub mod line;
 pub mod merge;
 pub mod param;
 pub mod prop;
+pub mod validator;
 pub mod value;
-pub mod vcard;
 pub mod wire;

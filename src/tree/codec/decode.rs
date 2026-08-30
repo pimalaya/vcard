@@ -268,10 +268,10 @@ mod tests {
         assert!(params.contains(&VcardParam::Encoding(Cow::Borrowed("BASE64"))));
     }
 
+    /// BDAY defaults to a date and PHOTO to inline base64 in 2.1, but a
+    /// declared VALUE forces the other reading.
     #[test]
     fn the_value_param_selects_the_value_kind() {
-        // NOTE: BDAY defaults to a date, but VALUE=text forces the text
-        // reading.
         let cst = VcardCst::parse(
             "BEGIN:VCARD\r\nVERSION:4.0\r\nBDAY;VALUE=text:circa 1800\r\nEND:VCARD\r\n",
         )
@@ -281,9 +281,6 @@ mod tests {
             VcardValue::Text(VcardText(Cow::Borrowed("circa 1800"))),
         );
 
-        // NOTE: A 2.1 PHOTO is inline base64 by default, but a plain URI when
-        // the line declares VALUE=uri (the old is_uri_reference path, now
-        // spec-derived).
         let cst = VcardCst::parse(
             "BEGIN:VCARD\r\nVERSION:2.1\r\nPHOTO;VALUE=URI:http://x/p.png\r\nEND:VCARD\r\n",
         )
@@ -341,13 +338,12 @@ mod tests {
         );
     }
 
+    /// The version-specific value shapes decode() resolves must come back
+    /// identically through the typed lens, not as a version-blind URI.
     #[test]
     fn geo_and_binary_lenses_agree_with_whole_card_decode() {
         use crate::tree::prop::{geo::GEO, photo::PHOTO};
 
-        // NOTE: The version-specific value shapes that decode() resolves must
-        // come back identically through the typed lens, not as a version-blind
-        // URI.
         for input in [
             concat!(
                 "BEGIN:VCARD\r\n",
@@ -394,13 +390,13 @@ mod tests {
         );
     }
 
+    /// The core transforms no content: the `=XX` octets stay in the value and
+    /// the ENCODING parameter is kept, so a consumer can decode through the
+    /// `quoted-printable` feature helper.
     #[test]
     fn keeps_a_quoted_printable_value_and_its_encoding_param_undecoded() {
         use crate::param::VcardParam;
 
-        // NOTE: Core transforms no content: the `=XX` octets stay in the value
-        // and the ENCODING param is kept, so a consumer can decode via the
-        // `quoted-printable` feature helper.
         let input = concat!(
             "BEGIN:VCARD\r\n",
             "VERSION:2.1\r\n",
@@ -530,29 +526,29 @@ mod tests {
         );
     }
 
+    /// RFC 6868 section 3.1 spells the three characters a parameter value
+    /// cannot carry raw.
     #[test]
     fn decodes_the_rfc_6868_parameter_sequences() {
-        // NOTE: RFC 6868 section 3.1 spells the three characters a parameter
-        // value cannot carry raw.
         let node = VcardParamNode::parse("LABEL=a^nb^^c^'d");
 
         assert_eq!(node.decode(), VcardParam::Label(Cow::Borrowed("a\nb^c\"d")));
     }
 
+    /// RFC 6868 section 3.1 forbids reading any other caret sequence as an
+    /// error, so the caret and what follows stay literal, and so does a
+    /// trailing one.
     #[test]
     fn keeps_an_unknown_caret_sequence_in_a_parameter() {
-        // NOTE: RFC 6868 section 3.1 forbids reading any other caret sequence
-        // as an error, so the caret and what follows stay literal, and so does
-        // a trailing one.
         let node = VcardParamNode::parse("LABEL=a^xb^");
 
         assert_eq!(node.decode(), VcardParam::Label(Cow::Borrowed("a^xb^")));
     }
 
+    /// RFC 6868 section 3.2 forbids backslash escaping in a parameter value,
+    /// so a Windows path keeps its separators.
     #[test]
     fn keeps_a_backslash_in_a_parameter() {
-        // NOTE: RFC 6868 section 3.2 forbids backslash escaping in a parameter
-        // value, so a Windows path keeps its separators.
         let node = VcardParamNode::parse(r"X-PATH=C:\temp\note.txt");
 
         assert_eq!(
@@ -564,10 +560,10 @@ mod tests {
         );
     }
 
+    /// RFC 6868 updates RFC 6350 alone, so a 3.0 caret is a literal caret:
+    /// only the version on the card tells the two readings apart.
     #[test]
     fn keeps_a_pre_4_0_parameter_caret_literal() {
-        // NOTE: RFC 6868 updates RFC 6350 alone, so a 3.0 caret is a literal
-        // caret; only the version on the card tells the two readings apart.
         let raw = "BEGIN:VCARD\r\nVERSION:3.0\r\nADR;LABEL=a^nb:;;;;;;\r\nEND:VCARD\r\n";
         let cst = VcardCst::parse(raw).unwrap();
 

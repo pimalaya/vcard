@@ -175,10 +175,10 @@ mod tests {
         ));
     }
 
+    /// RFC 6868 section 3.1 forbids reading `^x` as an error, and section 3.2
+    /// forbids backslash escaping, so both stay as they are.
     #[test]
     fn keeps_an_unknown_caret_sequence_and_a_backslash() {
-        // NOTE: RFC 6868 section 3.1 forbids reading `^x` as an error, and
-        // section 3.2 forbids backslash escaping, so both stay as they are.
         assert_eq!(unescape_param("a^xb^Nc^", VcardEscaper::V4_0), "a^xb^Nc^");
         assert_eq!(
             unescape_param(r"C:\temp\note", VcardEscaper::V4_0),
@@ -186,10 +186,10 @@ mod tests {
         );
     }
 
+    /// RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret is a literal
+    /// caret and resolving it would corrupt the value.
     #[test]
     fn leaves_a_pre_4_0_parameter_caret_alone() {
-        // NOTE: RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret is a
-        // literal caret and resolving it would corrupt the value.
         assert!(matches!(
             unescape_param("a^nb", VcardEscaper::V3_0),
             Cow::Borrowed("a^nb")
@@ -200,10 +200,10 @@ mod tests {
         ));
     }
 
+    /// vCard 2.1 resolves `\;` only: `\n` keeps its literal backslash, and a
+    /// trailing backslash stays.
     #[test]
     fn unescapes_only_the_semicolon_in_v2_1() {
-        // NOTE: vCard 2.1 resolves `\;` only; `\n` keeps its literal backslash,
-        // and a trailing backslash stays.
         assert_eq!(unescape_with(br"a\;b\nc\", VcardEscaper::V2_1), "a;b\\nc\\");
     }
 }

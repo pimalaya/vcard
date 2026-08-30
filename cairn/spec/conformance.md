@@ -6,7 +6,9 @@ status: current
 
 # Conformance
 
-The "strict out" half of the crate: the per-property spec layer, whole-card validation, and the spec-driven builder. All three read one source of truth, so a rule is stated once.
+The "strict out" half of the crate: the per-property spec layer, whole-card validation and the spec-driven builder. All three read one source of truth, so a rule is stated once.
+
+The builder lives at `tree::builder` and the validation at `tree::validator`, both under `tree` because both are keyed on the per-property spec, which sits on the lens markers.
 
 Validity and lossiness are orthogonal. A conformant card may still carry `X-` or IANA extensions, so a no-`Unknown` "strict" model type would mean "no extensions", a useless category. Validity is therefore a runtime predicate, not a second data model.
 

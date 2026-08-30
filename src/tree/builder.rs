@@ -22,8 +22,8 @@
 //!
 //! Its name is pinned by the marker's [`VcardPropSpec`], and
 //! [`build`](VcardPropBuilder::build) runs the shared per-property check
-//! ([`validate_prop`](crate::tree::vcard::validate)), so the value kind and
-//! every known parameter must be allowed for the version.
+//! ([`validate_prop`](crate::tree::validator)), so the value kind and every
+//! known parameter must be allowed for the version.
 //!
 //! Unknown, extension parameters pass. To emit something the spec forbids,
 //! construct the open [`VcardProp`] by hand. The version is a value the
@@ -32,7 +32,7 @@
 //! ## Example
 //!
 //! ```rust
-//! use vcard::tree::vcard::builder::VcardBuilder;
+//! use vcard::tree::builder::VcardBuilder;
 //! use vcard::tree::prop::{r#fn::FN, note::NOTE};
 //! use vcard::param::VcardParam;
 //! use vcard::value::VcardValue;
@@ -61,7 +61,7 @@ use crate::{
     prop::{VcardProp, VcardPropName},
     tree::{
         prop::spec::VcardPropSpec,
-        vcard::validate::{VcardValid, VcardValidateError, validate_prop},
+        validator::{VcardValid, VcardValidateError, validate_prop},
     },
     value::VcardValue,
     vcard::Vcard,
@@ -201,7 +201,7 @@ mod tests {
 
     use crate::{
         param::VcardParam,
-        tree::{prop::r#fn::FN, vcard::builder::VcardPropBuilder},
+        tree::{builder::VcardPropBuilder, prop::r#fn::FN},
         value::{VcardValue, text::VcardText, uri::VcardUri},
         version::VcardVersion,
     };
@@ -221,18 +221,18 @@ mod tests {
         );
     }
 
+    /// FN is text-only, so a URI value is rejected.
     #[test]
     fn refuses_a_value_kind_the_property_does_not_allow() {
-        // NOTE: FN is text-only, so a URI value is rejected.
         let built = VcardPropBuilder::<FN>::new(VcardVersion::V4_0)
             .build(VcardValue::Uri(VcardUri(Cow::Borrowed("x"))));
 
         assert!(built.is_err());
     }
 
+    /// FN does not allow MEDIATYPE.
     #[test]
     fn refuses_a_param_the_property_does_not_allow() {
-        // NOTE: FN does not allow MEDIATYPE.
         let built = VcardPropBuilder::<FN>::new(VcardVersion::V4_0)
             .param(VcardParam::MediaType(Cow::Borrowed("text/plain")))
             .build(VcardValue::Text(VcardText(Cow::Borrowed("John"))));
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn card_builder_chains_props_and_validates() {
-        use crate::tree::{prop::note::NOTE, vcard::builder::VcardBuilder};
+        use crate::tree::{builder::VcardBuilder, prop::note::NOTE};
 
         let valid = VcardBuilder::new(VcardVersion::V4_0)
             .prop::<FN>()
@@ -258,12 +258,12 @@ mod tests {
         assert_eq!(&*valid.properties[1].name, "NOTE");
     }
 
+    /// FN does not allow MEDIATYPE, and value() stays infallible, so the error
+    /// only surfaces from the final build().
     #[test]
     fn card_builder_defers_a_violation_to_build() {
-        use crate::tree::vcard::builder::VcardBuilder;
+        use crate::tree::builder::VcardBuilder;
 
-        // NOTE: FN does not allow MEDIATYPE; value() stays infallible, so the
-        // error only surfaces from the final build().
         let built = VcardBuilder::new(VcardVersion::V4_0)
             .prop::<FN>()
             .param(VcardParam::MediaType(Cow::Borrowed("text/plain")))

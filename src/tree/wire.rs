@@ -213,10 +213,10 @@ mod tests {
         assert_eq!(written(&wire, b"foobar"), b"foo=\nbar");
     }
 
+    /// What an edit leaves behind: the value grew, so every fold point after
+    /// it is wrong and the whole shape has to go.
     #[test]
     fn drops_a_shape_taken_against_other_bytes() {
-        // NOTE: What an edit leaves behind: the value grew, so every fold point
-        // after it is wrong and the whole shape has to go.
         let mut wire = VcardWire::default();
         wire.fold(3, true, b' ');
         wire.seal(6);
@@ -247,10 +247,10 @@ mod tests {
         assert_eq!(written(&wire, b"foo"), b"\r\nfoo=");
     }
 
+    /// What a value ending on two `=` leaves: a soft break past the last
+    /// logical byte, and the dangling `=` that precedes it.
     #[test]
     fn orders_a_merged_shape_by_offset_rather_than_by_list() {
-        // NOTE: What a value ending on two `=` leaves: a soft break past the
-        // last logical byte, and the dangling `=` that precedes it.
         let mut earlier = VcardWire::default();
         earlier.soft(4, true);
 

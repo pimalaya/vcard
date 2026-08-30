@@ -24,7 +24,7 @@
 //! into the model.
 //!
 //! Strictness lives on the way out: the builder refuses to construct a
-//! property the spec forbids, and [`validate`](tree::vcard::validate) checks a
+//! property the spec forbids, and [`validate`](tree::validator) checks a
 //! decoded card against its version's RFC contract.
 //!
 //! ## The two layers
@@ -74,7 +74,7 @@
 //! bridges the open [`VcardPropKind`] back to those static specs.
 //!
 //! That one source of truth has three readers: the decoder picks a value kind
-//! from it, [`validate`](tree::vcard::validate) checks conformance against it,
+//! from it, [`validate`](tree::validator) checks conformance against it,
 //! and the builder rejects illegal construction with it.
 //!
 //! A card that passes earns a [`VcardValid`] proof. Validity is a runtime
@@ -142,7 +142,7 @@
 //! [`VcardMerge`]: tree::merge::VcardMerge
 //! [`to_bytes`]: tree::cst::VcardCst::to_bytes
 //! [`VcardPropSpec`]: tree::prop::spec::VcardPropSpec
-//! [`VcardValid`]: tree::vcard::validate::VcardValid
+//! [`VcardValid`]: tree::validator::VcardValid
 //! [`decode_base64`]: value::binary::VcardBinary::decode_base64
 
 extern crate alloc;

@@ -138,7 +138,6 @@ mod tests {
             escape_with(b"plain", VcardEscaper::V4_0),
             Cow::Borrowed(b"plain")
         ));
-        // NOTE: vCard 2.1 escapes only `;`.
         assert_eq!(
             escape_with(b"a,b;c", VcardEscaper::V2_1).as_ref(),
             br"a,b\;c".as_slice(),
@@ -175,7 +174,6 @@ mod tests {
         );
         assert_eq!(unescape_with(br"C:\\path", VcardEscaper::V4_0), r"C:\path",);
 
-        // NOTE: a value ending in a backslash is escaped whole, not dangling.
         assert_eq!(
             escape_with(br"trailing\", VcardEscaper::V4_0).as_ref(),
             br"trailing\\".as_slice(),
@@ -210,10 +208,10 @@ mod tests {
         assert_eq!(escape_param("\"a^b\"", VcardEscaper::V4_0), "\"a^^b\"");
     }
 
+    /// RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret goes out as
+    /// itself, and neither reader would resolve `^^` anyway.
     #[test]
     fn writes_a_pre_4_0_parameter_unencoded() {
-        // NOTE: RFC 6868 updates RFC 6350 alone, so a 2.1 or 3.0 caret goes
-        // out as itself and neither reader would resolve `^^` anyway.
         assert!(matches!(
             escape_param("a^b", VcardEscaper::V3_0),
             Cow::Borrowed("a^b")

@@ -181,9 +181,10 @@ mod tests {
         assert_eq!(seconds("20260711T172559Z"), seconds("2026-07-11T17:25:59Z"));
     }
 
+    /// 19:25:59+02:00 is the same instant as 17:25:59Z, and the hour-only
+    /// offset form the grammar allows reads the same way.
     #[test]
     fn zone_offset_folds_into_utc() {
-        // NOTE: 19:25:59+02:00 is the same instant as 17:25:59Z.
         assert_eq!(
             seconds("2026-07-11T19:25:59+02:00"),
             seconds("2026-07-11T17:25:59Z"),
@@ -192,8 +193,6 @@ mod tests {
             seconds("2026-07-11T12:25:59-0500"),
             seconds("2026-07-11T17:25:59Z"),
         );
-        // NOTE: The hour-only form, which the offset grammar allows and nothing
-        // exercised before.
         assert_eq!(
             seconds("2026-07-11T19:25:59+02"),
             seconds("2026-07-11T17:25:59Z"),

@@ -40,6 +40,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed `tree::vcard` into the two modules it held: `tree::builder` and `tree::validator`.
+
+  The module was one noun sitting over a noun and a verb, `builder` and `validate`, and it held nothing of its own. `VcardBuilder`, `VcardPropBuilder`, `VcardValid` and `VcardValidateError` are unchanged; only their paths move up one level.
+
+  They stay under `tree` rather than at the crate root because both are keyed on the per-property spec, which lives on the lens markers next to the syntax they read.
+
 - Changed the parameter codec to carry an escaping mode, which the parameter side never had.
 
   `VcardParamNode` gains an `escaper` field, stamped by the parser once `VERSION` is known exactly as a value node's already was, and read by every parameter decode.

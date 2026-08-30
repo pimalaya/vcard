@@ -11,9 +11,9 @@ use std::borrow::Cow;
 use vcard::{
     param::VcardParam,
     tree::{
+        builder::VcardPropBuilder,
         cst::VcardCst,
         prop::{email::EMAIL, r#fn::FN},
-        vcard::builder::VcardPropBuilder,
     },
     value::VcardValue,
     vcard::Vcard,
