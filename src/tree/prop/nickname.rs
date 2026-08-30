@@ -1,22 +1,15 @@
 //! # NICKNAME lens
 //!
-//! The `NICKNAME` property lens: the familiar or informal name(s) of the
-//! object, decoded as a comma-separated `VcardTextList` (RFC 6350 6.2.3).
+//! Reading and editing the `NICKNAME` property in place: it decodes as a
+//! [`VcardTextList`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`NICKNAME`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, text::VcardTextList},
-    version::VcardVersion,
+    prop::nickname::NICKNAME,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::text::VcardTextList,
 };
-
-/// The `NICKNAME` property lens.
-pub struct NICKNAME;
 
 impl VcardPropLens for NICKNAME {
     type Target<'v> = VcardTextList<'v>;
@@ -28,28 +21,5 @@ impl VcardPropLens for NICKNAME {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for NICKNAME {
-    const KIND: VcardPropKind = VcardPropKind::Nickname;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V3_0, VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::TextList]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Type,
-            VcardParamKind::Language,
-            VcardParamKind::AltId,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::Value,
-        ]
     }
 }

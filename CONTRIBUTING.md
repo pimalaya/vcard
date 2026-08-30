@@ -11,9 +11,9 @@ Whether you are a human or an AI agent, read these in order before touching the 
 
 Everything below documents only what differs from the Pimalaya standards.
 
-## Deviation: wire-spelled lens markers
+## Deviation: wire-spelled markers
 
-The property and parameter lens markers are spelled exactly as their wire token (`FN`, `ADR`, `SORT_AS`, `TYPE`), against naming-007, which asks every public item to carry the `Vcard` domain prefix. Every other public item does carry it.
+The property and parameter markers are spelled exactly as their wire token (`FN`, `ADR`, `SORT_AS`, `TYPE`), against naming-007, which asks every public item to carry the `Vcard` domain prefix. Every other public item does carry it.
 
 They are type-level keys naming a spec token, written only inside a turbofish (`card.prop::<FN>()`), never constructed and never handled as values.
 

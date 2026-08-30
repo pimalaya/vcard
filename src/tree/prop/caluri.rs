@@ -1,24 +1,15 @@
 //! # CALURI lens
 //!
-//! The `CALURI` property lens: the URI of the contact's calendar, decoded as a
-//! URI.
+//! Reading and editing the `CALURI` property in place: it decodes as a
+//! [`VcardUri`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.9.3.
+//! Its RFC contract sits on the marker, [`CALURI`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, uri::VcardUri},
-    version::VcardVersion,
+    prop::caluri::CALURI,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::uri::VcardUri,
 };
-
-/// The `CALURI` property lens.
-pub struct CALURI;
 
 impl VcardPropLens for CALURI {
     type Target<'v> = VcardUri<'v>;
@@ -30,28 +21,5 @@ impl VcardPropLens for CALURI {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for CALURI {
-    const KIND: VcardPropKind = VcardPropKind::CalUri;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Uri]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::Type,
-            VcardParamKind::MediaType,
-            VcardParamKind::AltId,
-            VcardParamKind::Value,
-        ]
     }
 }

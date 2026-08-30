@@ -23,17 +23,3 @@ pub mod sort_as;
 pub mod r#type;
 pub mod tz;
 pub mod value;
-
-use crate::param::VcardParamKind;
-
-/// The default parameters a property may carry, used by the spec for the
-/// uniform majority. Per-property sets refine this where a property allows more
-/// or fewer.
-pub(crate) const COMMON_PARAMS: &[VcardParamKind] = &[
-    VcardParamKind::Value,
-    VcardParamKind::Language,
-    VcardParamKind::Pref,
-    VcardParamKind::AltId,
-    VcardParamKind::Pid,
-    VcardParamKind::Type,
-];

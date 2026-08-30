@@ -8,7 +8,9 @@ status: current
 
 The "strict out" half of the crate: the per-property spec layer, whole-card validation and the spec-driven builder. All three read one source of truth, so a rule is stated once.
 
-The builder lives at `tree::builder` and the validation at `tree::validator`, both under `tree` because both are keyed on the per-property spec, which sits on the lens markers.
+The builder lives at `builder` and the validation at `validator`, both at the crate root. The per-property contract is `prop::spec`, with the `prop::cardinality` multiplicity axis, and each property marker is defined at `prop::<name>` carrying its `VcardPropSpec` impl. The marker's lens half, its edit cursor and any bespoke codec stay at `tree::prop::<name>`.
+
+All of it works with the `parser` feature off: a spec is a statement about the RFC rather than about bytes, so validating, building and converting a decoded card compile no tokeniser.
 
 Validity and lossiness are orthogonal. A conformant card may still carry `X-` or IANA extensions, so a no-`Unknown` "strict" model type would mean "no extensions", a useless category. Validity is therefore a runtime predicate, not a second data model.
 

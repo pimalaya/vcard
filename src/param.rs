@@ -256,6 +256,18 @@ impl VcardParam<'_> {
     }
 }
 
+/// The default parameters a property may carry, used by the spec for the
+/// uniform majority. Per-property sets refine this where a property allows more
+/// or fewer.
+pub(crate) const COMMON_PARAMS: &[VcardParamKind] = &[
+    VcardParamKind::Value,
+    VcardParamKind::Language,
+    VcardParamKind::Pref,
+    VcardParamKind::AltId,
+    VcardParamKind::Pid,
+    VcardParamKind::Type,
+];
+
 #[cfg(test)]
 mod tests {
     use core::str::FromStr;

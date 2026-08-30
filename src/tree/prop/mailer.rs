@@ -1,24 +1,15 @@
 //! # MAILER lens
 //!
-//! The `MAILER` property lens: the identifier of the contact's mail client,
-//! decoded as a single text value.
+//! Reading and editing the `MAILER` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 2426 3.3.2 (vCard 2.1/3.0; removed in 4.0).
+//! Its RFC contract sits on the marker, [`MAILER`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::mailer::MAILER,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `MAILER` property lens.
-pub struct MAILER;
 
 impl VcardPropLens for MAILER {
     type Target<'v> = VcardText<'v>;
@@ -30,26 +21,5 @@ impl VcardPropLens for MAILER {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for MAILER {
-    const KIND: VcardPropKind = VcardPropKind::Mailer;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V2_1, VcardVersion::V3_0]
-    }
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Language,
-            VcardParamKind::Encoding,
-            VcardParamKind::Charset,
-            VcardParamKind::Value,
-        ]
     }
 }

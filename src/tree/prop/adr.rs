@@ -1,31 +1,24 @@
 //! # ADR lens
 //!
-//! The `ADR` (structured address) property lens, with a cursor naming its
-//! components: the seven RFC 6350 ones and the eleven RFC 9554 extensions.
+//! Reading and editing the `ADR` property in place through a cursor naming
+//! its components, the seven RFC 6350 ones and the eleven RFC 9554
+//! extensions.
 //!
 //! Like [`VcardNCursor`](crate::tree::prop::n::VcardNCursor), getters decode
 //! and setters encode in place, leaving the other components byte for byte
 //! intact.
 //!
-//! See RFC 6350 6.3.1 and RFC 9554.
+//! Its RFC contract sits on the marker, [`ADR`].
 
 use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
+    prop::adr::ADR,
     tree::{
-        codec::VcardCodec,
-        line::VcardLine,
-        param::lens::VcardParamLens,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
+        codec::VcardCodec, line::VcardLine, param::lens::VcardParamLens, prop::lens::VcardPropLens,
     },
-    value::{VcardValueKind, adr::VcardAdr},
-    version::VcardVersion,
+    value::adr::VcardAdr,
 };
-
-/// The `ADR` property lens.
-pub struct ADR;
 
 impl VcardPropLens for ADR {
     type Target<'v> = VcardAdr<'v>;
@@ -37,30 +30,6 @@ impl VcardPropLens for ADR {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardAdrCursor<'c, 'a> {
         VcardAdrCursor { line }
-    }
-}
-
-impl VcardPropSpec for ADR {
-    const KIND: VcardPropKind = VcardPropKind::Adr;
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Adr]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Label,
-            VcardParamKind::Language,
-            VcardParamKind::Phonetic,
-            VcardParamKind::Script,
-            VcardParamKind::Geo,
-            VcardParamKind::Tz,
-            VcardParamKind::AltId,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::Type,
-            VcardParamKind::Value,
-        ]
     }
 }
 

@@ -23,8 +23,8 @@ use serde_json::{Map, Value};
 use crate::{
     jcard::datetime::{extended_to_basic, offset_to_basic},
     param::{VcardParam, VcardParamKind},
+    prop::spec::prop_spec,
     prop::{VcardProp, VcardPropName},
-    tree::prop::spec::prop_spec,
     value::{
         VcardValue, VcardValueKind, VcardValueUnknown,
         adr::VcardAdr,

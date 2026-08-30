@@ -1,24 +1,15 @@
 //! # IMPP lens
 //!
-//! The `IMPP` property lens: a URI for instant messaging and presence with the
-//! contact, decoded as a URI.
+//! Reading and editing the `IMPP` property in place: it decodes as a
+//! [`VcardUri`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.4.3.
+//! Its RFC contract sits on the marker, [`IMPP`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, uri::VcardUri},
-    version::VcardVersion,
+    prop::impp::IMPP,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::uri::VcardUri,
 };
-
-/// The `IMPP` property lens.
-pub struct IMPP;
 
 impl VcardPropLens for IMPP {
     type Target<'v> = VcardUri<'v>;
@@ -30,28 +21,5 @@ impl VcardPropLens for IMPP {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for IMPP {
-    const KIND: VcardPropKind = VcardPropKind::Impp;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V3_0, VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Uri]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Type,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::AltId,
-            VcardParamKind::MediaType,
-            VcardParamKind::Value,
-        ]
     }
 }

@@ -1,22 +1,15 @@
 //! # PRODID lens
 //!
-//! The `PRODID` property lens: the identifier of the product that created the
-//! card, decoded as a single `VcardText` (RFC 6350 6.7.3).
+//! Reading and editing the `PRODID` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`PRODID`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::prodid::PRODID,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `PRODID` property lens.
-pub struct PRODID;
 
 impl VcardPropLens for PRODID {
     type Target<'v> = VcardText<'v>;
@@ -28,21 +21,5 @@ impl VcardPropLens for PRODID {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for PRODID {
-    const KIND: VcardPropKind = VcardPropKind::ProdId;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V3_0, VcardVersion::V4_0]
-    }
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[VcardParamKind::Value]
     }
 }

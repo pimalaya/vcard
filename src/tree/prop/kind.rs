@@ -1,24 +1,15 @@
 //! # KIND lens
 //!
-//! The `KIND` property lens: the kind of entity the card represents, such as an
-//! individual or an organization, decoded as a text value.
+//! Reading and editing the `KIND` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.1.4.
+//! Its RFC contract sits on the marker, [`KIND`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::kind::KIND,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `KIND` property lens.
-pub struct KIND;
 
 impl VcardPropLens for KIND {
     type Target<'v> = VcardText<'v>;
@@ -30,21 +21,5 @@ impl VcardPropLens for KIND {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for KIND {
-    const KIND: VcardPropKind = VcardPropKind::Kind;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[VcardParamKind::Value]
     }
 }

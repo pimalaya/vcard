@@ -22,7 +22,7 @@ name = "vcard"
 [features]
 default = ["parser", "quoted-printable", "base64", "encoding"]
 parser = ["dep:memchr"]
-jcard = ["parser", "dep:serde_json"]
+jcard = ["dep:serde_json"]
 jscontact = ["jcard"]
 quoted-printable = ["dep:quoted_printable"]
 base64 = ["dep:base64"]

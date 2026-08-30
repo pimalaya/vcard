@@ -1,32 +1,26 @@
 //! # N lens
 //!
-//! The `N` (structured name) property lens and its bespoke edit cursor: the
-//! components of the name of the object the card represents (RFC 6350 6.2.2).
+//! Reading and editing the `N` property in place through a bespoke cursor.
 //!
 //! `N` is the showcase of the structured-value path: it pairs [`VcardN`] with
 //! a dedicated [`VcardNCursor`] naming the five components, so callers write
 //! `cursor.set_family(...)` rather than `cursor.set_component(0, ...)`.
 //!
 //! Only the cursor is bespoke: decode and encode use the lens defaults, which
-//! delegate to [`VcardN`]'s [`VcardCodec`] impl in [`crate::tree::value`].
+//! delegate to [`VcardN`]'s [`VcardCodec`]
+//! impl in [`crate::tree::value`].
+//!
+//! Its RFC contract sits on the marker, [`N`].
 
 use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
+    prop::n::N,
     tree::{
-        codec::VcardCodec,
-        line::VcardLine,
-        param::lens::VcardParamLens,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
+        codec::VcardCodec, line::VcardLine, param::lens::VcardParamLens, prop::lens::VcardPropLens,
     },
-    value::{VcardValueKind, n::VcardN},
-    version::VcardVersion,
+    value::n::VcardN,
 };
-
-/// The `N` property lens.
-pub struct N;
 
 impl VcardPropLens for N {
     type Target<'v> = VcardN<'v>;
@@ -38,32 +32,6 @@ impl VcardPropLens for N {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardNCursor<'c, 'a> {
         VcardNCursor { line }
-    }
-}
-
-impl VcardPropSpec for N {
-    const KIND: VcardPropKind = VcardPropKind::N;
-
-    fn cardinality(version: VcardVersion) -> VcardPropCardinality {
-        match version {
-            VcardVersion::V4_0 => VcardPropCardinality::AtMostOne,
-            _ => VcardPropCardinality::ExactlyOne,
-        }
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::N]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::SortAs,
-            VcardParamKind::Language,
-            VcardParamKind::Phonetic,
-            VcardParamKind::Script,
-            VcardParamKind::AltId,
-            VcardParamKind::Value,
-        ]
     }
 }
 
@@ -143,7 +111,7 @@ impl VcardNCursor<'_, '_> {
 mod tests {
     use alloc::{borrow::Cow, string::ToString, vec};
 
-    use crate::tree::{cst::VcardCst, prop::n::N};
+    use crate::{prop::n::N, tree::cst::VcardCst};
 
     #[test]
     fn names_components_and_sets_them_preserving_the_rest() {

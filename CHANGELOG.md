@@ -2,7 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -40,11 +41,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-- Changed `tree::vcard` into the two modules it held: `tree::builder` and `tree::validator`.
+- Changed `tree::vcard` into `builder` and `validator` at the crate root, and moved the property spec layer up with them: `prop::spec`, `prop::cardinality`, and one marker module per property under `prop`.
 
-  The module was one noun sitting over a noun and a verb, `builder` and `validate`, and it held nothing of its own. `VcardBuilder`, `VcardPropBuilder`, `VcardValid` and `VcardValidateError` are unchanged; only their paths move up one level.
+  The module was one noun sitting over a noun and a verb, `builder` and `validate`, and it held nothing of its own. `VcardBuilder`, `VcardPropBuilder`, `VcardValid` and `VcardValidateError` are otherwise unchanged.
 
-  They stay under `tree` rather than at the crate root because both are keyed on the per-property spec, which lives on the lens markers next to the syntax they read.
+  `tree::prop::<name>::<MARKER>` is now `prop::<name>::<MARKER>`: `vcard::prop::r#fn::FN`, `vcard::prop::adr::ADR`. Each marker carries the RFC contract it always carried, and `tree::prop::<name>` keeps the lens half, the decode projection and the edit cursor.
+
+  The split says what was already true. A property spec is what the RFC allows, not how bytes are laid out, so nothing about it needs a parser. Reading `tree::builder` as "builds a tree" was the symptom.
+
+- Changed `Vcard::validate`, the builders and the jCard and JSContact codecs to no longer require the `parser` feature.
+
+  All four went through the property spec, which used to live under `tree`, so all four dragged in the tokeniser and `memchr` to say what a version allows or to project a card onto JSON. `jcard` is now `["dep:serde_json"]` alone, and a card can be validated, built and converted with no default features at all.
 
 - Changed the parameter codec to carry an escaping mode, which the parameter side never had.
 

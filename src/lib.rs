@@ -24,14 +24,14 @@
 //! into the model.
 //!
 //! Strictness lives on the way out: the builder refuses to construct a
-//! property the spec forbids, and [`validate`](tree::validator) checks a
+//! property the spec forbids, and [`validate`](validator) checks a
 //! decoded card against its version's RFC contract.
 //!
 //! ## The two layers
 //!
-//! The decoded model ([`vcard`], [`version`], [`prop`], [`param`], [`value`])
-//! is pure data with no dependency on the syntax side, so it can be depended
-//! on alone.
+//! The decoded model ([`vcard`], [`version`], [`prop`], [`param`], [`value`]),
+//! with its [`builder`] and [`validator`], is pure data with no dependency on
+//! the syntax side, so it can be depended on alone.
 //!
 //! Property and parameter names and value kinds are closed identity enums
 //! ([`VcardPropKind`], [`VcardParamKind`], [`VcardValueKind`]) whose wire
@@ -69,12 +69,14 @@
 //!
 //! ## The spec layer
 //!
-//! Each property carries a [`VcardPropSpec`] on its lens marker, declaring per
+//! Each property carries a [`VcardPropSpec`] on its marker, declaring per
 //! version the value kinds and parameters it allows, and one vtable dispatch
-//! bridges the open [`VcardPropKind`] back to those static specs.
+//! bridges the open [`VcardPropKind`] back to those static specs. It says what
+//! the RFC allows rather than how bytes are laid out, so it sits in [`prop`]
+//! with the model and needs no parser.
 //!
 //! That one source of truth has three readers: the decoder picks a value kind
-//! from it, [`validate`](tree::validator) checks conformance against it,
+//! from it, [`validate`](validator) checks conformance against it,
 //! and the builder rejects illegal construction with it.
 //!
 //! A card that passes earns a [`VcardValid`] proof. Validity is a runtime
@@ -141,12 +143,13 @@
 //! [`cursor`]: tree::value::cursor::VcardValueCursor
 //! [`VcardMerge`]: tree::merge::VcardMerge
 //! [`to_bytes`]: tree::cst::VcardCst::to_bytes
-//! [`VcardPropSpec`]: tree::prop::spec::VcardPropSpec
-//! [`VcardValid`]: tree::validator::VcardValid
+//! [`VcardPropSpec`]: prop::spec::VcardPropSpec
+//! [`VcardValid`]: validator::VcardValid
 //! [`decode_base64`]: value::binary::VcardBinary::decode_base64
 
 extern crate alloc;
 
+pub mod builder;
 #[cfg(feature = "jcard")]
 #[cfg_attr(docsrs, doc(cfg(feature = "jcard")))]
 pub mod jcard;
@@ -155,6 +158,7 @@ pub mod jcard;
 pub mod jscontact;
 pub mod param;
 pub mod prop;
+pub mod validator;
 pub mod value;
 pub mod vcard;
 pub mod version;

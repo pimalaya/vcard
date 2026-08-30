@@ -37,6 +37,7 @@ use crate::{
         value::node::VcardValueNode,
         wire::VcardWire,
     },
+    validator::VcardValid,
     vcard::Vcard,
 };
 
@@ -60,6 +61,12 @@ impl Vcard<'_> {
 impl<'a> From<Vcard<'a>> for VcardCst<'static> {
     fn from(card: Vcard<'a>) -> Self {
         card.encode()
+    }
+}
+
+impl From<VcardValid<Vcard<'_>>> for VcardCst<'static> {
+    fn from(card: VcardValid<Vcard<'_>>) -> Self {
+        card.into_inner().encode()
     }
 }
 

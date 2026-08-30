@@ -1,28 +1,21 @@
 //! # PHOTO lens
 //!
-//! The `PHOTO` property lens: an image of the object.
+//! Reading and editing the `PHOTO` property in place.
 //!
 //! Its value shape is version-specific, so the lens overrides
 //! [`decode`](VcardPropLens::decode) to resolve it from the card version
 //! through the property spec: a `data:` URI in 4.0 ([`VcardValue::Uri`]),
 //! inline base64 or a URI reference in 2.1 / 3.0 ([`VcardValue::Binary`]).
 //!
-//! See RFC 6350 6.2.4.
+//! Its RFC contract sits on the marker, [`PHOTO`].
 
 use crate::{
-    param::VcardParamKind,
     prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValue, VcardValueKind},
+    prop::photo::PHOTO,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::VcardValue,
     version::VcardVersion,
 };
-
-/// The `PHOTO` property lens.
-pub struct PHOTO;
 
 impl VcardPropLens for PHOTO {
     type Target<'v> = VcardValue<'v>;
@@ -38,27 +31,5 @@ impl VcardPropLens for PHOTO {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for PHOTO {
-    const KIND: VcardPropKind = VcardPropKind::Photo;
-
-    fn allowed_values(version: VcardVersion) -> &'static [VcardValueKind] {
-        match version {
-            VcardVersion::V4_0 => &[VcardValueKind::Uri],
-            _ => &[VcardValueKind::Binary, VcardValueKind::Uri],
-        }
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::AltId,
-            VcardParamKind::Type,
-            VcardParamKind::MediaType,
-            VcardParamKind::Pref,
-            VcardParamKind::Pid,
-            VcardParamKind::Value,
-        ]
     }
 }

@@ -1,24 +1,15 @@
 //! # CALADRURI lens
 //!
-//! The `CALADRURI` property lens: the URI to use when sending a scheduling
-//! request to the contact, decoded as a URI.
+//! Reading and editing the `CALADRURI` property in place: it decodes as a
+//! [`VcardUri`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.9.2.
+//! Its RFC contract sits on the marker, [`CALADRURI`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, uri::VcardUri},
-    version::VcardVersion,
+    prop::caladruri::CALADRURI,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::uri::VcardUri,
 };
-
-/// The `CALADRURI` property lens.
-pub struct CALADRURI;
 
 impl VcardPropLens for CALADRURI {
     type Target<'v> = VcardUri<'v>;
@@ -30,28 +21,5 @@ impl VcardPropLens for CALADRURI {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for CALADRURI {
-    const KIND: VcardPropKind = VcardPropKind::CalAdrUri;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Uri]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::Type,
-            VcardParamKind::MediaType,
-            VcardParamKind::AltId,
-            VcardParamKind::Value,
-        ]
     }
 }

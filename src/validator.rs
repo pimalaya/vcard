@@ -9,7 +9,7 @@
 //!
 //! [`Vcard::validate`] therefore checks the *known* parts of the (lossy) model
 //! against the per-property
-//! [`VcardPropSpec`](crate::tree::prop::spec::VcardPropSpec) for the card
+//! [`VcardPropSpec`](crate::prop::spec::VcardPropSpec) for the card
 //! version, and leaves the unknown parts alone.
 //!
 //! The check covers existence, value kind, parameters and cardinality. A
@@ -17,7 +17,7 @@
 //! holding a `VcardValid<Vcard>` is proof the check passed. The same
 //! per-property check backs the [`VcardPropBuilder`]'s strict construction.
 //!
-//! [`VcardPropBuilder`]: crate::tree::builder::VcardPropBuilder
+//! [`VcardPropBuilder`]: crate::builder::VcardPropBuilder
 //!
 //! ## Example
 //!
@@ -44,10 +44,10 @@ use alloc::vec::Vec;
 
 use crate::{
     param::VcardParamKind,
-    prop::{VcardProp, VcardPropKind, VcardPropName},
-    tree::{
-        cst::VcardCst,
-        prop::{cardinality::VcardPropCardinality, spec::VcardPropSpecFns, spec::prop_spec},
+    prop::{
+        VcardProp, VcardPropKind, VcardPropName,
+        cardinality::VcardPropCardinality,
+        spec::{VcardPropSpecFns, prop_spec},
     },
     value::VcardValueKind,
     vcard::Vcard,
@@ -183,7 +183,7 @@ impl<'a> Vcard<'a> {
 /// Check one property against its spec for the version, pushing any violations.
 /// An unknown (extension) property is always conformant. Shared by
 /// [`Vcard::validate`] and the
-/// [`VcardPropBuilder`](crate::tree::builder::VcardPropBuilder).
+/// [`VcardPropBuilder`](crate::builder::VcardPropBuilder).
 pub(crate) fn validate_prop(
     prop: &VcardProp<'_>,
     version: VcardVersion,
@@ -310,24 +310,15 @@ impl<'a> TryFrom<Vcard<'a>> for VcardValid<Vcard<'a>> {
     }
 }
 
-impl From<VcardValid<Vcard<'_>>> for VcardCst<'static> {
-    fn from(card: VcardValid<Vcard<'_>>) -> Self {
-        card.into_inner().encode()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
 
     use crate::{
         param::{VcardParam, VcardParamKind},
-        prop::{VcardProp, VcardPropKind},
-        tree::{
-            cst::VcardCst,
-            prop::cardinality::VcardPropCardinality,
-            validator::{VcardValid, VcardValidateError},
-        },
+        prop::{VcardProp, VcardPropKind, cardinality::VcardPropCardinality},
+        tree::cst::VcardCst,
+        validator::{VcardValid, VcardValidateError},
         value::{VcardValue, VcardValueKind, n::VcardN, text::VcardText, uri::VcardUri},
         vcard::Vcard,
         version::VcardVersion,

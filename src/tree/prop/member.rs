@@ -1,23 +1,15 @@
 //! # MEMBER lens
 //!
-//! The `MEMBER` property lens: a URI naming a member of the group the card
-//! represents, meaningful only when `KIND` is `group`. The lens decodes the
-//! value as a `VcardUri` (RFC 6350 6.6.5).
+//! Reading and editing the `MEMBER` property in place: it decodes as a
+//! [`VcardUri`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`MEMBER`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, uri::VcardUri},
-    version::VcardVersion,
+    prop::member::MEMBER,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::uri::VcardUri,
 };
-
-/// The `MEMBER` property lens.
-pub struct MEMBER;
 
 impl VcardPropLens for MEMBER {
     type Target<'v> = VcardUri<'v>;
@@ -29,27 +21,5 @@ impl VcardPropLens for MEMBER {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for MEMBER {
-    const KIND: VcardPropKind = VcardPropKind::Member;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Uri]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::AltId,
-            VcardParamKind::MediaType,
-            VcardParamKind::Value,
-        ]
     }
 }

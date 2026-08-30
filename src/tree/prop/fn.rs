@@ -1,24 +1,15 @@
 //! # FN lens
 //!
-//! The `FN` (formatted name) property lens: the contact's display name, decoded
-//! as a single text value.
+//! Reading and editing the `FN` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.2.1.
+//! Its RFC contract sits on the marker `FN`, in `crate::prop::r#fn`.
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::r#fn::FN,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `FN` property lens.
-pub struct FN;
 
 impl VcardPropLens for FN {
     type Target<'v> = VcardText<'v>;
@@ -30,27 +21,5 @@ impl VcardPropLens for FN {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for FN {
-    const KIND: VcardPropKind = VcardPropKind::Fn;
-
-    fn cardinality(version: VcardVersion) -> VcardPropCardinality {
-        match version {
-            VcardVersion::V2_1 => VcardPropCardinality::AtMostOne,
-            _ => VcardPropCardinality::OneOrMore,
-        }
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Type,
-            VcardParamKind::Language,
-            VcardParamKind::AltId,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::Value,
-        ]
     }
 }

@@ -12,10 +12,8 @@
 use std::borrow::Cow;
 
 use vcard::{
-    tree::{
-        cst::VcardCst,
-        prop::{r#fn::FN, n::N, nickname::NICKNAME, note::NOTE, org::ORG},
-    },
+    prop::{r#fn::FN, n::N, nickname::NICKNAME, note::NOTE, org::ORG},
+    tree::cst::VcardCst,
     version::VcardVersion,
 };
 

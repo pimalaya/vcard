@@ -1,22 +1,15 @@
 //! # TITLE lens
 //!
-//! The `TITLE` (job title) property lens: the position or job of the object,
-//! decoded as a single `VcardText` (RFC 6350 6.6.1).
+//! Reading and editing the `TITLE` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`TITLE`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::title::TITLE,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `TITLE` property lens.
-pub struct TITLE;
 
 impl VcardPropLens for TITLE {
     type Target<'v> = VcardText<'v>;
@@ -28,20 +21,5 @@ impl VcardPropLens for TITLE {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for TITLE {
-    const KIND: VcardPropKind = VcardPropKind::Title;
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Language,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::AltId,
-            VcardParamKind::Type,
-            VcardParamKind::Value,
-        ]
     }
 }

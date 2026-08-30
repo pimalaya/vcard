@@ -1,24 +1,15 @@
 //! # BDAY lens
 //!
-//! The `BDAY` (birthday) property lens: the contact's birth date, decoded as a
-//! date-and-or-time value.
+//! Reading and editing the `BDAY` property in place: it decodes as a
+//! [`VcardDateAndOrTime`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.2.5.
+//! Its RFC contract sits on the marker, [`BDAY`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, datetime::VcardDateAndOrTime},
-    version::VcardVersion,
+    prop::bday::BDAY,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::datetime::VcardDateAndOrTime,
 };
-
-/// The `BDAY` property lens.
-pub struct BDAY;
 
 impl VcardPropLens for BDAY {
     type Target<'v> = VcardDateAndOrTime<'v>;
@@ -30,26 +21,5 @@ impl VcardPropLens for BDAY {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for BDAY {
-    const KIND: VcardPropKind = VcardPropKind::Bday;
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::DateAndOrTime, VcardValueKind::Text]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::AltId,
-            VcardParamKind::CalScale,
-            VcardParamKind::Language,
-            VcardParamKind::Value,
-        ]
     }
 }

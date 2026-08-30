@@ -4,17 +4,13 @@
 //! bridges the open [`VcardPropKind`] back to those static impls.
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        param::COMMON_PARAMS,
-        prop::{
-            adr, agent, anniversary, bday, caladruri, caluri, cardinality::VcardPropCardinality,
-            categories, class, client_pid_map, created, email, fburl, r#fn, gender, geo,
-            gramgender, impp, jsprop, key, kind, label, lang, language, logo, mailer, member, n,
-            name, nickname, note, org, photo, prodid, profile, pronouns, related, rev, role,
-            socialprofile, sort_string, sound, source, tel, title, tz, uid, url, xml,
-        },
+    param::{COMMON_PARAMS, VcardParamKind},
+    prop::{
+        VcardPropKind, adr, agent, anniversary, bday, caladruri, caluri,
+        cardinality::VcardPropCardinality, categories, class, client_pid_map, created, email,
+        fburl, r#fn, gender, geo, gramgender, impp, jsprop, key, kind, label, lang, language, logo,
+        mailer, member, n, name, nickname, note, org, photo, prodid, profile, pronouns, related,
+        rev, role, socialprofile, sort_string, sound, source, tel, title, tz, uid, url, xml,
     },
     value::VcardValueKind,
     version::VcardVersion,
@@ -75,7 +71,9 @@ pub(crate) struct VcardPropSpecFns {
     pub allowed_values: fn(VcardVersion) -> &'static [VcardValueKind],
     /// See [`VcardPropSpec::allowed_params`].
     pub allowed_params: fn(VcardVersion) -> &'static [VcardParamKind],
-    /// See [`VcardPropSpec::value`].
+    /// See [`VcardPropSpec::value`]. Read by the decoder and the jCard import,
+    /// so it is dead in a build carrying neither.
+    #[allow(dead_code)]
     pub value: fn(VcardVersion, Option<VcardValueKind>) -> VcardValueKind,
 }
 
@@ -149,8 +147,7 @@ pub(crate) fn prop_spec(prop: VcardPropKind) -> VcardPropSpecFns {
 #[cfg(test)]
 mod tests {
     use crate::{
-        prop::VcardPropKind, tree::prop::spec::prop_spec, value::VcardValueKind,
-        version::VcardVersion,
+        prop::VcardPropKind, prop::spec::prop_spec, value::VcardValueKind, version::VcardVersion,
     };
 
     #[test]

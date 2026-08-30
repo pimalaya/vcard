@@ -8,7 +8,8 @@
 //! stay in sync; each property implements it on the marker in its own module.
 
 use crate::{
-    tree::{codec::VcardCodec, line::VcardLine, prop::spec::VcardPropSpec},
+    prop::spec::VcardPropSpec,
+    tree::{codec::VcardCodec, line::VcardLine},
     version::VcardVersion,
 };
 

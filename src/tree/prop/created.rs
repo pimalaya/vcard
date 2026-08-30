@@ -1,24 +1,15 @@
 //! # CREATED lens
 //!
-//! The `CREATED` property lens: the timestamp of the card's creation,
-//! decoded as a `VcardTimestamp`.
+//! Reading and editing the `CREATED` property in place: it decodes as a
+//! [`VcardTimestamp`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 9554.
+//! Its RFC contract sits on the marker, [`CREATED`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, datetime::VcardTimestamp},
-    version::VcardVersion,
+    prop::created::CREATED,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::datetime::VcardTimestamp,
 };
-
-/// The `CREATED` property lens.
-pub struct CREATED;
 
 impl VcardPropLens for CREATED {
     type Target<'v> = VcardTimestamp<'v>;
@@ -30,25 +21,5 @@ impl VcardPropLens for CREATED {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for CREATED {
-    const KIND: VcardPropKind = VcardPropKind::Created;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Timestamp]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[VcardParamKind::Value]
     }
 }

@@ -19,13 +19,12 @@ use alloc::{borrow::Cow, vec::Vec};
 
 use crate::{
     param::{VcardParam, VcardParamKind},
-    prop::{VcardProp, VcardPropKind, VcardPropName},
+    prop::{VcardProp, VcardPropKind, VcardPropName, spec::prop_spec},
     tree::{
         codec::{VcardCodec, unescape::unescape_param},
         cst::VcardCst,
         line::VcardLine,
         param::node::VcardParamNode,
-        prop::spec::prop_spec,
         value::node::VcardValueNode,
     },
     value::{
@@ -342,7 +341,7 @@ mod tests {
     /// identically through the typed lens, not as a version-blind URI.
     #[test]
     fn geo_and_binary_lenses_agree_with_whole_card_decode() {
-        use crate::tree::prop::{geo::GEO, photo::PHOTO};
+        use crate::prop::{geo::GEO, photo::PHOTO};
 
         for input in [
             concat!(
@@ -419,7 +418,7 @@ mod tests {
 
     #[test]
     fn applies_version_specific_escaping() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         // NOTE: 2.1: only `\;` is an escape; `\n` stays a literal backslash-n.
         let cst = VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE:a\\nb\\;c\r\nEND:VCARD\r\n")

@@ -205,9 +205,9 @@ impl VcardListCursor<'_, '_> {
 mod tests {
     use alloc::{string::ToString, vec};
 
-    use crate::tree::{
-        cst::VcardCst,
+    use crate::{
         prop::{adr::ADR, r#fn::FN},
+        tree::cst::VcardCst,
     };
 
     #[test]
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn writes_and_reads_a_foreign_charset_value_as_raw_bytes() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         let mut card = VcardCst::parse(
             "BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;CHARSET=ISO-8859-1:x\r\nEND:VCARD\r\n",
@@ -239,7 +239,7 @@ mod tests {
     /// value.
     #[test]
     fn bytes_returns_the_raw_undecoded_value() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
@@ -256,7 +256,7 @@ mod tests {
     /// `=E9` is the Latin-1 'é' octet, which the helper resolves to raw bytes.
     #[test]
     fn quoted_printable_helper_resolves_octets() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
@@ -277,7 +277,7 @@ mod tests {
     /// the QUOTED-PRINTABLE one, yields the UTF-8 string.
     #[test]
     fn charset_helper_transcodes_to_utf8() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
@@ -304,7 +304,7 @@ mod tests {
     /// different value leaves it byte for byte.
     #[test]
     fn walks_a_list_editing_items_without_reformatting_siblings() {
-        use crate::tree::prop::nickname::NICKNAME;
+        use crate::prop::nickname::NICKNAME;
 
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn walks_a_list_setting_inserting_and_pushing() {
-        use crate::tree::prop::nickname::NICKNAME;
+        use crate::prop::nickname::NICKNAME;
 
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNICKNAME:a,b,c\r\nEND:VCARD\r\n")
@@ -348,7 +348,7 @@ mod tests {
     /// component left the old tail behind: read then write changed the value.
     #[test]
     fn reads_and_writes_the_whole_value_not_its_first_component() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a;b\r\nEND:VCARD\r\n").unwrap();
@@ -370,7 +370,7 @@ mod tests {
     /// A named component of a structured value keeps the commas inside it.
     #[test]
     fn reads_a_structured_component_past_its_first_comma() {
-        use crate::tree::prop::client_pid_map::CLIENTPIDMAP;
+        use crate::prop::client_pid_map::CLIENTPIDMAP;
 
         let mut card = VcardCst::parse(concat!(
             "BEGIN:VCARD\r\n",
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn exercises_every_generic_accessor() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:4.0\r\nNOTE:a,b\r\nEND:VCARD\r\n").unwrap();

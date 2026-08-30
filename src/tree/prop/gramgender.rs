@@ -1,24 +1,15 @@
 //! # GRAMGENDER lens
 //!
-//! The `GRAMGENDER` property lens: the grammatical gender to address the
-//! contact by (e.g. `feminine`, `neuter`), decoded as text.
+//! Reading and editing the `GRAMGENDER` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 9554.
+//! Its RFC contract sits on the marker, [`GRAMGENDER`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::gramgender::GRAMGENDER,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `GRAMGENDER` property lens.
-pub struct GRAMGENDER;
 
 impl VcardPropLens for GRAMGENDER {
     type Target<'v> = VcardText<'v>;
@@ -30,21 +21,5 @@ impl VcardPropLens for GRAMGENDER {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for GRAMGENDER {
-    const KIND: VcardPropKind = VcardPropKind::GramGender;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Language,
-            VcardParamKind::AltId,
-            VcardParamKind::Value,
-        ]
     }
 }

@@ -1,24 +1,15 @@
 //! # EMAIL lens
 //!
-//! The `EMAIL` property lens: an email address for the contact, decoded as a
-//! text value.
+//! Reading and editing the `EMAIL` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.4.2.
+//! Its RFC contract sits on the marker, [`EMAIL`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::email::EMAIL,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `EMAIL` property lens.
-pub struct EMAIL;
 
 impl VcardPropLens for EMAIL {
     type Target<'v> = VcardText<'v>;
@@ -30,19 +21,5 @@ impl VcardPropLens for EMAIL {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for EMAIL {
-    const KIND: VcardPropKind = VcardPropKind::Email;
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Type,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::AltId,
-            VcardParamKind::Value,
-        ]
     }
 }

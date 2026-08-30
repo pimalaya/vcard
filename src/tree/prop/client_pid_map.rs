@@ -1,27 +1,19 @@
 //! # CLIENTPIDMAP lens
 //!
-//! The `CLIENTPIDMAP` property lens, mapping a PID source identifier to the URI
-//! of the client that produced it, with a cursor naming those two components.
+//! Reading and editing the `CLIENTPIDMAP` property in place through a cursor
+//! naming its two components, the source identifier and the client URI.
 //!
-//! See RFC 6350 6.7.7.
+//! Its RFC contract sits on the marker, [`CLIENTPIDMAP`].
 
 use alloc::borrow::Cow;
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
+    prop::client_pid_map::CLIENTPIDMAP,
     tree::{
-        codec::VcardCodec,
-        line::VcardLine,
-        param::lens::VcardParamLens,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
+        codec::VcardCodec, line::VcardLine, param::lens::VcardParamLens, prop::lens::VcardPropLens,
     },
-    value::{VcardValueKind, client_pid_map::VcardClientPidMap},
-    version::VcardVersion,
+    value::client_pid_map::VcardClientPidMap,
 };
-
-/// The `CLIENTPIDMAP` property lens.
-pub struct CLIENTPIDMAP;
 
 impl VcardPropLens for CLIENTPIDMAP {
     type Target<'v> = VcardClientPidMap<'v>;
@@ -33,22 +25,6 @@ impl VcardPropLens for CLIENTPIDMAP {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardClientPidMapCursor<'c, 'a> {
         VcardClientPidMapCursor { line }
-    }
-}
-
-impl VcardPropSpec for CLIENTPIDMAP {
-    const KIND: VcardPropKind = VcardPropKind::ClientPidMap;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::ClientPidMap]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[]
     }
 }
 

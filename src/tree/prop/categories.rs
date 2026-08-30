@@ -1,24 +1,15 @@
 //! # CATEGORIES lens
 //!
-//! The `CATEGORIES` property lens: the tags the contact belongs to, decoded as
-//! a comma-separated text list.
+//! Reading and editing the `CATEGORIES` property in place: it decodes as a
+//! [`VcardTextList`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.7.1.
+//! Its RFC contract sits on the marker, [`CATEGORIES`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, text::VcardTextList},
-    version::VcardVersion,
+    prop::categories::CATEGORIES,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::text::VcardTextList,
 };
-
-/// The `CATEGORIES` property lens.
-pub struct CATEGORIES;
 
 impl VcardPropLens for CATEGORIES {
     type Target<'v> = VcardTextList<'v>;
@@ -30,27 +21,5 @@ impl VcardPropLens for CATEGORIES {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for CATEGORIES {
-    const KIND: VcardPropKind = VcardPropKind::Categories;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V3_0, VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::TextList]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::Type,
-            VcardParamKind::AltId,
-            VcardParamKind::Value,
-        ]
     }
 }

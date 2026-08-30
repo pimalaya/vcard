@@ -489,20 +489,18 @@ fn every_property_kind_derefs_and_round_trips() {
 
 #[test]
 fn exercises_every_property_lens_and_bespoke_cursor() {
-    use vcard::tree::{
-        param::r#type::TYPE,
-        prop::{
-            adr::ADR, agent::AGENT, anniversary::ANNIVERSARY, bday::BDAY, caladruri::CALADRURI,
-            caluri::CALURI, categories::CATEGORIES, class::CLASS, client_pid_map::CLIENTPIDMAP,
-            created::CREATED, email::EMAIL, fburl::FBURL, r#fn::FN, gender::GENDER, geo::GEO,
-            gramgender::GRAMGENDER, impp::IMPP, jsprop::JSPROP, key::KEY, kind::KIND, label::LABEL,
-            lang::LANG, language::LANGUAGE, logo::LOGO, mailer::MAILER, member::MEMBER, n::N,
-            name::NAME, nickname::NICKNAME, note::NOTE, org::ORG, photo::PHOTO, prodid::PRODID,
-            profile::PROFILE, pronouns::PRONOUNS, related::RELATED, rev::REV, role::ROLE,
-            socialprofile::SOCIALPROFILE, sort_string::SORT_STRING, sound::SOUND, source::SOURCE,
-            tel::TEL, title::TITLE, tz::TZ, uid::UID, url::URL, xml::XML,
-        },
+    use vcard::prop::{
+        adr::ADR, agent::AGENT, anniversary::ANNIVERSARY, bday::BDAY, caladruri::CALADRURI,
+        caluri::CALURI, categories::CATEGORIES, class::CLASS, client_pid_map::CLIENTPIDMAP,
+        created::CREATED, email::EMAIL, fburl::FBURL, r#fn::FN, gender::GENDER, geo::GEO,
+        gramgender::GRAMGENDER, impp::IMPP, jsprop::JSPROP, key::KEY, kind::KIND, label::LABEL,
+        lang::LANG, language::LANGUAGE, logo::LOGO, mailer::MAILER, member::MEMBER, n::N,
+        name::NAME, nickname::NICKNAME, note::NOTE, org::ORG, photo::PHOTO, prodid::PRODID,
+        profile::PROFILE, pronouns::PRONOUNS, related::RELATED, rev::REV, role::ROLE,
+        socialprofile::SOCIALPROFILE, sort_string::SORT_STRING, sound::SOUND, source::SOURCE,
+        tel::TEL, title::TITLE, tz::TZ, uid::UID, url::URL, xml::XML,
     };
+    use vcard::tree::param::r#type::TYPE;
 
     let raw = concat!(
         "BEGIN:VCARD\r\nVERSION:4.0\r\n",
@@ -729,13 +727,11 @@ fn exercises_every_property_lens_and_bespoke_cursor() {
 
 #[test]
 fn exercises_every_parameter_lens() {
-    use vcard::tree::{
-        param::{
-            altid::ALTID, calscale::CALSCALE, geo::GEO as GEOP, label::LABEL as LABELP,
-            language::LANGUAGE, lens::VcardParamLens, mediatype::MEDIATYPE, pid::PID, pref::PREF,
-            sort_as::SORT_AS, r#type::TYPE, tz::TZ as TZP, value::VALUE,
-        },
-        prop::tel::TEL,
+    use vcard::prop::tel::TEL;
+    use vcard::tree::param::{
+        altid::ALTID, calscale::CALSCALE, geo::GEO as GEOP, label::LABEL as LABELP,
+        language::LANGUAGE, lens::VcardParamLens, mediatype::MEDIATYPE, pid::PID, pref::PREF,
+        sort_as::SORT_AS, r#type::TYPE, tz::TZ as TZP, value::VALUE,
     };
 
     let raw = concat!(

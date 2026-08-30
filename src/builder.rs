@@ -22,7 +22,7 @@
 //!
 //! Its name is pinned by the marker's [`VcardPropSpec`], and
 //! [`build`](VcardPropBuilder::build) runs the shared per-property check
-//! ([`validate_prop`](crate::tree::validator)), so the value kind and every
+//! ([`validate_prop`](crate::validator)), so the value kind and every
 //! known parameter must be allowed for the version.
 //!
 //! Unknown, extension parameters pass. To emit something the spec forbids,
@@ -32,8 +32,8 @@
 //! ## Example
 //!
 //! ```rust
-//! use vcard::tree::builder::VcardBuilder;
-//! use vcard::tree::prop::{r#fn::FN, note::NOTE};
+//! use vcard::builder::VcardBuilder;
+//! use vcard::prop::{r#fn::FN, note::NOTE};
 //! use vcard::param::VcardParam;
 //! use vcard::value::VcardValue;
 //! use vcard::value::text::VcardText;
@@ -58,11 +58,8 @@ use alloc::vec::Vec;
 
 use crate::{
     param::VcardParam,
-    prop::{VcardProp, VcardPropName},
-    tree::{
-        prop::spec::VcardPropSpec,
-        validator::{VcardValid, VcardValidateError, validate_prop},
-    },
+    prop::{VcardProp, VcardPropName, spec::VcardPropSpec},
+    validator::{VcardValid, VcardValidateError, validate_prop},
     value::VcardValue,
     vcard::Vcard,
     version::VcardVersion,
@@ -200,8 +197,9 @@ mod tests {
     use alloc::{borrow::Cow, vec};
 
     use crate::{
+        builder::VcardPropBuilder,
         param::VcardParam,
-        tree::{builder::VcardPropBuilder, prop::r#fn::FN},
+        prop::r#fn::FN,
         value::{VcardValue, text::VcardText, uri::VcardUri},
         version::VcardVersion,
     };
@@ -242,7 +240,7 @@ mod tests {
 
     #[test]
     fn card_builder_chains_props_and_validates() {
-        use crate::tree::{builder::VcardBuilder, prop::note::NOTE};
+        use crate::{builder::VcardBuilder, prop::note::NOTE};
 
         let valid = VcardBuilder::new(VcardVersion::V4_0)
             .prop::<FN>()
@@ -262,7 +260,7 @@ mod tests {
     /// only surfaces from the final build().
     #[test]
     fn card_builder_defers_a_violation_to_build() {
-        use crate::tree::builder::VcardBuilder;
+        use crate::builder::VcardBuilder;
 
         let built = VcardBuilder::new(VcardVersion::V4_0)
             .prop::<FN>()

@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 
 use crate::{
     param::VcardParam,
-    prop::VcardPropKind,
+    prop::{VcardPropKind, cardinality::VcardPropCardinality, spec::prop_spec},
     tree::{
         codec::{mode::VcardEscaper, unescape::unescape_param},
         cst::VcardCst,
@@ -39,7 +39,6 @@ use crate::{
             matching::Matching, slot::Slot,
         },
         param::node::VcardParamNode,
-        prop::{cardinality::VcardPropCardinality, spec::prop_spec},
         value::node::VcardValueNode,
     },
     version::VcardVersion,

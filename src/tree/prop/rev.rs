@@ -1,22 +1,15 @@
 //! # REV lens
 //!
-//! The `REV` (revision) property lens: the timestamp of the card's latest
-//! revision, decoded as a `VcardTimestamp` (RFC 6350 6.7.4).
+//! Reading and editing the `REV` property in place: it decodes as a
+//! [`VcardTimestamp`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`REV`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, datetime::VcardTimestamp},
-    version::VcardVersion,
+    prop::rev::REV,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::datetime::VcardTimestamp,
 };
-
-/// The `REV` property lens.
-pub struct REV;
 
 impl VcardPropLens for REV {
     type Target<'v> = VcardTimestamp<'v>;
@@ -28,21 +21,5 @@ impl VcardPropLens for REV {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for REV {
-    const KIND: VcardPropKind = VcardPropKind::Rev;
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Timestamp]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[VcardParamKind::Value]
     }
 }

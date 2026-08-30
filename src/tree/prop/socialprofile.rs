@@ -1,25 +1,20 @@
 //! # SOCIALPROFILE lens
 //!
-//! The `SOCIALPROFILE` property lens: a social-media profile, a URI by
-//! default or a username when `VALUE=text` is declared, so the lens decodes
-//! through the property spec like the other multi-kind lenses.
+//! Reading and editing the `SOCIALPROFILE` property in place.
 //!
-//! See RFC 9554.
+//! Its value takes two kinds, so the lens overrides
+//! [`decode`](VcardPropLens::decode) to resolve the one in force through the
+//! property spec: a URI by default, a username when `VALUE=text` is declared.
+//!
+//! Its RFC contract sits on the marker, [`SOCIALPROFILE`].
 
 use crate::{
-    param::VcardParamKind,
     prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValue, VcardValueKind},
+    prop::socialprofile::SOCIALPROFILE,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::VcardValue,
     version::VcardVersion,
 };
-
-/// The `SOCIALPROFILE` property lens.
-pub struct SOCIALPROFILE;
 
 impl VcardPropLens for SOCIALPROFILE {
     type Target<'v> = VcardValue<'v>;
@@ -35,28 +30,5 @@ impl VcardPropLens for SOCIALPROFILE {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for SOCIALPROFILE {
-    const KIND: VcardPropKind = VcardPropKind::SocialProfile;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Uri, VcardValueKind::Text]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::ServiceType,
-            VcardParamKind::Username,
-            VcardParamKind::Pref,
-            VcardParamKind::Type,
-            VcardParamKind::AltId,
-            VcardParamKind::Value,
-        ]
     }
 }

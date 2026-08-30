@@ -1,24 +1,17 @@
 //! # ORG lens
 //!
-//! The `ORG` (organization) property lens (RFC 6350 6.6.4): the organizational
-//! name and units the object belongs to. Its value is a `;`-ordered list of
-//! units, which maps cleanly onto the generic [`VcardValueCursor`]'s positional
-//! component access, so it needs no bespoke cursor.
+//! Reading and editing the `ORG` property in place: it decodes as a
+//! [`VcardOrg`], and its `;`-ordered units map cleanly onto the generic
+//! [`VcardValueCursor`]'s positional component access, so it needs no bespoke
+//! cursor.
+//!
+//! Its RFC contract sits on the marker, [`ORG`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, org::VcardOrg},
-    version::VcardVersion,
+    prop::org::ORG,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::org::VcardOrg,
 };
-
-/// The `ORG` property lens.
-pub struct ORG;
 
 impl VcardPropLens for ORG {
     type Target<'v> = VcardOrg<'v>;
@@ -30,25 +23,5 @@ impl VcardPropLens for ORG {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for ORG {
-    const KIND: VcardPropKind = VcardPropKind::Org;
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Org]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::SortAs,
-            VcardParamKind::Language,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::AltId,
-            VcardParamKind::Type,
-            VcardParamKind::Value,
-        ]
     }
 }

@@ -28,7 +28,7 @@
 //!
 //! ```rust
 //! use vcard::tree::cst::VcardCst;
-//! use vcard::tree::prop::r#fn::FN;
+//! use vcard::prop::r#fn::FN;
 //! use vcard::version::VcardVersion;
 //!
 //! let raw = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n";
@@ -56,12 +56,10 @@ use alloc::{
 };
 
 use crate::{
-    prop::{VcardProp, VcardPropKind},
+    prop::{VcardProp, VcardPropKind, cardinality::VcardPropCardinality, spec::prop_spec},
     tree::{
-        codec::mode::VcardEscaper,
-        error::VcardParseError,
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::prop_spec},
+        codec::mode::VcardEscaper, error::VcardParseError, line::VcardLine,
+        prop::lens::VcardPropLens,
     },
     value::VcardValue,
     version::VcardVersion,
@@ -435,14 +433,13 @@ mod tests {
         vec::Vec,
     };
 
-    use crate::prop::VcardPropKind;
-    use crate::version::VcardVersion;
     use crate::{
         param::VcardParam,
-        prop::VcardProp,
-        tree::{cst::VcardCst, prop::n::N},
+        prop::{VcardProp, VcardPropKind, n::N},
+        tree::cst::VcardCst,
         value::{VcardValue, VcardValueUnknown, n::VcardN, text::VcardText},
         vcard::Vcard,
+        version::VcardVersion,
     };
 
     const CARD: &str = concat!(
@@ -465,7 +462,7 @@ mod tests {
     /// through the lens cursor, never transcoded.
     #[test]
     fn round_trips_a_non_utf8_value_byte_for_byte() {
-        use crate::tree::prop::note::NOTE;
+        use crate::prop::note::NOTE;
 
         let mut raw = Vec::new();
         raw.extend_from_slice(b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;CHARSET=ISO-8859-1:caf");
@@ -795,7 +792,7 @@ mod tests {
 
     #[test]
     fn reads_and_edits_a_legacy_property_through_its_lens() {
-        use crate::tree::prop::label::LABEL;
+        use crate::prop::label::LABEL;
 
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:3.0\r\nLABEL:Old\r\nFN:X\r\nEND:VCARD\r\n")

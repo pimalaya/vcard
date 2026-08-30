@@ -1,21 +1,19 @@
 //! # Property lenses
 //!
-//! The property lens contract, the per-property spec, and one hand-written
-//! module per property the crate knows.
+//! The property lens contract and one module per property the crate knows,
+//! the read-and-edit half of the markers whose RFC contract lives in
+//! [`crate::prop`].
 //!
-//! [`VcardPropLens`](lens::VcardPropLens) ties a wire name to a decoded value
-//! type plus the `decode` projection and an edit cursor; each property
-//! implements it on the marker in its own module, the type-level key for
+//! [`VcardPropLens`](lens::VcardPropLens) ties a property to a decoded value
+//! type plus the `decode` projection and an edit cursor. Each property
+//! implements it on its marker, the type-level key for
 //! [`VcardCst::prop`](crate::tree::cst::VcardCst::prop).
 //!
 //! Scalar, list and URI properties share the generic
 //! [`VcardValueCursor`](crate::tree::value::cursor::VcardValueCursor); the
 //! structured ones (`N`, `ADR`, `GENDER`, `CLIENTPIDMAP`) carry a cursor
-//! naming their components.
-//!
-//! The per-property contract is [`VcardPropSpec`](spec::VcardPropSpec), with
-//! the [`VcardPropCardinality`](cardinality::VcardPropCardinality)
-//! multiplicity axis.
+//! naming their components, and the version-specific ones (`GEO`, the binary
+//! properties) override `decode`.
 
 pub mod adr;
 pub mod agent;
@@ -23,7 +21,6 @@ pub mod anniversary;
 pub mod bday;
 pub mod caladruri;
 pub mod caluri;
-pub mod cardinality;
 pub mod categories;
 pub mod class;
 pub mod client_pid_map;
@@ -61,7 +58,6 @@ pub mod socialprofile;
 pub mod sort_string;
 pub mod sound;
 pub mod source;
-pub mod spec;
 pub mod tel;
 pub mod title;
 pub mod tz;

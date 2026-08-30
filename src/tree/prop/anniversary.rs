@@ -1,24 +1,15 @@
 //! # ANNIVERSARY lens
 //!
-//! The `ANNIVERSARY` property lens: the contact's anniversary, decoded as a
-//! date-and-or-time value.
+//! Reading and editing the `ANNIVERSARY` property in place: it decodes as a
+//! [`VcardDateAndOrTime`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 6350 6.2.6.
+//! Its RFC contract sits on the marker, [`ANNIVERSARY`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, datetime::VcardDateAndOrTime},
-    version::VcardVersion,
+    prop::anniversary::ANNIVERSARY,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::datetime::VcardDateAndOrTime,
 };
-
-/// The `ANNIVERSARY` property lens.
-pub struct ANNIVERSARY;
 
 impl VcardPropLens for ANNIVERSARY {
     type Target<'v> = VcardDateAndOrTime<'v>;
@@ -30,29 +21,5 @@ impl VcardPropLens for ANNIVERSARY {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for ANNIVERSARY {
-    const KIND: VcardPropKind = VcardPropKind::Anniversary;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::DateAndOrTime, VcardValueKind::Text]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::AltId,
-            VcardParamKind::CalScale,
-            VcardParamKind::Value,
-        ]
     }
 }

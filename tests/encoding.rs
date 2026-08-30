@@ -6,11 +6,7 @@
 
 use std::borrow::Cow;
 
-use vcard::{
-    param::VcardParam,
-    tree::{cst::VcardCst, prop::note::NOTE},
-    value::VcardValue,
-};
+use vcard::{param::VcardParam, prop::note::NOTE, tree::cst::VcardCst, value::VcardValue};
 
 // --- core: encoding metadata is kept, content is not transformed ---
 

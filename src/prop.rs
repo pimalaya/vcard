@@ -12,9 +12,65 @@
 //! bytes.
 //!
 //! Build a property directly from its public fields; strict, spec-checked
-//! construction lives in the syntax layer
-//! ([`VcardPropBuilder`](crate::tree::builder::VcardPropBuilder)), which
-//! this module does not depend on: pure model, no [`crate::tree`].
+//! construction is [`VcardPropBuilder`](crate::builder::VcardPropBuilder).
+//!
+//! This module also owns the per-property contract: one marker module per
+//! property the crate knows, each carrying its [`VcardPropSpec`](spec) impl,
+//! and the [`spec`] vtable that bridges the open [`VcardPropKind`] back to
+//! those static impls. The contract is what the RFC allows, so it is model
+//! rather than syntax and needs no parser; the read-and-edit lens on the same
+//! marker lives in [`crate::tree::prop`].
+
+pub mod adr;
+pub mod agent;
+pub mod anniversary;
+pub mod bday;
+pub mod caladruri;
+pub mod caluri;
+pub mod cardinality;
+pub mod categories;
+pub mod class;
+pub mod client_pid_map;
+pub mod created;
+pub mod email;
+pub mod fburl;
+pub mod r#fn;
+pub mod gender;
+pub mod geo;
+pub mod gramgender;
+pub mod impp;
+pub mod jsprop;
+pub mod key;
+pub mod kind;
+pub mod label;
+pub mod lang;
+pub mod language;
+pub mod logo;
+pub mod mailer;
+pub mod member;
+pub mod n;
+pub mod name;
+pub mod nickname;
+pub mod note;
+pub mod org;
+pub mod photo;
+pub mod prodid;
+pub mod profile;
+pub mod pronouns;
+pub mod related;
+pub mod rev;
+pub mod role;
+pub mod socialprofile;
+pub mod sort_string;
+pub mod sound;
+pub mod source;
+pub mod spec;
+pub mod tel;
+pub mod title;
+pub mod tz;
+pub mod uid;
+pub mod url;
+pub mod xml;
 
 use core::{error, fmt, ops, str};
 

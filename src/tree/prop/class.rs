@@ -1,24 +1,15 @@
 //! # CLASS lens
 //!
-//! The `CLASS` property lens: the access classification of the card, decoded as
-//! a single text value.
+//! Reading and editing the `CLASS` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
 //!
-//! See RFC 2426 3.7.1 (vCard 3.0; removed in 4.0).
+//! Its RFC contract sits on the marker, [`CLASS`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{cardinality::VcardPropCardinality, lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::class::CLASS,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `CLASS` property lens.
-pub struct CLASS;
 
 impl VcardPropLens for CLASS {
     type Target<'v> = VcardText<'v>;
@@ -30,21 +21,5 @@ impl VcardPropLens for CLASS {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for CLASS {
-    const KIND: VcardPropKind = VcardPropKind::Class;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V3_0]
-    }
-
-    fn cardinality(_version: VcardVersion) -> VcardPropCardinality {
-        VcardPropCardinality::AtMostOne
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[VcardParamKind::Value]
     }
 }

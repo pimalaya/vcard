@@ -1,22 +1,15 @@
 //! # TEL lens
 //!
-//! The `TEL` (telephone) property lens: a telephone number for the object,
-//! decoded as a single `VcardText` (RFC 6350 6.4.1).
+//! Reading and editing the `TEL` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`TEL`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
-    value::{VcardValueKind, text::VcardText},
-    version::VcardVersion,
+    prop::tel::TEL,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
+    value::text::VcardText,
 };
-
-/// The `TEL` property lens.
-pub struct TEL;
 
 impl VcardPropLens for TEL {
     type Target<'v> = VcardText<'v>;
@@ -28,24 +21,5 @@ impl VcardPropLens for TEL {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for TEL {
-    const KIND: VcardPropKind = VcardPropKind::Tel;
-
-    fn allowed_values(_version: VcardVersion) -> &'static [VcardValueKind] {
-        &[VcardValueKind::Text, VcardValueKind::Uri]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Type,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::AltId,
-            VcardParamKind::MediaType,
-            VcardParamKind::Value,
-        ]
     }
 }

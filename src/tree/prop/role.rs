@@ -1,22 +1,15 @@
 //! # ROLE lens
 //!
-//! The `ROLE` property lens: the function or part the object plays in its
-//! organization, decoded as a single `VcardText` (RFC 6350 6.6.2).
+//! Reading and editing the `ROLE` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`ROLE`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::role::ROLE,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `ROLE` property lens.
-pub struct ROLE;
 
 impl VcardPropLens for ROLE {
     type Target<'v> = VcardText<'v>;
@@ -28,20 +21,5 @@ impl VcardPropLens for ROLE {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for ROLE {
-    const KIND: VcardPropKind = VcardPropKind::Role;
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[
-            VcardParamKind::Language,
-            VcardParamKind::Pid,
-            VcardParamKind::Pref,
-            VcardParamKind::AltId,
-            VcardParamKind::Type,
-            VcardParamKind::Value,
-        ]
     }
 }

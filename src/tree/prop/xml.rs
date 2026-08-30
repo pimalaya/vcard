@@ -1,22 +1,15 @@
 //! # XML lens
 //!
-//! The `XML` property lens: extended XML-encoded vCard data that fits no other
-//! property, decoded as a single `VcardText` (RFC 6350 6.1.5).
+//! Reading and editing the `XML` property in place: it decodes as a
+//! [`VcardText`] and edits through the generic [`VcardValueCursor`].
+//!
+//! Its RFC contract sits on the marker, [`XML`].
 
 use crate::{
-    param::VcardParamKind,
-    prop::VcardPropKind,
-    tree::{
-        line::VcardLine,
-        prop::{lens::VcardPropLens, spec::VcardPropSpec},
-        value::cursor::VcardValueCursor,
-    },
+    prop::xml::XML,
+    tree::{line::VcardLine, prop::lens::VcardPropLens, value::cursor::VcardValueCursor},
     value::text::VcardText,
-    version::VcardVersion,
 };
-
-/// The `XML` property lens.
-pub struct XML;
 
 impl VcardPropLens for XML {
     type Target<'v> = VcardText<'v>;
@@ -28,17 +21,5 @@ impl VcardPropLens for XML {
 
     fn cursor<'c, 'a>(line: &'c mut VcardLine<'a>) -> VcardValueCursor<'c, 'a> {
         VcardValueCursor { line }
-    }
-}
-
-impl VcardPropSpec for XML {
-    const KIND: VcardPropKind = VcardPropKind::Xml;
-
-    fn allowed_versions() -> &'static [VcardVersion] {
-        &[VcardVersion::V4_0]
-    }
-
-    fn allowed_params(_version: VcardVersion) -> &'static [VcardParamKind] {
-        &[VcardParamKind::AltId, VcardParamKind::Value]
     }
 }
