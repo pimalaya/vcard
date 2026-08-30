@@ -57,24 +57,7 @@ See documentation at [docs.rs](https://docs.rs/vcard-rs/latest/vcard).
 
 ## Examples
 
-Every example is runnable with `cargo run --example <name>`, and prints what it does. See them all at [./examples](./examples).
-
-| Example | What it shows |
-|---------|---------------|
-| [parse_edit_export](./examples/parse_edit_export.rs) | parse a card, rename the contact, write it back with every other byte untouched |
-| [structured_values](./examples/structured_values.rs) | read and edit the components of `N`, `ADR` and a `CATEGORIES` list, one at a time |
-| [forgiving_parse](./examples/forgiving_parse.rs) | a card no standard would bless (folds, blank lines, mixed endings, soft breaks) round-tripping byte for byte |
-| [all_versions](./examples/all_versions.rs) | the same code reading a 2.1, a 3.0 and a 4.0 card, and where their values genuinely differ |
-| [strict_builder](./examples/strict_builder.rs) | build a card checked against the RFC as it is assembled, then validated as a whole |
-| [raw_builder](./examples/raw_builder.rs) | the escape hatch: assemble anything, checked by nothing |
-| [validate_errors](./examples/validate_errors.rs) | every violation a card commits, and repairing one a strict server would reject |
-| [three_way_merge](./examples/three_way_merge.rs) | reconcile two divergent edits against their base, with each side's actions and their conflicts |
-| [address_book](./examples/address_book.rs) | walk a multi-card export, and read a bare RFC 2425 directory record |
-| [content_encodings](./examples/content_encodings.rs) | quoted-printable, base64 and a foreign charset, kept raw then decoded on demand |
-| [jcard](./examples/jcard.rs) | write a card as jCard JSON and read it back |
-| [jscontact](./examples/jscontact.rs) | convert a card to a JSContact Card and back, escape hatches included |
-
-The last three need their cargo feature: `--features quoted-printable,base64,encoding`, `--features jcard` and `--features jscontact`.
+See complete examples at [./examples](./examples).
 
 ## License
 
