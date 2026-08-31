@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-31
+
 ### Added
 
 - `validate` now checks the content of the few values whose RFC closes it, where it used to check a property's shape alone.
@@ -304,7 +306,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `Vcard::to_jscontact` and `from_jscontact` convert to and from an RFC 9553 Card, infallibly aside from a non-object import root. Unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams`, and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.3.1..HEAD
+[unreleased]: https://github.com/pimalaya/vcard/compare/v0.4.0..HEAD
+[0.4.0]: https://github.com/pimalaya/vcard/compare/v0.3.1..v0.4.0
 [0.3.1]: https://github.com/pimalaya/vcard/compare/v0.3.0..v0.3.1
 [0.3.0]: https://github.com/pimalaya/vcard/compare/v0.2.1..v0.3.0
 [0.2.1]: https://github.com/pimalaya/vcard/compare/v0.2.0..v0.2.1
