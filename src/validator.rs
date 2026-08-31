@@ -12,9 +12,19 @@
 //! [`VcardPropSpec`](crate::prop::spec::VcardPropSpec) for the card
 //! version, and leaves the unknown parts alone.
 //!
-//! The check covers existence, value kind, parameters and cardinality. A
-//! passing check mints a [`VcardValid`] marker, the only way to obtain one, so
-//! holding a `VcardValid<Vcard>` is proof the check passed. The same
+//! The check covers existence, value kind, parameters and cardinality, which
+//! are a property's shape, plus the content of the few values whose RFC closes
+//! it: `GENDER`'s sex code, `PROFILE`'s single value, `CLIENTPIDMAP`'s
+//! identifier, and the `PREF`, `PID` and `DERIVED` parameters.
+//!
+//! Content stops there. A vocabulary ending in `iana-token / x-name` is open
+//! and nothing to check against, and a date, a URI or a language tag is a
+//! grammar rather than a set: reading those is a different appetite, and one
+//! that would have this crate carrying a URI parser to answer a question no
+//! caller asked.
+//!
+//! A passing check mints a [`VcardValid`] marker, the only way to obtain one,
+//! so holding a `VcardValid<Vcard>` is proof the check passed. The same
 //! per-property check backs the [`VcardPropBuilder`]'s strict construction.
 //!
 //! [`VcardPropBuilder`]: crate::builder::VcardPropBuilder
@@ -42,10 +52,14 @@
 
 use core::{error, fmt, ops::Deref};
 
-use alloc::vec::Vec;
+use alloc::{
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::{
-    param::VcardParamKind,
+    param::{VcardParam, VcardParamKind},
     prop::{
         VcardProp, VcardPropKind, VcardPropName,
         cardinality::VcardPropCardinality,
@@ -80,6 +94,28 @@ pub enum VcardValidateError {
         prop: VcardPropKind,
         /// The disallowed parameter.
         param: VcardParamKind,
+    },
+    /// The value holds something the property's own definition forbids.
+    ///
+    /// Only the few properties whose RFC closes their content raise this:
+    /// `GENDER`'s sex code, `PROFILE`'s single value, `CLIENTPIDMAP`'s
+    /// identifier. A vocabulary ending in `iana-token / x-name` is open,
+    /// and nothing to check against.
+    Value {
+        /// The offending property.
+        prop: VcardPropKind,
+        /// The value found, as the card wrote it.
+        found: String,
+    },
+    /// The parameter's value is outside what the parameter accepts.
+    ///
+    /// `PREF` outside 1 to 100, a `PID` that is not a small integer or a
+    /// pair of them, a `DERIVED` that is neither `true` nor `false`.
+    ParamValue {
+        /// The offending parameter.
+        param: VcardParamKind,
+        /// The value found, as the card wrote it.
+        found: String,
     },
     /// The property appears a number of times its multiplicity forbids.
     Cardinality {
@@ -118,6 +154,12 @@ impl fmt::Display for VcardValidateError {
                 param: pm,
             } => {
                 write!(f, "Parameter `{}` is not allowed for `{}`", &**pm, &**pp)
+            }
+            Self::Value { prop: p, found } => {
+                write!(f, "Value `{found}` is not allowed for `{}`", &**p)
+            }
+            Self::ParamValue { param: p, found } => {
+                write!(f, "Value `{found}` is not allowed for parameter `{}`", &**p)
             }
             Self::Cardinality {
                 prop: p,
@@ -212,12 +254,76 @@ pub(crate) fn validate_prop(
         });
     }
 
+    if let Some(found) = (spec.invalid_value)(&prop.value, version) {
+        errors.push(VcardValidateError::Value { prop: *kind, found });
+    }
+
     for param in &prop.params {
-        if let Some(param) = param.kind()
-            && !param_allowed(&spec, version, param)
-        {
-            errors.push(VcardValidateError::Param { prop: *kind, param });
+        let Some(param_kind) = param.kind() else {
+            continue;
+        };
+
+        if !param_allowed(&spec, version, param_kind) {
+            errors.push(VcardValidateError::Param {
+                prop: *kind,
+                param: param_kind,
+            });
         }
+
+        for found in invalid_param_values(param) {
+            errors.push(VcardValidateError::ParamValue {
+                param: param_kind,
+                found,
+            });
+        }
+    }
+}
+
+/// The values a parameter carries that its own definition forbids.
+///
+/// These constraints do not vary by the property carrying the parameter, so
+/// one check serves every appearance rather than each property restating it.
+///
+/// `PREF` is an integer from 1 to 100 (RFC 6350 5.3), `PID` one or more
+/// digits optionally followed by a dot and more digits (5.5), and `DERIVED`
+/// either `true` or `false` (RFC 9554 3.4). Every other parameter is free
+/// text, a language tag, a media type or an open vocabulary, and none of
+/// those is a set to check against.
+fn invalid_param_values(param: &VcardParam<'_>) -> Vec<String> {
+    match param {
+        VcardParam::Pref(value) => {
+            let pref = value.parse::<u8>();
+            offending(pref.is_ok_and(|pref| (1..=100).contains(&pref)), value)
+        }
+        VcardParam::Derived(value) => {
+            let boolean = value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("false");
+            offending(boolean, value)
+        }
+        VcardParam::Pid(values) => values
+            .iter()
+            .filter(|value| !is_pid(value))
+            .map(|value| value.to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// A single-valued parameter's value when it is not allowed, nothing when it
+/// is.
+fn offending(allowed: bool, value: &str) -> Vec<String> {
+    match allowed {
+        true => Vec::new(),
+        false => vec![value.to_string()],
+    }
+}
+
+/// Whether a `PID` value is `1*DIGIT ["." 1*DIGIT]` (RFC 6350 5.5).
+fn is_pid(value: &str) -> bool {
+    let digits = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+
+    match value.split_once('.') {
+        Some((source, client)) => digits(source) && digits(client),
+        None => digits(value),
     }
 }
 
@@ -320,7 +426,10 @@ mod tests {
         param::{VcardParam, VcardParamKind},
         prop::{VcardProp, VcardPropKind, cardinality::VcardPropCardinality},
         validator::{VcardValid, VcardValidateError},
-        value::{VcardValue, VcardValueKind, n::VcardN, text::VcardText, uri::VcardUri},
+        value::{
+            VcardValue, VcardValueKind, client_pid_map::VcardClientPidMap, gender::VcardGender,
+            n::VcardN, text::VcardText, uri::VcardUri,
+        },
         vcard::Vcard,
         version::VcardVersion,
     };
@@ -359,6 +468,153 @@ mod tests {
             ],
         );
         assert!(vcard.validate().is_ok());
+    }
+
+    /// A 4.0 card carrying `FN` and one more property, the minimum that
+    /// passes cardinality.
+    fn card_with(other: VcardProp<'static>) -> Vcard<'static> {
+        card(
+            VcardVersion::V4_0,
+            vec![
+                prop(
+                    "FN",
+                    vec![],
+                    VcardValue::Text(VcardText(Cow::Borrowed("John"))),
+                ),
+                other,
+            ],
+        )
+    }
+
+    fn gender(sex: &'static str, identity: &'static str) -> VcardProp<'static> {
+        prop(
+            "GENDER",
+            vec![],
+            VcardValue::Gender(VcardGender {
+                sex: Cow::Borrowed(sex),
+                identity: Cow::Borrowed(identity),
+            }),
+        )
+    }
+
+    /// A property carrying one parameter, for the parameter checks.
+    fn with_param(param: VcardParam<'static>) -> VcardProp<'static> {
+        prop(
+            "NICKNAME",
+            vec![param],
+            VcardValue::TextList(Default::default()),
+        )
+    }
+
+    #[test]
+    fn accepts_every_sex_code_the_rfc_defines() {
+        // RFC 6350 6.2.7: sex = "" / "M" / "F" / "O" / "N" / "U", and RFC
+        // 5234 makes a quoted ABNF literal case-insensitive.
+        for sex in ["", "M", "F", "O", "N", "U", "m", "f"] {
+            assert!(
+                card_with(gender(sex, "")).validate().is_ok(),
+                "rejected the sex code {sex:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn flags_a_sex_code_outside_the_vocabulary() {
+        let errors = card_with(gender("X", "")).validate().unwrap_err();
+
+        assert!(errors.contains(&VcardValidateError::Value {
+            prop: VcardPropKind::Gender,
+            found: "X".to_string(),
+        }));
+    }
+
+    #[test]
+    fn a_gender_outside_the_vocabulary_belongs_in_the_identity() {
+        // Which is what the RFC's own `GENDER:;it's complicated` does.
+        assert!(card_with(gender("", "it's complicated")).validate().is_ok());
+    }
+
+    #[test]
+    fn flags_a_profile_that_is_not_vcard() {
+        let profile = |value| {
+            card(
+                VcardVersion::V3_0,
+                vec![
+                    prop(
+                        "FN",
+                        vec![],
+                        VcardValue::Text(VcardText(Cow::Borrowed("John"))),
+                    ),
+                    prop("N", vec![], VcardValue::N(VcardN::default())),
+                    prop("PROFILE", vec![], VcardValue::Text(VcardText(value))),
+                ],
+            )
+        };
+
+        assert!(profile(Cow::Borrowed("VCARD")).validate().is_ok());
+        assert!(profile(Cow::Borrowed("vcard")).validate().is_ok());
+        assert!(profile(Cow::Borrowed("ICAL")).validate().is_err());
+    }
+
+    #[test]
+    fn flags_a_client_pid_map_identifier_that_is_not_an_integer() {
+        let map = |id| {
+            card_with(prop(
+                "CLIENTPIDMAP",
+                vec![],
+                VcardValue::ClientPidMap(VcardClientPidMap {
+                    id,
+                    uri: Cow::Borrowed("urn:uuid:1f"),
+                }),
+            ))
+        };
+
+        assert!(map(Cow::Borrowed("1")).validate().is_ok());
+        assert!(map(Cow::Borrowed("")).validate().is_err());
+        assert!(map(Cow::Borrowed("one")).validate().is_err());
+    }
+
+    #[test]
+    fn flags_a_pref_outside_one_to_a_hundred() {
+        let pref = |value| card_with(with_param(VcardParam::Pref(Cow::Borrowed(value))));
+
+        assert!(pref("1").validate().is_ok());
+        assert!(pref("100").validate().is_ok());
+        assert!(pref("0").validate().is_err());
+        assert!(pref("101").validate().is_err());
+        assert!(pref("high").validate().is_err());
+    }
+
+    #[test]
+    fn flags_a_pid_that_is_not_a_small_integer_pair() {
+        let pid = |values| card_with(with_param(VcardParam::Pid(values)));
+
+        assert!(pid(vec![Cow::Borrowed("1")]).validate().is_ok());
+        assert!(pid(vec![Cow::Borrowed("1.1")]).validate().is_ok());
+        assert!(pid(vec![Cow::Borrowed("1.")]).validate().is_err());
+        assert!(pid(vec![Cow::Borrowed("a")]).validate().is_err());
+    }
+
+    #[test]
+    fn flags_a_derived_that_is_not_a_boolean() {
+        let derived = |value| card_with(with_param(VcardParam::Derived(Cow::Borrowed(value))));
+
+        assert!(derived("true").validate().is_ok());
+        assert!(derived("FALSE").validate().is_ok());
+        assert!(derived("yes").validate().is_err());
+    }
+
+    #[test]
+    fn an_open_vocabulary_is_not_checked() {
+        // RFC 6350 6.1.4 ends KIND's grammar in `iana-token / x-name`, so a
+        // value outside the listed ones still conforms.
+        let kind = prop(
+            "KIND",
+            vec![],
+            VcardValue::Text(VcardText(Cow::Borrowed("x-android-custom"))),
+        );
+
+        assert!(card_with(kind).validate().is_ok());
     }
 
     #[test]

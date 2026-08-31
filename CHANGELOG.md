@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `validate` now checks the content of the few values whose RFC closes it, where it used to check a property's shape alone.
+
+  `GENDER`'s sex code must be one of `M`, `F`, `O`, `N`, `U` or empty (RFC 6350 6.2.7), `PROFILE`'s value must be `VCARD` (RFC 2426 3.6.3), and `CLIENTPIDMAP`'s first field must be a positive integer (RFC 6350 6.7.7). The `PREF` (1 to 100), `PID` (`1*DIGIT ["." 1*DIGIT]`) and `DERIVED` (`true`/`false`) parameters are checked wherever they appear. Matching is case-insensitive, RFC 5234 making a quoted ABNF literal so.
+
+  Every other vocabulary in the format ends its grammar in `iana-token / x-name`, so it is open and stays unchecked: `KIND`, `CLASS`, `GRAMGENDER`, `CALSCALE`, `PHONETIC` and every `TYPE` set. Dates, URIs and language tags are grammars rather than sets and are out of scope too.
+
+  Reading is unchanged and stays maximally liberal: a card carrying `GENDER:X` still parses and still round-trips byte for byte. Only `validate` has an opinion.
+
+- Added `VcardPropSpec::invalid_value`, the per-property hook behind that check. It defaults to allowing everything, so only a property whose RFC closes its content overrides it.
+
+### Changed
+
+- **BREAKING**: `VcardValidateError` gained the `Value` and `ParamValue` variants, which breaks an exhaustive match on it.
+
 ## [0.3.1] - 2026-08-30
 
 ### Fixed

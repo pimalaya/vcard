@@ -3,6 +3,8 @@
 //! The per-property contract on the lens markers, and the runtime vtable that
 //! bridges the open [`VcardPropKind`] back to those static impls.
 
+use alloc::string::String;
+
 use crate::{
     param::{COMMON_PARAMS, VcardParamKind},
     prop::{
@@ -12,7 +14,7 @@ use crate::{
         mailer, member, n, name, nickname, note, org, photo, prodid, profile, pronouns, related,
         rev, role, socialprofile, sort_string, sound, source, tel, title, tz, uid, url, xml,
     },
-    value::VcardValueKind,
+    value::{VcardValue, VcardValueKind},
     version::VcardVersion,
 };
 
@@ -56,6 +58,23 @@ pub trait VcardPropSpec {
             .or_else(|| Self::allowed_values(version).first().copied())
             .unwrap_or(VcardValueKind::Text)
     }
+
+    /// What the value holds that the property's own definition forbids,
+    /// `None` when it holds nothing of the sort.
+    ///
+    /// The other members of this spec describe a property's shape: which
+    /// versions define it, how often it may appear, which value types and
+    /// parameters it takes. This one is about the content of the value
+    /// itself, and only the few properties whose RFC closes that content
+    /// override it.
+    ///
+    /// Most do not, their grammars ending in `iana-token / x-name`, which
+    /// is an open set and nothing to check against. `KIND`, `CLASS`,
+    /// `GRAMGENDER` and the `TYPE` vocabularies are all open in exactly
+    /// that way.
+    fn invalid_value(_value: &VcardValue<'_>, _version: VcardVersion) -> Option<String> {
+        None
+    }
 }
 
 /// The spec of a property as function pointers, the runtime bridge from the
@@ -75,6 +94,8 @@ pub(crate) struct VcardPropSpecFns {
     /// so it is dead in a build carrying neither.
     #[allow(dead_code)]
     pub value: fn(VcardVersion, Option<VcardValueKind>) -> VcardValueKind,
+    /// See [`VcardPropSpec::invalid_value`].
+    pub invalid_value: fn(&VcardValue<'_>, VcardVersion) -> Option<String>,
 }
 
 /// Collect the spec function pointers of a marker type.
@@ -85,6 +106,7 @@ fn spec_fns<L: VcardPropSpec>() -> VcardPropSpecFns {
         allowed_values: L::allowed_values,
         allowed_params: L::allowed_params,
         value: L::value,
+        invalid_value: L::invalid_value,
     }
 }
 

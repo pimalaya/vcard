@@ -75,6 +75,12 @@
 //! the RFC allows rather than how bytes are laid out, so it sits in [`prop`]
 //! with the model and needs no parser.
 //!
+//! Most of that spec describes a property's shape. One member describes the
+//! content of its value, and only the few whose RFC closes that content
+//! override it: `GENDER`'s sex code, `PROFILE`'s single value and
+//! `CLIENTPIDMAP`'s identifier. Every other vocabulary in the format ends in
+//! `iana-token / x-name`, which is an open set and nothing to check against.
+//!
 //! That one source of truth has three readers: the decoder picks a value kind
 //! from it, [`validate`](validator) checks conformance against it, and the
 //! builder rejects illegal construction with it.
