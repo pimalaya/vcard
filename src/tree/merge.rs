@@ -308,7 +308,11 @@ pub enum VcardMergeAction<'a> {
 
 #[cfg(test)]
 mod tests {
-    use alloc::{borrow::Cow, string::ToString};
+    use alloc::{
+        borrow::Cow,
+        string::{String, ToString},
+        vec::Vec,
+    };
 
     use crate::{
         tree::{
@@ -945,5 +949,136 @@ mod tests {
         let merged = report.merged.to_string();
 
         assert!(merged.contains("NICKNAME:a,b,c;x\r\n"), "got: {merged}");
+    }
+
+    /// The property names the report says collided, one per reported pair.
+    fn collided(report: &VcardMergeReport<'_>) -> Vec<String> {
+        report
+            .conflicts
+            .iter()
+            .map(|conflict| match &conflict.right {
+                VcardMergeAction::PropAdded { at, .. }
+                | VcardMergeAction::PropRemoved { at, .. }
+                | VcardMergeAction::ValueChanged { at, .. }
+                | VcardMergeAction::ValueComponentChanged { at, .. }
+                | VcardMergeAction::ValueItemAdded { at, .. }
+                | VcardMergeAction::ValueItemRemoved { at, .. }
+                | VcardMergeAction::ParamAdded { at, .. }
+                | VcardMergeAction::ParamRemoved { at, .. }
+                | VcardMergeAction::ParamChanged { at, .. }
+                | VcardMergeAction::ParamItemAdded { at, .. }
+                | VcardMergeAction::ParamItemRemoved { at, .. } => at.name.to_string(),
+            })
+            .collect()
+    }
+
+    /// Two fields each written differently on both sides are two reported
+    /// collisions, not the one a caller who has only ever seen a single-field
+    /// disagreement would expect.
+    #[test]
+    fn two_diverging_fields_are_reported_twice() {
+        let base = card("FN:John Doe\r\nTITLE:dev\r\nNOTE:hi\r\n");
+        let left = card("FN:Jane Doe\r\nTITLE:boss\r\nNOTE:hi\r\n");
+        let right = card("FN:Johnny Doe\r\nTITLE:lead\r\nNOTE:hi\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+
+        assert_eq!(report.left.len(), 2);
+        assert_eq!(report.right.len(), 2);
+        assert_eq!(collided(&report), ["FN", "TITLE"], "{:?}", report.conflicts);
+
+        // NOTE: the left side wins both, so the count is the only trace the
+        // merged card carries of the two values it did not keep.
+        assert_eq!(
+            report.merged.to_string(),
+            card("FN:Jane Doe\r\nTITLE:boss\r\nNOTE:hi\r\n"),
+        );
+    }
+
+    /// Three fields each written differently on both sides are three reported
+    /// collisions, so the count follows the disagreement rather than
+    /// saturating.
+    #[test]
+    fn three_diverging_fields_are_reported_three_times() {
+        let base = card("FN:John Doe\r\nTITLE:dev\r\nNOTE:hi\r\n");
+        let left = card("FN:Jane Doe\r\nTITLE:boss\r\nNOTE:hello\r\n");
+        let right = card("FN:Johnny Doe\r\nTITLE:lead\r\nNOTE:hey\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+
+        assert_eq!(
+            collided(&report),
+            ["FN", "TITLE", "NOTE"],
+            "{:?}",
+            report.conflicts,
+        );
+    }
+
+    /// Edits that merge are not counted, so the number reports the
+    /// disagreement rather than the traffic.
+    ///
+    /// Both sides wrote `FN` and `TITLE` differently, and each also touched
+    /// fields the other left alone. Only the two contested ones are reported,
+    /// and every uncontested change lands.
+    #[test]
+    fn merged_edits_do_not_inflate_the_count() {
+        let base =
+            card("FN:John Doe\r\nTITLE:dev\r\nNOTE:hi\r\nORG:Acme\r\nEMAIL:j@doe.example\r\n");
+        let left = card(
+            "FN:Jane Doe\r\nTITLE:boss\r\nNOTE:hi\r\nORG:Acme\r\nEMAIL:j@doe.example\r\nNICKNAME:JD\r\n",
+        );
+        let right = card("FN:Johnny Doe\r\nTITLE:lead\r\nNOTE:hello\r\nORG:Acme Inc\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let left = VcardCst::parse(&left).unwrap();
+        let right = VcardCst::parse(&right).unwrap();
+
+        let report = merge(&base, &left, &right);
+        let merged = report.merged.to_string();
+
+        assert_eq!(collided(&report), ["FN", "TITLE"], "{:?}", report.conflicts);
+
+        assert!(merged.contains("FN:Jane Doe\r\n"), "got: {merged}");
+        assert!(merged.contains("TITLE:boss\r\n"), "got: {merged}");
+        assert!(merged.contains("NOTE:hello\r\n"), "got: {merged}");
+        assert!(merged.contains("ORG:Acme Inc\r\n"), "got: {merged}");
+        assert!(merged.contains("NICKNAME:JD\r\n"), "got: {merged}");
+        assert!(!merged.contains("EMAIL:"), "got: {merged}");
+    }
+
+    /// A property the left side removed and the right side both retyped and
+    /// relabelled is one report, however many actions the right side made on
+    /// it.
+    ///
+    /// ical-rs reports the same shape once per action, so a caller showing the
+    /// number to a person cannot read it as one count across both libraries.
+    #[test]
+    fn a_removed_property_is_reported_once_however_many_edits_meet_it() {
+        let base = card("FN:X\r\nNOTE:a\r\n");
+        let removed = card("FN:X\r\n");
+        let touched = card("FN:X\r\nNOTE;LANGUAGE=en:b\r\n");
+
+        let base = VcardCst::parse(&base).unwrap();
+        let removed = VcardCst::parse(&removed).unwrap();
+        let touched = VcardCst::parse(&touched).unwrap();
+
+        let report = merge(&base, &removed, &touched);
+        let merged = report.merged.to_string();
+
+        assert_eq!(report.right.len(), 2);
+        assert_eq!(collided(&report), ["NOTE"], "{:?}", report.conflicts);
+
+        // NOTE: the property comes back once, the right side's own line, which
+        // is what makes the one report cover both of its actions.
+        assert!(merged.contains("NOTE;LANGUAGE=en:b\r\n"), "got: {merged}");
+        assert_eq!(merged.matches("NOTE").count(), 1, "got: {merged}");
     }
 }
