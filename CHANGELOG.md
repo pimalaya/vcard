@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-26
+
 ### Added
 
 - Added `VcardLine::bare_name`, the property name without its group prefix, and `VcardLine::group`, the prefix itself.
@@ -322,7 +324,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `Vcard::to_jscontact` and `from_jscontact` convert to and from an RFC 9553 Card, infallibly aside from a non-object import root. Unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams`, and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.4.0..HEAD
+[unreleased]: https://github.com/pimalaya/vcard/compare/v0.5.0..HEAD
+[0.5.0]: https://github.com/pimalaya/vcard/compare/v0.4.0..v0.5.0
 [0.4.0]: https://github.com/pimalaya/vcard/compare/v0.3.1..v0.4.0
 [0.3.1]: https://github.com/pimalaya/vcard/compare/v0.3.0..v0.3.1
 [0.3.0]: https://github.com/pimalaya/vcard/compare/v0.2.1..v0.3.0
