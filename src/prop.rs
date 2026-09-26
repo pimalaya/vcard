@@ -97,10 +97,12 @@ impl fmt::Display for VcardPropKindParseError {
 
 impl error::Error for VcardPropKindParseError {}
 
-/// A decoded property: its wire name, its parameters, and its decoded value.
+/// A decoded property: its group, name, parameters and value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VcardProp<'a> {
-    /// The property name (a known kind, or an unknown name kept verbatim).
+    /// The group (RFC 6350 3.3), `item1` in `item1.TEL`.
+    pub group: Option<Cow<'a, str>>,
+    /// The name without its group: a known kind, or an unknown one verbatim.
     pub name: VcardPropName<'a>,
     /// The parameters decorating the property.
     pub params: Vec<VcardParam<'a>>,
@@ -454,6 +456,7 @@ mod tests {
     #[test]
     fn names_the_property_and_wraps_the_value() {
         let prop = VcardProp {
+            group: None,
             name: VcardPropKind::Title.into(),
             params: [].into(),
             value: VcardValue::Text(VcardText(Cow::Borrowed("Developer"))),
@@ -470,6 +473,7 @@ mod tests {
     #[test]
     fn carries_the_given_parameters() {
         let prop = VcardProp {
+            group: None,
             name: VcardPropKind::Fn.into(),
             params: [VcardParam::Pref(Cow::Borrowed("1"))].into(),
             value: VcardValue::Text(VcardText(Cow::Borrowed("John"))),

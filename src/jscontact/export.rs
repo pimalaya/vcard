@@ -77,7 +77,7 @@ type Collection = fn(&mut Card) -> &mut Map<String, Value>;
 impl Card {
     /// Convert one property, escaping it whole when it does not map.
     pub(super) fn prop(&mut self, prop: &VcardProp<'_>) {
-        let VcardPropName::Kind(kind) = &prop.name else {
+        let (None, VcardPropName::Kind(kind)) = (&prop.group, &prop.name) else {
             return self.escape(prop);
         };
 

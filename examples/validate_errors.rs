@@ -21,18 +21,21 @@ fn main() {
         properties: vec![
             // MAILER was removed in 4.0.
             VcardProp {
+                group: None,
                 name: "MAILER".into(),
                 params: vec![],
                 value: VcardValue::Text("Mutt".into()),
             },
             // EMAIL carries no LANGUAGE parameter.
             VcardProp {
+                group: None,
                 name: "EMAIL".into(),
                 params: vec![VcardParam::Language(Cow::Borrowed("en"))],
                 value: VcardValue::Text("john@example.com".into()),
             },
             // N takes its own structured value, not a text.
             VcardProp {
+                group: None,
                 name: "N".into(),
                 params: vec![],
                 value: VcardValue::Text("Doe, John".into()),

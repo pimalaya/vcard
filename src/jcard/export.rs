@@ -33,14 +33,10 @@ impl VcardProp<'_> {
     /// Also the encoder behind the RFC 9555 vCardProps escape hatch, which
     /// preserves whole properties in jCard syntax.
     pub(crate) fn to_jcard(&self) -> Value {
-        let full = &*self.name;
-        let (group, name) = match full.split_once('.') {
-            Some((group, name)) => (Some(group), name),
-            None => (None, full),
-        };
+        let name = &*self.name;
 
         let mut params = Map::new();
-        if let Some(group) = group {
+        if let Some(group) = &self.group {
             params.insert("group".into(), Value::String(group.to_ascii_lowercase()));
         }
 

@@ -8,7 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Added `VcardLine::bare_name`, the property name without its group prefix.
+- Added `VcardLine::bare_name`, the property name without its group prefix, and `VcardLine::group`, the prefix itself.
+
+### Changed
+
+- **BREAKING**: `VcardProp` gained a `group` field, so a struct literal needs `group: None`.
+
+  A grouped property such as `item1.TEL` now decodes as its kind, a typed `TEL` with group `item1`, where it used to be an unknown `item1.TEL` with a raw value. `validate` therefore checks it like any other property. jCard reads and writes the `group` parameter through the field. JSContact output is unchanged: a grouped property still goes to `vCardProps` whole.
 
 ### Fixed
 

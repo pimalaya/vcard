@@ -163,6 +163,7 @@ mod model_tests {
         let card = Vcard {
             version: VcardVersion::V4_0,
             properties: vec![VcardProp {
+                group: None,
                 name: "FN".into(),
                 params: vec![],
                 value: VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
@@ -273,9 +274,10 @@ mod tests {
 
         let card = Vcard::from_jcard(&jcard).unwrap();
         let prop = &card.properties[0];
+        assert_eq!(prop.group.as_deref(), Some("item1"));
         assert_eq!(
             prop.name,
-            VcardPropName::Unknown(Cow::Borrowed("item1.X-ABLABEL")),
+            VcardPropName::Unknown(Cow::Borrowed("X-ABLABEL")),
         );
         assert_eq!(
             prop.value,

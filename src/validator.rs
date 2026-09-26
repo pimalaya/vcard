@@ -440,6 +440,7 @@ mod tests {
         value: VcardValue<'static>,
     ) -> VcardProp<'static> {
         VcardProp {
+            group: None,
             name: name.into(),
             params,
             value,

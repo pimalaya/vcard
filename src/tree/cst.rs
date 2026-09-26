@@ -340,6 +340,7 @@ impl<'a> VcardCst<'a> {
             }
             if let Some(value_kind) = (spec.allowed_values)(version).first() {
                 self.push(VcardProp {
+                    group: None,
                     name: kind.into(),
                     params: Vec::new(),
                     value: VcardValue::empty(*value_kind),
@@ -435,7 +436,7 @@ mod tests {
 
     use crate::{
         param::VcardParam,
-        prop::{VcardProp, VcardPropKind, n::N, tel::TEL},
+        prop::{VcardProp, VcardPropKind, VcardPropName, n::N, tel::TEL},
         tree::cst::VcardCst,
         value::{VcardValue, VcardValueUnknown, n::VcardN, text::VcardText},
         vcard::Vcard,
@@ -635,6 +636,7 @@ mod tests {
     fn pushes_a_typed_property_onto_a_parsed_card() {
         let mut card = VcardCst::parse(CARD).unwrap();
         card.push(VcardProp {
+            group: None,
             name: VcardPropKind::Email.into(),
             params: [].into(),
             value: VcardValue::Text("john@doe.example".into()),
@@ -728,10 +730,31 @@ mod tests {
     }
 
     #[test]
+    fn decodes_a_grouped_property_as_its_kind() {
+        let cst = VcardCst::parse(
+            "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane\r\nitem1.TEL:+1 555 0100\r\nEND:VCARD\r\n",
+        )
+        .unwrap();
+        let card = cst.decode();
+
+        let tel = &card.properties[1];
+        assert_eq!(tel.group.as_deref(), Some("item1"));
+        assert_eq!(tel.name, VcardPropName::Kind(VcardPropKind::Tel));
+        assert_eq!(
+            tel.value,
+            VcardValue::Text(VcardText(Cow::Borrowed("+1 555 0100")))
+        );
+
+        let out = card.encode().to_string();
+        assert!(out.contains("item1.TEL:+1 555 0100\r\n"), "{out}");
+    }
+
+    #[test]
     fn builds_a_card_from_decoded_types() {
         let card = Vcard {
             version: VcardVersion::V4_0,
             properties: vec![VcardProp {
+                group: None,
                 name: "N".into(),
                 params: Vec::new(),
                 value: VcardValue::N(VcardN {
@@ -755,6 +778,7 @@ mod tests {
         let note = |version| Vcard {
             version,
             properties: vec![VcardProp {
+                group: None,
                 name: "NOTE".into(),
                 params: Vec::new(),
                 value: VcardValue::Text(VcardText(Cow::Borrowed("a,b;c"))),
@@ -773,6 +797,7 @@ mod tests {
         let mut card =
             VcardCst::parse("BEGIN:VCARD\r\nVERSION:2.1\r\nFN:X\r\nEND:VCARD\r\n").unwrap();
         card.push(VcardProp {
+            group: None,
             name: "NOTE".into(),
             params: Vec::new(),
             value: VcardValue::Text(VcardText(Cow::Borrowed("a,b;c"))),

@@ -121,6 +121,7 @@ mod model_tests {
         let card = Vcard {
             version: VcardVersion::V4_0,
             properties: vec![VcardProp {
+                group: None,
                 name: "FN".into(),
                 params: vec![],
                 value: VcardValue::Text(VcardText(Cow::Borrowed("John Doe"))),
@@ -365,6 +366,7 @@ mod tests {
             "BDAY;VALUE=text:circa 1800\r\n",
             "CATEGORIES;PREF=1:vip\r\n",
             "ITEM1.X-ABLABEL:Nickname\r\n",
+            "ITEM1.TEL:tel:+1-555-0100\r\n",
             "END:VCARD\r\n",
         );
         let cst = VcardCst::parse(input).unwrap();
@@ -376,10 +378,12 @@ mod tests {
                 ["bday", {}, "text", "circa 1800"],
                 ["categories", { "pref": "1" }, "text", "vip"],
                 ["x-ablabel", { "group": "item1" }, "unknown", "Nickname"],
+                ["tel", { "group": "item1" }, "text", "tel:+1-555-0100"],
             ]),
         );
         assert!(card.get("anniversaries").is_none());
         assert!(card.get("keywords").is_none());
+        assert!(card.get("phones").is_none());
     }
 
     #[test]

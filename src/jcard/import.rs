@@ -12,7 +12,6 @@
 
 use alloc::{
     borrow::Cow,
-    format,
     string::{String, ToString},
     vec,
     vec::Vec,
@@ -54,14 +53,11 @@ impl<'a> VcardProp<'a> {
         values: &'a [Value],
         version: VcardVersion,
     ) -> Self {
-        // NOTE: a grouped name is rebuilt as its wire form (group prefix kept on
-        // the name), which is how the wire decoder models groups too.
-        let group = params.get("group").and_then(Value::as_str);
-        let name = match group {
-            Some(group) => format!("{group}.{}", name.to_ascii_uppercase()),
-            None => name.to_ascii_uppercase(),
-        };
-        let name = VcardPropName::from(Cow::Owned(name));
+        let group = params
+            .get("group")
+            .and_then(Value::as_str)
+            .map(Cow::Borrowed);
+        let name = VcardPropName::from(Cow::Owned(name.to_ascii_uppercase()));
 
         let mut prop_params: Vec<VcardParam<'_>> = params
             .iter()
@@ -105,6 +101,7 @@ impl<'a> VcardProp<'a> {
         };
 
         Self {
+            group,
             name,
             params: prop_params,
             value,

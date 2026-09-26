@@ -886,6 +886,7 @@ impl<'a> Import<'a> {
     /// Push a known-name property.
     fn prop(&mut self, kind: VcardPropKind, params: Vec<VcardParam<'a>>, value: VcardValue<'a>) {
         self.properties.push(VcardProp {
+            group: None,
             name: VcardPropName::Kind(kind),
             params,
             value,

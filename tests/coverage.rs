@@ -352,6 +352,7 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
     let mut properties: Vec<VcardProp> = value_props
         .into_iter()
         .map(|(name, value)| VcardProp {
+            group: None,
             name: VcardPropName::from(name),
             params: Vec::new(),
             value,
@@ -360,6 +361,7 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
 
     // One property carrying every parameter, to drive each param encoder.
     properties.push(VcardProp {
+        group: None,
         name: VcardPropName::from("NOTE"),
         params: all_params,
         value: VcardValue::Text(VcardText::from("hi")),
@@ -389,6 +391,7 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
             .cloned()
             .map(|prop| match (version, &*prop.name) {
                 (VcardVersion::V4_0, "GEO") => VcardProp {
+                    group: None,
                     value: VcardValue::Uri(VcardUri::from("https://example.com/where")),
                     ..prop
                 },

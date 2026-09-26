@@ -8,7 +8,7 @@ status: current
 
 The semantic side of the crate: `Vcard`, `VcardVersion`, `VcardProp`, `VcardParam`, `VcardValue` and the structured value types. It is pure data, available without the `parser` feature, so a consumer that only needs the model can depend on it alone.
 
-A single version-agnostic model reads and writes vCard 2.1, 3.0 (RFC 2426) and 4.0 (RFC 6350) alike. A `Vcard` is a version plus a list of `VcardProp`, each a name, its parameters and one value.
+A single version-agnostic model reads and writes vCard 2.1, 3.0 (RFC 2426) and 4.0 (RFC 6350) alike. A `Vcard` is a version plus a list of `VcardProp`, each an optional group, a name, its parameters and one value.
 
 ### Requirement: No dependency on the syntax side
 
@@ -31,6 +31,17 @@ Parsing a name is case-insensitive. `VcardPropKind::ALL` enumerates every known 
 - GIVEN the wire name `fn`
 - WHEN it is parsed into a `VcardPropKind`
 - THEN it yields the `Fn` variant, whose `Deref` is `FN`
+
+### Requirement: A group rides beside the name
+
+A grouped property (RFC 6350 3.3) SHALL decode as its kind, the group kept verbatim on `VcardProp::group` and the name holding only what follows the dot, so `item1.TEL` decodes as a typed `TEL`. Encoding SHALL join them back into the wire name.
+
+JSContact has no member for a group, and a group ties its members together, so a grouped property SHALL go to `vCardProps` whole rather than map to a member.
+
+#### Scenario: An Apple-style grouped phone
+- GIVEN a card carrying `item1.TEL:+1 555 0100`
+- WHEN it is decoded and encoded back
+- THEN the property is a `TEL` with a text value and group `item1`, and the line comes back as `item1.TEL:+1 555 0100`
 
 ### Requirement: Open payloads keep unmodelled data
 

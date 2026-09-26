@@ -14,6 +14,7 @@ fn main() {
         version: VcardVersion::V4_0,
         properties: vec![
             VcardProp {
+                group: None,
                 name: "FN".into(),
                 params: vec![],
                 value: VcardValue::Text("John Doe".into()),
@@ -21,6 +22,7 @@ fn main() {
             // A custom extension property the strict builder has no marker for.
             // Nothing here is validated; it is written out as given.
             VcardProp {
+                group: None,
                 name: "X-CUSTOM".into(),
                 params: vec![],
                 value: VcardValue::Text("anything goes".into()),

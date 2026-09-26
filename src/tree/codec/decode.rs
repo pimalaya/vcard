@@ -72,7 +72,7 @@ impl VcardLine<'_> {
     /// value through the spec (see `decode_value`); an unknown one keeps its
     /// raw components so it round-trips.
     pub fn decode(&self, version: VcardVersion) -> VcardProp<'_> {
-        let name = self.name.get();
+        let name = self.bare_name();
         let params = self.params.iter().map(VcardParamNode::decode).collect();
 
         let value = match name.parse::<VcardPropKind>() {
@@ -81,6 +81,7 @@ impl VcardLine<'_> {
         };
 
         VcardProp {
+            group: self.group().map(Cow::Borrowed),
             name: VcardPropName::from(name),
             params,
             value,

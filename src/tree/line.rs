@@ -190,8 +190,12 @@ impl<'a> VcardLine<'a> {
         }
     }
 
-    /// The property name without its group prefix (RFC 6350 3.3), the name
-    /// a lens matches: `TEL` for `item1.TEL`.
+    /// The group prefix of the name (RFC 6350 3.3): `item1` for `item1.TEL`.
+    pub fn group(&self) -> Option<&str> {
+        self.name.get().split_once('.').map(|(group, _)| group)
+    }
+
+    /// The name without its group prefix: `TEL` for `item1.TEL`.
     pub fn bare_name(&self) -> &str {
         let name = self.name.get();
         name.split_once('.').map_or(name, |(_, name)| name)

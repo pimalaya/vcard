@@ -19,7 +19,7 @@
 
 use core::fmt;
 
-use alloc::{borrow::Cow, string::ToString, vec, vec::Vec};
+use alloc::{borrow::Cow, format, string::ToString, vec, vec::Vec};
 
 use crate::{
     param::VcardParam,
@@ -74,8 +74,13 @@ impl VcardProp<'_> {
     /// Encode the property into a raw content line for the given escaping mode,
     /// dispatching on its value.
     pub fn encode(&self, escaper: VcardEscaper) -> VcardLine<'static> {
+        let name = match &self.group {
+            Some(group) => format!("{group}.{}", &*self.name),
+            None => self.name.to_string(),
+        };
+
         VcardLine {
-            name: VcardLeaf::from(self.name.to_string()),
+            name: VcardLeaf::from(name),
             params: self
                 .params
                 .iter()

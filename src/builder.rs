@@ -135,6 +135,7 @@ impl<'a, L: VcardPropSpec> VcardPropInProgress<'a, L> {
     /// the final [`build`](VcardBuilder::build).
     pub fn value(mut self, value: VcardValue<'a>) -> VcardBuilder<'a> {
         self.card.properties.push(VcardProp {
+            group: None,
             name: VcardPropName::Kind(L::KIND),
             params: self.inner.params,
             value,
@@ -176,6 +177,7 @@ impl<'a, L: VcardPropSpec> VcardPropBuilder<'a, L> {
     /// every known parameter must be allowed for the version, extensions pass.
     pub fn build(self, value: VcardValue<'a>) -> Result<VcardProp<'a>, Vec<VcardValidateError>> {
         let prop = VcardProp {
+            group: None,
             name: VcardPropName::Kind(L::KIND),
             params: self.params,
             value,
