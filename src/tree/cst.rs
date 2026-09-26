@@ -311,7 +311,7 @@ impl<'a> VcardCst<'a> {
     /// Remove every property of type `L`.
     pub fn remove<L: VcardPropLens>(&mut self) -> &mut Self {
         self.props
-            .retain(|line| !line.name.get().eq_ignore_ascii_case(&L::KIND));
+            .retain(|line| !line.bare_name().eq_ignore_ascii_case(&L::KIND));
         self
     }
 
@@ -334,7 +334,7 @@ impl<'a> VcardCst<'a> {
             let present = self
                 .props
                 .iter()
-                .any(|line| line.name.get().eq_ignore_ascii_case(&kind));
+                .any(|line| line.bare_name().eq_ignore_ascii_case(&kind));
             if !required || present {
                 continue;
             }
@@ -357,7 +357,7 @@ impl<'a> VcardCst<'a> {
         let version = self.version();
         self.props
             .iter()
-            .find(|line| line.name.get().eq_ignore_ascii_case(&L::KIND))
+            .find(|line| line.bare_name().eq_ignore_ascii_case(&L::KIND))
             .map(|line| L::decode(line, version))
     }
 
@@ -365,7 +365,7 @@ impl<'a> VcardCst<'a> {
     pub fn prop_mut<L: VcardPropLens>(&mut self) -> Option<L::Cursor<'_, 'a>> {
         self.props
             .iter_mut()
-            .find(|line| line.name.get().eq_ignore_ascii_case(&L::KIND))
+            .find(|line| line.bare_name().eq_ignore_ascii_case(&L::KIND))
             .map(|line| L::cursor(line))
     }
 
@@ -435,7 +435,7 @@ mod tests {
 
     use crate::{
         param::VcardParam,
-        prop::{VcardProp, VcardPropKind, n::N},
+        prop::{VcardProp, VcardPropKind, n::N, tel::TEL},
         tree::cst::VcardCst,
         value::{VcardValue, VcardValueUnknown, n::VcardN, text::VcardText},
         vcard::Vcard,
@@ -692,6 +692,39 @@ mod tests {
         .unwrap();
         let before = has.to_string();
         assert_eq!(has.fill_required().to_string(), before);
+    }
+
+    /// Apple Contacts and iCloud group almost every TEL, EMAIL, ADR and URL
+    /// with its label. The group prefix does not hide a property from its
+    /// lens, from `remove`, nor from `fill_required`.
+    #[test]
+    fn a_group_prefix_does_not_hide_a_property() {
+        const GROUPED: &str = concat!(
+            "BEGIN:VCARD\r\n",
+            "VERSION:3.0\r\n",
+            "item2.N:Doe;Jane;;;\r\n",
+            "FN:Jane Doe\r\n",
+            "item1.TEL;type=pref:+1 555 0100\r\n",
+            "item1.X-ABLabel:work\r\n",
+            "END:VCARD\r\n",
+        );
+
+        let mut card = VcardCst::parse(GROUPED).unwrap();
+        assert_eq!(card.prop::<TEL>().unwrap().0, "+1 555 0100");
+
+        card.prop_mut::<TEL>().unwrap().set_text("+1 555 0199");
+        assert!(
+            card.to_string()
+                .contains("item1.TEL;type=pref:+1 555 0199\r\n")
+        );
+
+        let before = card.to_string();
+        assert_eq!(card.fill_required().to_string(), before);
+
+        card.remove::<TEL>();
+        let out = card.to_string();
+        assert!(!out.contains("TEL"), "{out}");
+        assert!(out.contains("item1.X-ABLabel:work\r\n"), "{out}");
     }
 
     #[test]

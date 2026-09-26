@@ -190,6 +190,13 @@ impl<'a> VcardLine<'a> {
         }
     }
 
+    /// The property name without its group prefix (RFC 6350 3.3), the name
+    /// a lens matches: `TEL` for `item1.TEL`.
+    pub fn bare_name(&self) -> &str {
+        let name = self.name.get();
+        name.split_once('.').map_or(name, |(_, name)| name)
+    }
+
     /// The raw bytes of the line's first value, for simple single-value lines.
     pub fn raw_value(&self) -> &[u8] {
         self.value.first_value_bytes()

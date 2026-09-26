@@ -63,3 +63,12 @@ The value cursor SHALL expose raw byte accessors (`bytes` and `set_bytes`) besid
 - GIVEN a 3.0 card carrying `FN` but no `N`, which 3.0 makes mandatory
 - WHEN `fill_required` runs twice
 - THEN exactly one `N` line is added and the existing lines are untouched
+
+### Requirement: A group prefix does not hide a property
+
+The typed lookups (`prop`, `prop_mut`), `remove` and `fill_required` SHALL match a property by its name without its group prefix (RFC 6350 3.3), so `item1.TEL` is a `TEL`. The prefix itself SHALL stay on the line as written.
+
+#### Scenario: An Apple-style grouped card
+- GIVEN a card carrying `item1.TEL` and `item2.N`
+- WHEN `TEL` is read, edited and removed, and `fill_required` runs
+- THEN the lens finds and edits `item1.TEL` in place, `remove` drops it, and no second `N` is added

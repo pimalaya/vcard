@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added `VcardLine::bare_name`, the property name without its group prefix.
+
+### Fixed
+
+- Fixed a grouped property such as `item1.TEL`, which Apple Contacts and iCloud write, being invisible to `prop`, `prop_mut`, `remove` and `fill_required`.
+
+  `remove` kept the grouped lines, and `fill_required` added an empty second `N` or `FN` next to a grouped one.
+
 ## [0.4.0] - 2026-08-31
 
 ### Added
