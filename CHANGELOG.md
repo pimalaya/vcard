@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-01
+
 ### Added
 
 - Added `VcardProp::text`, `VcardCst::push_raw` and `VcardDateAndOrTime::full_date`, what a projection needs to build a card from a JSON contact: a groupless text property, raw lines restored byte for byte, and a birthday as a complete `yyyy-mm-dd` date.
@@ -328,7 +330,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `Vcard::to_jscontact` and `from_jscontact` convert to and from an RFC 9553 Card, infallibly aside from a non-object import root. Unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams`, and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.5.0..HEAD
+[unreleased]: https://github.com/pimalaya/vcard/compare/v0.5.1..HEAD
+[0.5.1]: https://github.com/pimalaya/vcard/compare/v0.5.0..v0.5.1
 [0.5.0]: https://github.com/pimalaya/vcard/compare/v0.4.0..v0.5.0
 [0.4.0]: https://github.com/pimalaya/vcard/compare/v0.3.1..v0.4.0
 [0.3.1]: https://github.com/pimalaya/vcard/compare/v0.3.0..v0.3.1
