@@ -295,6 +295,27 @@ impl<'a> VcardCst<'a> {
             .unwrap_or(VcardVersion::V4_0)
     }
 
+    /// Append raw logical property lines, without their line ending, kept byte
+    /// for byte: lines a projection stashed verbatim and restores as they were.
+    ///
+    /// Fails on a line that does not tokenise, leaving the card unchanged.
+    pub fn push_raw(&mut self, line: &str) -> Result<&mut Self, VcardParseError> {
+        let mut bytes = String::with_capacity(line.len() + 2);
+        bytes.push_str(line);
+        bytes.push_str("\r\n");
+
+        let mut lines = Vec::new();
+        let mut rest = bytes.as_bytes();
+        while !rest.is_empty() {
+            let (line, tail) = VcardLine::take(rest)?;
+            lines.push(line.into_static());
+            rest = tail;
+        }
+
+        self.props.extend(lines);
+        Ok(self)
+    }
+
     /// Append a typed property, encoding it into a line. Adding to a *parsed*
     /// card leaves every existing line byte for byte intact (they stay
     /// borrowed); only the new line is canonical. The building primitive.
@@ -915,5 +936,21 @@ mod tests {
 
         assert_eq!(card.decode().properties.len(), 1);
         assert_eq!(card.to_string(), input);
+    }
+
+    #[test]
+    fn push_raw_keeps_the_line_verbatim_and_a_minted_one_escaped() {
+        use crate::prop::VcardProp;
+
+        let mut card = VcardCst::v4();
+        card.push(VcardProp::text("X-VENDOR-NOTE", vec![], "a, b; c"));
+        card.push_raw("item1.X-STASHED;TYPE=home:kept\\, as is")
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(card.to_bytes()).unwrap(),
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nX-VENDOR-NOTE:a\\, b\\; c\r\n\
+             item1.X-STASHED;TYPE=home:kept\\, as is\r\nEND:VCARD\r\n",
+        );
     }
 }

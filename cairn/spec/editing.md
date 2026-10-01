@@ -72,3 +72,12 @@ The typed lookups (`prop`, `prop_mut`), `remove` and `fill_required` SHALL match
 - GIVEN a card carrying `item1.TEL` and `item2.N`
 - WHEN `TEL` is read, edited and removed, and `fill_required` runs
 - THEN the lens finds and edits `item1.TEL` in place, `remove` drops it, and no second `N` is added
+
+### Requirement: Building a card from another representation
+
+A projection synthesizing a card from a JSON contact SHALL find its three building blocks here rather than in string handling of its own. `VcardProp::text` SHALL build a groupless text property for a known kind or an `X-` name, its value escaped when the card is serialized. `VcardCst::push_raw` SHALL append raw logical property lines kept byte for byte, failing without touching the card on a line that does not tokenise. `VcardDateAndOrTime::full_date` SHALL read a complete date in its basic or extended form as `yyyy-mm-dd`, and SHALL answer `None` for a reduced-precision, year-less or time-bearing value.
+
+#### Scenario: A minted line and a restored one
+- GIVEN a 4.0 card
+- WHEN `X-VENDOR-NOTE` is pushed as text holding a comma, then a stashed grouped line is pushed raw
+- THEN the first line is escaped per RFC 6350 3.4 and the second comes back exactly as stashed, both before `END`

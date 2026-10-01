@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added `VcardProp::text`, `VcardCst::push_raw` and `VcardDateAndOrTime::full_date`, what a projection needs to build a card from a JSON contact: a groupless text property, raw lines restored byte for byte, and a birthday as a complete `yyyy-mm-dd` date.
+
 ## [0.5.0] - 2026-09-26
 
 ### Added

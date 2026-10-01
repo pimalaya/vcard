@@ -10,7 +10,7 @@
 //! calendar fields at the risk of a lossy round-trip. Callers needing calendar
 //! semantics parse the string themselves.
 
-use alloc::{borrow::Cow, string::String};
+use alloc::{borrow::Cow, format, string::String};
 
 /// A decoded date-and-or-time value, kept as its raw text.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -31,6 +31,38 @@ impl From<String> for VcardDateAndOrTime<'_> {
 impl<'a> From<Cow<'a, str>> for VcardDateAndOrTime<'a> {
     fn from(value: Cow<'a, str>) -> Self {
         Self(value)
+    }
+}
+
+impl VcardDateAndOrTime<'_> {
+    /// The value as a complete `yyyy-mm-dd` date, from the basic (`19850412`)
+    /// or the extended (`1985-04-12`) form.
+    ///
+    /// `None` for a reduced-precision date, a year-less one (`--0412`) or a
+    /// value carrying a time (RFC 6350 4.3.4), none of which every
+    /// representation can hold.
+    pub fn full_date(&self) -> Option<String> {
+        let date = self.0.trim();
+        let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
+
+        let mut parts = date.split('-');
+        if let (Some(y), Some(m), Some(d), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+            && y.len() == 4
+            && m.len() == 2
+            && d.len() == 2
+            && digits(y)
+            && digits(m)
+            && digits(d)
+        {
+            return Some(format!("{y}-{m}-{d}"));
+        }
+
+        if date.len() == 8 && digits(date) {
+            return Some(format!("{}-{}-{}", &date[..4], &date[4..6], &date[6..]));
+        }
+
+        None
     }
 }
 
@@ -232,5 +264,18 @@ mod tests {
         assert_eq!(seconds("2026-07-11T19:25:59+020"), None);
         assert_eq!(seconds("2026-07-11T19:25:59+24:00"), None);
         assert_eq!(seconds("2026-07-11T19:25:59+02:60"), None);
+    }
+
+    #[test]
+    fn full_date_reads_both_complete_forms_and_nothing_else() {
+        use crate::value::datetime::VcardDateAndOrTime;
+
+        let full = |raw: &str| VcardDateAndOrTime::from(raw).full_date();
+
+        assert_eq!(full("1985-04-12").as_deref(), Some("1985-04-12"));
+        assert_eq!(full(" 19850412 ").as_deref(), Some("1985-04-12"));
+        assert_eq!(full("--0412"), None);
+        assert_eq!(full("1985-04"), None);
+        assert_eq!(full("19850412T102200"), None);
     }
 }

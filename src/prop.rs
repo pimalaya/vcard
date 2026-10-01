@@ -80,7 +80,10 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::{param::VcardParam, value::VcardValue};
+use crate::{
+    param::VcardParam,
+    value::{VcardValue, text::VcardText},
+};
 
 /// Parse vCard property kind error.
 #[derive(Debug)]
@@ -108,6 +111,26 @@ pub struct VcardProp<'a> {
     pub params: Vec<VcardParam<'a>>,
     /// The decoded value.
     pub value: VcardValue<'a>,
+}
+
+impl<'a> VcardProp<'a> {
+    /// A text property with no group: a known kind or an `X-` name, its
+    /// parameters and its raw value, escaped when the card is serialized.
+    ///
+    /// The shape a projection mints when it synthesizes a card from another
+    /// representation.
+    pub fn text(
+        name: impl Into<VcardPropName<'a>>,
+        params: Vec<VcardParam<'a>>,
+        value: impl Into<Cow<'a, str>>,
+    ) -> Self {
+        Self {
+            group: None,
+            name: name.into(),
+            params,
+            value: VcardValue::Text(VcardText(value.into())),
+        }
+    }
 }
 
 /// A property name: a known RFC 6350 name, or an unknown one kept verbatim.
@@ -494,5 +517,18 @@ mod tests {
         }
         assert_eq!(VcardPropKind::from_str("fn").ok(), Some(VcardPropKind::Fn));
         assert!(VcardPropKind::from_str("X-CUSTOM").is_err());
+    }
+
+    #[test]
+    fn text_builds_a_groupless_text_prop_for_known_and_unknown_names() {
+        let known = VcardProp::text(VcardPropKind::Note, vec![], "a, b");
+        let unknown = VcardProp::text("X-VENDOR-FIELD", vec![], "c");
+
+        assert_eq!(known.group, None);
+        assert_eq!(known.name, VcardPropName::Kind(VcardPropKind::Note));
+        assert_eq!(
+            unknown.name,
+            VcardPropName::Unknown(Cow::Borrowed("X-VENDOR-FIELD"))
+        );
     }
 }
