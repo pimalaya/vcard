@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added `VcardTimestamp::to_unix_nanos`, the instant a timestamp names with its fraction of a second kept, so two revisions one second apart or less still order.
+
+### Fixed
+
+- Fixed every card both sides edited conflicting on `REV`, each side having restamped it, with the left side's stamp standing even when older. The merge settles it without a conflict: the later stamp's line stands, whichever side wrote it, read as an instant across the basic and extended forms, offsets and a vCard 3.0 date (RFC 6350 6.7.4). A stamp that does not read is still contested. ical-rs settles `DTSTAMP`, `LAST-MODIFIED` and `SEQUENCE` the same way.
+
+- Fixed a three-way merge landing one side's parameter on the other side's value when the parameter says what the value means: English text rewritten on one side and relabelled `LANGUAGE=fr` on the other came out as English labelled French, unreported. A change to `VALUE`, `LANGUAGE`, `CALSCALE`, `MEDIATYPE`, `PHONETIC`, `SCRIPT`, `ENCODING`, `CHARSET` or the bare 2.1 `QUOTED-PRINTABLE` now collides with the other side's change to the value, both ways, and the left side's line stands. A relabel both sides made alike, and a removal the other side's relabel beats, contest nothing.
+
+- Fixed `VcardTimestamp::to_unix_seconds` rejecting the fraction of a second RFC 2425 section 5.8.4 allows a vCard 3.0 date-time (`1995-10-31T22:27:10,5Z`).
+
 ## [0.5.1] - 2026-10-01
 
 ### Added

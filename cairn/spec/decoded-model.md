@@ -138,3 +138,12 @@ A value whose grammar is genuinely structured SHALL have its own type rather tha
 - GIVEN a 4.0 `ADR` with only the seven classic components filled
 - WHEN it is encoded
 - THEN the eleven extended slots are not written
+
+### Requirement: A timestamp orders as an instant
+
+`VcardTimestamp` keeps its raw text, and SHALL read as an instant for ordering revisions: `to_unix_seconds` in whole seconds, `to_unix_nanos` keeping the fraction of a second, both `None` for a value that does not read. Both SHALL accept the ISO 8601 basic and extended forms, a `Z` or a numeric offset folded into UTC, reduced precision with omitted components read as zero, a date alone, a missing zone read as UTC, and the fraction of a second RFC 2425 section 5.8.4 allows a vCard 3.0 date-time after a comma, or after a full stop as ISO 8601 also writes it.
+
+#### Scenario: A 3.0 stamp with a fraction
+- GIVEN `1995-10-31T22:27:10,5Z` and `19951031T222710.25Z`
+- WHEN they are read
+- THEN both name the same second, and the first orders after the second by its fraction

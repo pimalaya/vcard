@@ -6,6 +6,12 @@
 //! Two item edits merge as a set and never collide; an item edit against a
 //! whole-value change does, either way round, since one value has to go. Two
 //! parameters of one name are two slots (RFC 2426 section 4), never rivals.
+//!
+//! A parameter that says what its property's value means collides with every
+//! value-level slot, both ways, since what the other side wrote was written
+//! for the old meaning: a note one side rewrote in English and the other
+//! relabelled as French would otherwise come out as English text labelled
+//! French, which neither side wrote.
 
 use alloc::string::String;
 
@@ -51,6 +57,18 @@ impl Slot {
             _ => false,
         }
     }
+
+    /// Whether an action on this slot contests one on `other` across the
+    /// value and a parameter saying what the value means, either way round.
+    pub(super) fn contests_meaning(&self, other: &Slot) -> bool {
+        match (self, other) {
+            (Self::Param { name, .. }, Self::Value | Self::Component(_) | Self::Items)
+            | (Self::Value | Self::Component(_) | Self::Items, Self::Param { name, .. }) => {
+                qualifies(name)
+            }
+            _ => false,
+        }
+    }
 }
 
 impl VcardMergeAction<'_> {
@@ -78,4 +96,33 @@ impl VcardMergeAction<'_> {
             },
         }
     }
+}
+
+/// Whether a parameter, by its key, says what its property's value means
+/// rather than describing the thing the value names, so that changing it
+/// contests a concurrent change to the value.
+///
+/// How the value is read: its type (`VALUE`, RFC 6350 5.2), its language
+/// (`LANGUAGE`, 5.1), the calendar its date counts in (`CALSCALE`, 5.8), the
+/// media type of what it points at (`MEDIATYPE`, 5.7), the phonetic system
+/// and the script it is written in (`PHONETIC` and `SCRIPT`, RFC 9554), and
+/// the vCard 2.1 and 3.0 transfer encoding and character set (`ENCODING`,
+/// `CHARSET`, and the bare 2.1 `QUOTED-PRINTABLE`).
+///
+/// Left out as describing the thing rather than the value: `TYPE`, `PREF`,
+/// `ALTID`, `PID`, `SORT-AS`, `GEO`, `TZ`, `LABEL` and the other RFC 9554
+/// parameters.
+fn qualifies(name: &str) -> bool {
+    matches!(
+        name,
+        "VALUE"
+            | "LANGUAGE"
+            | "CALSCALE"
+            | "MEDIATYPE"
+            | "PHONETIC"
+            | "SCRIPT"
+            | "ENCODING"
+            | "CHARSET"
+            | "QUOTED-PRINTABLE"
+    )
 }

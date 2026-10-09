@@ -39,6 +39,19 @@
 //! A change both sides made is no conflict at all. Every conflict is reported,
 //! so a caller can resolve differently.
 //!
+//! A parameter that says what its value means (`VALUE`, `LANGUAGE`,
+//! `CALSCALE`, `MEDIATYPE`, the transfer encodings) contests the other side's
+//! change to that value, both ways, so a value never lands under a meaning
+//! its side did not give it.
+//!
+//! ## Bookkeeping
+//!
+//! `REV` records when the card was last revised (RFC 6350 6.7.4), not what it
+//! says, so two sides that each restamped it are settled rather than
+//! contested: the later stamp's line stands, whichever side wrote it, and
+//! nothing is reported. A stamp that does not read is contested as any other
+//! value is.
+//!
 //! ## Envelope and version
 //!
 //! The merged card keeps the left card's `VERSION`; a version change is not
@@ -120,6 +133,7 @@ impl<'a> VcardMerge<'a> {
             left_matching: &left_matching,
             right_matching: &right_matching,
             left_ops: &left_ops,
+            right_ops: &right_ops,
             merged: self.left.clone(),
             conflicts: Vec::new(),
             removals: Vec::new(),

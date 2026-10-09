@@ -12,6 +12,9 @@
 //! survives over silent loss). A change both sides made is no conflict at
 //! all, and every conflict is reported so a caller can resolve differently.
 //!
+//! Two new `REV` stamps are the exception: the later one's line replaces the
+//! left one, or the left one stands, and nothing is reported.
+//!
 //! An edit that keeps the card's line indices happens in place; a removal and
 //! an addition are deferred to [`Merger::finish`], where the removals run
 //! first on stable indices and each addition then lands after the last line
@@ -22,7 +25,7 @@
 //! every line of the merged card but its last is terminated, so the card a
 //! caller serializes reads back as itself.
 
-use core::mem;
+use core::{mem, str};
 
 use alloc::vec::Vec;
 
@@ -41,6 +44,7 @@ use crate::{
         param::node::VcardParamNode,
         value::node::VcardValueNode,
     },
+    value::datetime::VcardTimestamp,
     version::VcardVersion,
 };
 
@@ -55,6 +59,7 @@ pub(super) struct Merger<'o, 'a> {
     pub(super) left_matching: &'o Matching,
     pub(super) right_matching: &'o Matching,
     pub(super) left_ops: &'o [(Target, VcardMergeAction<'a>)],
+    pub(super) right_ops: &'o [(Target, VcardMergeAction<'a>)],
     pub(super) merged: VcardCst<'a>,
     pub(super) conflicts: Vec<VcardMergeConflict<'a>>,
     pub(super) removals: Vec<usize>,
@@ -127,6 +132,16 @@ impl<'a> Merger<'_, 'a> {
 
         let line = self.left_line(b);
 
+        // NOTE: both sides restamped the card, so the later revision's line
+        // stands whole, its `VALUE` saying how its own stamp reads, and the
+        // other side's edits of it go with the stamp they were made beside.
+        if let Some(later) = self.settles(b, r) {
+            if later {
+                self.merged.props[line] = self.right_line(&self.right_instances[r]);
+            }
+            return;
+        }
+
         match action {
             VcardMergeAction::ValueChanged { .. } => {
                 if self.already_made(b, r, action) {
@@ -135,9 +150,7 @@ impl<'a> Merger<'_, 'a> {
 
                 let right_value = &self.right_instances[r].node().value;
 
-                if let Some(colliding) = self.colliding(b, &Slot::Value) {
-                    let colliding = colliding.clone();
-                    self.record(colliding, action);
+                if !self.contest(b, r, &Slot::Value, action).is_empty() {
                     return;
                 }
 
@@ -149,9 +162,10 @@ impl<'a> Merger<'_, 'a> {
                     return;
                 }
 
-                if let Some(colliding) = self.colliding(b, &Slot::Component(*component)) {
-                    let colliding = colliding.clone();
-                    self.record(colliding, action);
+                if !self
+                    .contest(b, r, &Slot::Component(*component), action)
+                    .is_empty()
+                {
                     return;
                 }
 
@@ -163,9 +177,7 @@ impl<'a> Merger<'_, 'a> {
                     return;
                 }
 
-                if let Some(colliding) = self.colliding(b, &Slot::Items) {
-                    let colliding = colliding.clone();
-                    self.record(colliding, action);
+                if !self.contest(b, r, &Slot::Items, action).is_empty() {
                     return;
                 }
 
@@ -192,9 +204,7 @@ impl<'a> Merger<'_, 'a> {
                     return;
                 }
 
-                if let Some(colliding) = self.colliding(b, &Slot::Items) {
-                    let colliding = colliding.clone();
-                    self.record(colliding, action);
+                if !self.contest(b, r, &Slot::Items, action).is_empty() {
                     return;
                 }
 
@@ -222,14 +232,12 @@ impl<'a> Merger<'_, 'a> {
                     at: *index,
                 };
 
-                if let Some(colliding) = self.colliding(b, &slot) {
-                    let removed = matches!(colliding, VcardMergeAction::ParamRemoved { .. });
-                    let colliding = colliding.clone();
-                    self.record(colliding, action);
-
-                    if !removed {
-                        return;
-                    }
+                if !self
+                    .contest(b, r, &slot, action)
+                    .iter()
+                    .all(VcardMergeAction::is_param_removal)
+                {
+                    return;
                 }
 
                 let Some(node) = self.right_param_node(r, param, *index).cloned() else {
@@ -249,9 +257,7 @@ impl<'a> Merger<'_, 'a> {
                     at: *index,
                 };
 
-                if let Some(colliding) = self.colliding(b, &slot) {
-                    let colliding = colliding.clone();
-                    self.record(colliding, action);
+                if !self.contest(b, r, &slot, action).is_empty() {
                     return;
                 }
 
@@ -272,20 +278,17 @@ impl<'a> Merger<'_, 'a> {
                     return;
                 }
 
-                let mut restore = false;
                 let slot = Slot::Param {
                     name: new.key(),
                     at: *index,
                 };
 
-                if let Some(colliding) = self.colliding(b, &slot) {
-                    let colliding = colliding.clone();
-                    restore = matches!(colliding, VcardMergeAction::ParamRemoved { .. });
-                    self.record(colliding, action);
+                let colliding = self.contest(b, r, &slot, action);
+                let restore = !colliding.is_empty()
+                    && colliding.iter().all(VcardMergeAction::is_param_removal);
 
-                    if !restore {
-                        return;
-                    }
+                if !colliding.is_empty() && !restore {
+                    return;
                 }
 
                 let position = self.merged.props[line]
@@ -416,6 +419,19 @@ impl<'a> Merger<'_, 'a> {
         });
 
         if let Some(l) = contested {
+            let ours = &self.left_instances[l];
+
+            // NOTE: both sides stamped a card whose base carried no revision:
+            // the later stamp's line stands, as over a base one.
+            if ours.key == "REV"
+                && let Some(later) = later_revision(ours.node(), instance.node())
+            {
+                if later {
+                    self.merged.props[ours.line] = self.right_line(instance);
+                }
+                return;
+            }
+
             let colliding = self
                 .left_ops
                 .iter()
@@ -507,9 +523,7 @@ impl<'a> Merger<'_, 'a> {
 
     /// The left-side actions targeting a base instance.
     fn left_ops_on(&self, b: usize) -> impl Iterator<Item = &(Target, VcardMergeAction<'a>)> {
-        self.left_ops.iter().filter(move |(target, _)| {
-            matches!(target, Target::Pair { base, .. } | Target::Removed(base) if *base == b)
-        })
+        targeting(self.left_ops, b)
     }
 
     /// Whether the left side already made the very same change, so the merged
@@ -558,12 +572,72 @@ impl<'a> Merger<'_, 'a> {
         }
     }
 
-    /// The left-side action whose slot collides with a right action's slot on
-    /// the same base instance, if any.
-    fn colliding(&self, b: usize, right: &Slot) -> Option<&VcardMergeAction<'a>> {
-        self.left_ops_on(b)
-            .find(|(_, action)| action.slot().collides_with(right))
-            .map(|(_, action)| action)
+    /// Whether the right side made the very same change as a left action.
+    fn right_made(&self, b: usize, r: usize, left: &VcardMergeAction<'a>) -> bool {
+        targeting(self.right_ops, b).any(|(_, right)| right.same_change_as(left))
+            && self.wrote_alike(b, r, left)
+    }
+
+    /// Record a conflict for each left-side action on the same base instance
+    /// that a right action on `right` collides with, and return them: the
+    /// first one on its own field, and every one contesting what the value
+    /// means.
+    ///
+    /// Two meaning actions contest nothing. One the other side made too: both
+    /// sides stood on it, so what was written beside it was written for it.
+    /// And a parameter removal the other side's update of that parameter
+    /// beats: the update is the meaning that stands.
+    fn contest(
+        &mut self,
+        b: usize,
+        r: usize,
+        right: &Slot,
+        action: &VcardMergeAction<'a>,
+    ) -> Vec<VcardMergeAction<'a>> {
+        let field = self
+            .left_ops_on(b)
+            .map(|(_, left)| left)
+            .find(|left| left.slot().collides_with(right));
+
+        let beaten = gives_way(action, self.left_ops, b);
+
+        // NOTE: each meaning pair is its own report, so swapping the sides
+        // reports as many: one parameter against two components is two pairs
+        // read either way round.
+        let meaning = self.left_ops_on(b).map(|(_, left)| left).filter(|left| {
+            !beaten
+                && left.slot().contests_meaning(right)
+                && !self.right_made(b, r, left)
+                && !gives_way(left, self.right_ops, b)
+        });
+
+        let colliding: Vec<VcardMergeAction<'a>> =
+            field.into_iter().chain(meaning).cloned().collect();
+
+        for left in &colliding {
+            self.record(left.clone(), action);
+        }
+
+        colliding
+    }
+
+    /// Whether the right side's revision stands over the left side's, when
+    /// both sides wrote a new `REV` value on one base instance.
+    ///
+    /// `None` where either side did not, or where [`later_revision`] cannot
+    /// tell, which leaves the pair to the ordinary rules.
+    fn settles(&self, b: usize, r: usize) -> Option<bool> {
+        let ours = self.left_instance(b);
+        let wrote = |ops| {
+            targeting(ops, b)
+                .any(|(_, action)| matches!(action, VcardMergeAction::ValueChanged { .. }))
+        };
+
+        if ours.key != "REV" || !wrote(self.left_ops) || !wrote(self.right_ops) {
+            return None;
+        }
+
+        later_revision(ours.node(), self.right_instances[r].node())
     }
 
     /// The left side's removal action of a base instance.
@@ -726,4 +800,60 @@ impl VcardPropKind {
             VcardPropCardinality::ExactlyOne | VcardPropCardinality::AtMostOne,
         )
     }
+}
+
+impl VcardMergeAction<'_> {
+    /// Whether the action takes a parameter away, the one a parameter update
+    /// beats.
+    fn is_param_removal(&self) -> bool {
+        matches!(self, Self::ParamRemoved { .. })
+    }
+}
+
+/// The actions of one side that target a base instance.
+fn targeting<'o, 'a>(
+    ops: &'o [(Target, VcardMergeAction<'a>)],
+    b: usize,
+) -> impl Iterator<Item = &'o (Target, VcardMergeAction<'a>)> {
+    ops.iter().filter(move |(target, _)| {
+        matches!(target, Target::Pair { base, .. } | Target::Removed(base) if *base == b)
+    })
+}
+
+/// Whether `theirs` stamps a later revision than `ours`.
+///
+/// `REV` records when the card was last revised (RFC 6350 6.7.4), so the
+/// later stamp is the one standing, read as an instant whichever form the
+/// version wrote it in. `None` where both wrote the same value, which is
+/// agreement rather than two stamps, or where either does not read as a
+/// timestamp, which leaves the two to the ordinary rules. A tie is no later
+/// stamp, so the left side's stands.
+fn later_revision(ours: &VcardLine<'_>, theirs: &VcardLine<'_>) -> Option<bool> {
+    let (ours, theirs) = (ours.value.raw_bytes(), theirs.value.raw_bytes());
+
+    if ours == theirs {
+        return None;
+    }
+
+    let read = |raw: &[u8]| VcardTimestamp::from(str::from_utf8(raw).ok()?).to_unix_nanos();
+
+    Some(read(&theirs)? > read(&ours)?)
+}
+
+/// Whether an action is a parameter removal the other side's update of that
+/// parameter beats, so the removal is not the meaning that stands.
+fn gives_way(
+    action: &VcardMergeAction<'_>,
+    theirs: &[(Target, VcardMergeAction<'_>)],
+    b: usize,
+) -> bool {
+    if !action.is_param_removal() {
+        return false;
+    }
+
+    let slot = action.slot();
+
+    targeting(theirs, b).any(|(_, other)| {
+        matches!(other, VcardMergeAction::ParamChanged { .. }) && other.slot() == slot
+    })
 }

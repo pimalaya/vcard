@@ -74,10 +74,23 @@ impl VcardTimestamp<'_> {
     /// The RFC 6350 timestamp in Unix epoch seconds, `None` if unparsable.
     ///
     /// For ordering revisions. Accepts the ISO 8601 basic and extended forms,
-    /// a `Z` or numeric offset, and reduced precision (omitted components read
-    /// as zero, no zone meaning UTC). Disagrees with `PartialEq`, so no `Ord`.
+    /// a `Z` or numeric offset, reduced precision (omitted components read as
+    /// zero, no zone meaning UTC) and the fraction of a second RFC 2425 section
+    /// 5.8.4 allows vCard 3.0, which is dropped. Disagrees with `PartialEq`, so
+    /// no `Ord`.
     pub fn to_unix_seconds(&self) -> Option<i64> {
-        parse_timestamp(self.0.as_ref())
+        parse_timestamp(self.0.as_ref()).map(|(seconds, _)| seconds)
+    }
+
+    /// The timestamp in Unix epoch nanoseconds, `None` if unparsable.
+    ///
+    /// The reading [`to_unix_seconds`](Self::to_unix_seconds) makes, its
+    /// fraction of a second kept, so two revisions one second apart or less
+    /// still order.
+    pub fn to_unix_nanos(&self) -> Option<i128> {
+        let (seconds, nanos) = parse_timestamp(self.0.as_ref())?;
+
+        Some(i128::from(seconds) * 1_000_000_000 + i128::from(nanos))
     }
 }
 
@@ -99,8 +112,9 @@ impl<'a> From<Cow<'a, str>> for VcardTimestamp<'a> {
     }
 }
 
-/// Parses an RFC 6350 timestamp into seconds from the Unix epoch, UTC.
-fn parse_timestamp(raw: &str) -> Option<i64> {
+/// Parses an RFC 6350 timestamp into seconds from the Unix epoch, UTC, and
+/// the nanoseconds of its fraction.
+fn parse_timestamp(raw: &str) -> Option<(i64, u32)> {
     let text = raw.trim();
     let (date, time) = match text.find(['T', 't']) {
         Some(pos) => (&text[..pos], Some(&text[pos + 1..])),
@@ -108,13 +122,15 @@ fn parse_timestamp(raw: &str) -> Option<i64> {
     };
 
     let (year, month, day) = parse_date(date)?;
-    let (hour, minute, second, offset) = match time {
+    let (hour, minute, second, nanos, offset) = match time {
         Some(time) => parse_time(time)?,
-        None => (0, 0, 0, 0),
+        None => (0, 0, 0, 0, 0),
     };
 
     let days = days_from_civil(year, month, day);
-    Some(days * 86_400 + hour * 3_600 + minute * 60 + second - offset)
+    let seconds = days * 86_400 + hour * 3_600 + minute * 60 + second - offset;
+
+    Some((seconds, nanos))
 }
 
 /// Parses the date part (basic `YYYYMMDD` or extended `YYYY-MM-DD`).
@@ -133,9 +149,9 @@ fn parse_date(date: &str) -> Option<(i64, i64, i64)> {
     Some((year, month, day))
 }
 
-/// Parses the time part with its optional zone, returning the hour,
-/// minute, second and the zone offset in seconds.
-fn parse_time(time: &str) -> Option<(i64, i64, i64, i64)> {
+/// Parses the time part with its optional zone, returning the hour, minute,
+/// second, the nanoseconds of the fraction and the zone offset in seconds.
+fn parse_time(time: &str) -> Option<(i64, i64, i64, u32, i64)> {
     let (clock, offset) = if let Some(stripped) = time.strip_suffix(['Z', 'z']) {
         (stripped, 0)
     } else if let Some(sign) = time.rfind(['+', '-']) {
@@ -144,11 +160,25 @@ fn parse_time(time: &str) -> Option<(i64, i64, i64, i64)> {
         (time, 0)
     };
 
+    let (clock, fraction) = match clock.find([',', '.']) {
+        Some(at) => (&clock[..at], Some(&clock[at + 1..])),
+        None => (clock, None),
+    };
+
     // NOTE: Trailing time components may be omitted; pad them to zero.
     let mut digits: String = clock.chars().filter(|c| *c != ':').collect();
     if digits.is_empty() || digits.len() > 6 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
+
+    // NOTE: A fraction belongs to the second (RFC 2425 section 5.8.4), so a
+    // time without one carries none.
+    let nanos = match fraction {
+        Some(fraction) if digits.len() == 6 => parse_fraction(fraction)?,
+        Some(_) => return None,
+        None => 0,
+    };
+
     while digits.len() < 6 {
         digits.push('0');
     }
@@ -160,7 +190,22 @@ fn parse_time(time: &str) -> Option<(i64, i64, i64, i64)> {
     if hour > 23 || minute > 59 || second > 60 {
         return None;
     }
-    Some((hour, minute, second, offset))
+    Some((hour, minute, second, nanos, offset))
+}
+
+/// Parses the digits of a fraction of a second into nanoseconds, any digit
+/// past the ninth dropped.
+fn parse_fraction(fraction: &str) -> Option<u32> {
+    if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+
+    let mut digits: String = fraction.chars().take(9).collect();
+    while digits.len() < 9 {
+        digits.push('0');
+    }
+
+    digits.parse().ok()
 }
 
 /// Parses a signed zone offset (`+02`, `+0200`, `-05:00`) into seconds.
@@ -249,6 +294,28 @@ mod tests {
     fn reduced_precision_pads_with_zero() {
         assert_eq!(seconds("2026-07-11T17Z"), seconds("2026-07-11T170000Z"));
         assert_eq!(seconds("20260711"), seconds("2026-07-11T000000Z"));
+    }
+
+    /// RFC 2425 section 5.8.4 lets a vCard 3.0 date-time carry a fraction of
+    /// a second after a comma, which ISO 8601 also writes after a full stop.
+    #[test]
+    fn a_fraction_of_a_second_orders_and_truncates() {
+        let nanos = |raw: &str| VcardTimestamp::from(raw).to_unix_nanos();
+        let whole = seconds("19951031T222710Z").unwrap();
+
+        assert_eq!(seconds("1995-10-31T22:27:10,5Z"), Some(whole));
+        assert_eq!(
+            nanos("1995-10-31T22:27:10,5Z"),
+            nanos("19951031T222710.500Z")
+        );
+        assert!(nanos("19951031T222710.25Z") < nanos("19951031T222710,5Z"));
+        assert_eq!(
+            nanos("19951031T232710.1234567891+01:00"),
+            Some(i128::from(whole) * 1_000_000_000 + 123_456_789),
+        );
+        assert_eq!(seconds("19951031T2227,5Z"), None);
+        assert_eq!(seconds("19951031T222710,Z"), None);
+        assert_eq!(seconds("19951031T222710,5aZ"), None);
     }
 
     #[test]

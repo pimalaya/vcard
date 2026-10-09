@@ -84,7 +84,7 @@ use vcard::{
         param::node::VcardParamNode,
         value::node::VcardValueNode,
     },
-    value::{VcardValueKind, uri::VcardUri},
+    value::{VcardValueKind, datetime::VcardTimestamp, uri::VcardUri},
 };
 
 /// Merge three cards, the shape every law below is stated at: the left side is
@@ -242,6 +242,99 @@ const AT_MOST_ONE: [&str; 8] = [
 /// Whether a property name may appear at most once in a 4.0 card.
 fn at_most_one(name: &str) -> bool {
     AT_MOST_ONE.contains(&name)
+}
+
+/// The parameters that say what their property's value means, so that a
+/// change to one contests a concurrent change to the value. Mirrors the
+/// merge's own list, which an integration test cannot reach.
+const MEANING: [&str; 9] = [
+    "VALUE",
+    "LANGUAGE",
+    "CALSCALE",
+    "MEDIATYPE",
+    "PHONETIC",
+    "SCRIPT",
+    "ENCODING",
+    "CHARSET",
+    "QUOTED-PRINTABLE",
+];
+
+/// Whether a field is a parameter saying what the value means.
+fn meaning(field: &Field) -> bool {
+    matches!(field, Field::Param(key) if MEANING.contains(&key.as_str()))
+}
+
+/// Whether a field is the value, whole or in part.
+fn valued(field: &Field) -> bool {
+    matches!(field, Field::Whole | Field::Comp(_) | Field::Items)
+}
+
+/// Whether one side changed a field in a way the other did not also make,
+/// item by item for a list value, so that its change can contest another.
+fn unmade(
+    field: &Field,
+    base: &BTreeMap<Field, Value>,
+    ours: &BTreeMap<Field, Value>,
+    theirs: &BTreeMap<Field, Value>,
+) -> bool {
+    let get = |map: &BTreeMap<Field, Value>| map.get(field).cloned().flatten();
+    let (base, ours, theirs) = (get(base), get(ours), get(theirs));
+
+    if *field != Field::Items {
+        return ours != base && ours != theirs;
+    }
+
+    let set =
+        |value: Value| -> BTreeSet<String> { value.unwrap_or_default().into_iter().collect() };
+    let (base, ours, theirs) = (set(base), set(ours), set(theirs));
+
+    ours.difference(&base).any(|item| !theirs.contains(item))
+        || base.difference(&ours).any(|item| theirs.contains(item))
+}
+
+/// Whether one side removed a parameter the other side rewrote, so the
+/// removal gives way to the update and contests no meaning.
+fn gives_way(
+    field: &Field,
+    base: &BTreeMap<Field, Value>,
+    ours: &BTreeMap<Field, Value>,
+    theirs: &BTreeMap<Field, Value>,
+) -> bool {
+    let get = |map: &BTreeMap<Field, Value>| map.get(field).cloned().flatten();
+    let (base, ours, theirs) = (get(base), get(ours), get(theirs));
+
+    matches!(field, Field::Param(_))
+        && base.is_some()
+        && ours.is_none()
+        && theirs.is_some()
+        && theirs != base
+}
+
+/// The side whose `REV` stands when both wrote a new one (RFC 6350 6.7.4):
+/// the later stamp, the left one on a tie.
+///
+/// `None` unless both wrote a value, the two differ and both read as
+/// timestamps, as the merge's own rule needs. `base` is `None` for two
+/// additions.
+fn settled<'p>(base: Option<&Prop>, left: &'p Prop, right: &'p Prop) -> Option<&'p Prop> {
+    if left.name != "REV" || right.name != "REV" {
+        return None;
+    }
+
+    let stamp = |prop: &Prop| fields_of(prop).get(&Field::Whole).cloned().flatten();
+    let (ours, theirs) = (stamp(left)?, stamp(right)?);
+    let held = base.and_then(stamp);
+
+    if ours == theirs || held.is_some_and(|held| held == ours || held == theirs) {
+        return None;
+    }
+
+    let read = |stamp: &[String]| VcardTimestamp::from(stamp.concat()).to_unix_nanos();
+
+    Some(match read(&theirs)? > read(&ours)? {
+        true => right,
+        false => left,
+    })
 }
 
 /// Project a parsed card onto the plain model, skipping the `VERSION`
@@ -668,6 +761,16 @@ fn check_completeness(
                     continue;
                 }
                 let mp = mp.expect("a merged instance");
+
+                // NOTE: two new revision stamps settle to the later one's
+                // whole line, with nothing reported.
+                if let Some(later) = settled(Some(bp), lp, rp) {
+                    if canon_prop(mp) != canon_prop(later) {
+                        return fail("the later revision did not stand");
+                    }
+                    continue;
+                }
+
                 check_fields(id, &name, bp, lp, rp, mp, keys)?;
             }
             // The left side removed it.
@@ -705,6 +808,16 @@ fn check_completeness(
             // One or both sides added it.
             (None, lp, rp) => {
                 let added = lp.or(rp).expect("an added instance");
+
+                if let (Some(lp), Some(rp)) = (lp, rp)
+                    && let Some(later) = settled(None, lp, rp)
+                {
+                    if mp.is_none_or(|mp| canon_prop(mp) != canon_prop(later)) {
+                        return fail("the later added revision did not stand");
+                    }
+                    continue;
+                }
+
                 match mp {
                     None if !presence => return fail("an addition was dropped unreported"),
                     Some(mp) => {
@@ -772,7 +885,13 @@ fn check_fields(
 
         if set_valued {
             let held = sorted_set(mv.clone().unwrap_or_default().iter());
-            if held != set_reconcile(&bv, &lv, &rv) {
+
+            // NOTE: a list one side edited under a meaning the other side
+            // changed is contested rather than reconciled, and the left side's
+            // list stands.
+            let contested = reported(keys, id, name, &field) && mv == lv;
+
+            if held != set_reconcile(&bv, &lv, &rv) && !contested {
                 return fail("set reconciliation lost or invented an item");
             }
             continue;
@@ -872,6 +991,20 @@ fn reference_merge(base: &[Prop], left: &[Prop], right: &[Prop]) -> Reference {
         if left_added.iter().any(|lp| canon_prop(lp) == canon_prop(rp)) {
             continue;
         }
+
+        // NOTE: two new revision stamps settle to the later one, with
+        // nothing reported.
+        let held = left_added.iter().find(|lp| lp.name == rp.name);
+        if let Some(lp) = held
+            && let Some(later) = settled(None, lp, rp)
+        {
+            if canon_prop(later) == canon_prop(rp) {
+                let at = props.iter().position(|prop| prop == lp);
+                props[at.expect("the left addition")] = rp.clone();
+            }
+            continue;
+        }
+
         if at_most_one(&rp.name) && left_added.iter().any(|lp| lp.name == rp.name) {
             conflicts.insert((rp.name.clone(), Field::Presence));
             continue;
@@ -884,6 +1017,12 @@ fn reference_merge(base: &[Prop], left: &[Prop], right: &[Prop]) -> Reference {
 
 /// Reconcile one instance both sides kept, field by field.
 fn reconcile(id: &str, bp: &Prop, lp: &Prop, rp: &Prop, conflicts: &mut BTreeSet<Key>) -> Prop {
+    // NOTE: two new revision stamps settle to the later one's whole line,
+    // with nothing reported.
+    if let Some(later) = settled(Some(bp), lp, rp) {
+        return later.clone();
+    }
+
     let mut out = bp.clone();
     let (bf, lf, rf) = (fields_of(bp), fields_of(lp), fields_of(rp));
 
@@ -892,9 +1031,40 @@ fn reconcile(id: &str, bp: &Prop, lp: &Prop, rp: &Prop, conflicts: &mut BTreeSet
     fields.extend(lf.keys().cloned());
     fields.extend(rf.keys().cloned());
 
-    for field in fields {
-        let get = |map: &BTreeMap<Field, Value>| map.get(&field).cloned().flatten();
+    // NOTE: a parameter saying what the value means contests the other
+    // side's change to the value, both ways, unless that side made the same
+    // change or the parameter's removal gave way to the other side's update
+    // of it: the right side's field yields to the left side's, and every
+    // field of the pair is reported.
+    let left_alone: Vec<&Field> = fields
+        .iter()
+        .filter(|f| unmade(f, &bf, &lf, &rf) && !gives_way(f, &bf, &lf, &rf))
+        .collect();
+    let right_alone: Vec<&Field> = fields
+        .iter()
+        .filter(|f| unmade(f, &bf, &rf, &lf) && !gives_way(f, &bf, &rf, &lf))
+        .collect();
+    let rivals = |field: &Field| -> Vec<&Field> {
+        left_alone
+            .iter()
+            .copied()
+            .filter(|left| (meaning(field) && valued(left)) || (valued(field) && meaning(left)))
+            .collect()
+    };
+
+    for field in fields.iter() {
+        let get = |map: &BTreeMap<Field, Value>| map.get(field).cloned().flatten();
         let (bv, lv, rv) = (get(&bf), get(&lf), get(&rf));
+
+        let met = rivals(field);
+        if right_alone.contains(&field) && !met.is_empty() {
+            conflicts.insert((id.to_string(), field.clone()));
+            conflicts.extend(met.into_iter().map(|left| (id.to_string(), left.clone())));
+            set_field(&mut out, field, lv);
+            continue;
+        }
+
+        let field = field.clone();
 
         let set_valued = matches!(field, Field::Items)
             || (matches!(field, Field::ParamItems(_))
@@ -1005,16 +1175,27 @@ const WORDS: [&str; 3] = ["alpha", "beta", "gamma"];
 const PARAM_KEYS: [&str; 4] = ["TYPE", "PREF", "LANGUAGE", "X-TAG"];
 
 /// The properties an addition may draw from. The two `UID` entries share an
-/// at-most-once name, so two divergent additions of it collide; every other
-/// name appears once, so two sides adding the same entry add the same
-/// property.
-const ADD_POOL: [(&str, Shape, &[&str]); 6] = [
+/// at-most-once name, so two divergent additions of it collide, and the two
+/// `REV` entries settle on the later stamp instead; every other name appears
+/// once, so two sides adding the same entry add the same property.
+const ADD_POOL: [(&str, Shape, &[&str]); 8] = [
     ("UID", Shape::Scalar, &["urn:uuid:a"]),
     ("UID", Shape::Scalar, &["urn:uuid:b"]),
     ("TITLE", Shape::Scalar, &["boss"]),
     ("ROLE", Shape::Scalar, &["dev"]),
     ("CATEGORIES", Shape::List, &["x", "y"]),
     ("ORG", Shape::Structured, &["Acme", "Widgets"]),
+    ("REV", Shape::Scalar, &["20260105T000000Z"]),
+    ("REV", Shape::Scalar, &["2026-01-04T00:00:00Z"]),
+];
+
+/// The stamps a side writes on `REV` (RFC 6350 6.7.4), in both ISO 8601
+/// forms and with an offset, the last naming the first's instant, so a later
+/// stamp, an earlier one and a tie between two spellings are all reachable.
+const STAMPS: [&str; 3] = [
+    "20260102T000000Z",
+    "2026-01-03T00:00:00Z",
+    "20260102T010000+0100",
 ];
 
 /// Lines no edit ever targets, carrying a redundant escape, a fold, a blank
@@ -1050,7 +1231,8 @@ fn prop(name: &str, shape: Shape, params: &[(&str, &[&str])], comps: Vec<Vec<Str
 /// The base card the two sides diverge from: one instance of every shape, with
 /// and without parameters. In `pid` mode it gains a second `TEL` and an
 /// `EMAIL` and every instance carries a distinct `PID`, so property names
-/// repeat while instance identity stays unambiguous.
+/// repeat while instance identity stays unambiguous. Two seeds in three
+/// give it a `REV`, the rest leave the sides to add one.
 fn base_model(pid: bool, seed: [usize; 4]) -> Vec<Prop> {
     let word = |i: usize| WORDS[i % WORDS.len()].to_string();
     let one = |text: &str| vec![text.to_string()];
@@ -1088,6 +1270,16 @@ fn base_model(pid: bool, seed: [usize; 4]) -> Vec<Prop> {
         ),
     ];
 
+    // NOTE: a base without a revision is where two sides each add one.
+    if !seed[0].is_multiple_of(WORDS.len()) {
+        props.push(prop(
+            "REV",
+            Shape::Scalar,
+            &[],
+            vec![one("20260101T000000Z")],
+        ));
+    }
+
     if pid {
         props.push(prop(
             "TEL",
@@ -1118,7 +1310,9 @@ fn added_prop(seed: usize, pid: bool) -> Prop {
 
     let mut prop = prop(name, shape, &[], comps);
 
-    if pid {
+    // NOTE: a revision carries no `PID`, so the two sides adding one add the
+    // same instance with two stamps, which is what settles.
+    if pid && name != "REV" {
         prop.params
             .push(("PID".to_string(), vec![(90 + seed).to_string()]));
     }
@@ -1149,8 +1343,12 @@ fn apply_edits(base: &[Prop], edits: &[Edit], pid: bool) -> Vec<Prop> {
 
         match *edit {
             Edit::Value { comp, word, .. } => {
-                let text = WORDS[word % WORDS.len()].to_string();
                 let prop = &mut props[target];
+                let text = match prop.name == "REV" {
+                    true => STAMPS[word % STAMPS.len()].to_string(),
+                    false => WORDS[word % WORDS.len()].to_string(),
+                };
+
                 match prop.shape {
                     Shape::List => {
                         if !prop.comps[0].contains(&text) {
@@ -1206,6 +1404,21 @@ fn apply_edits(base: &[Prop], edits: &[Edit], pid: bool) -> Vec<Prop> {
         }
     }
 
+    // NOTE: a side that edits a card restamps it, as a client does, unless it
+    // wrote the stamp itself, so two sides editing one card both write one.
+    let stamped = edits.iter().any(|edit| {
+        matches!(edit, Edit::Value { .. } | Edit::Clear { .. })
+            && edit
+                .prop()
+                .is_some_and(|prop| props[prop % editable].name == "REV")
+    });
+
+    if let Some(rev) = props.iter_mut().find(|prop| prop.name == "REV")
+        && !stamped
+    {
+        rev.comps = vec![vec![STAMPS[edits.len() % STAMPS.len()].to_string()]];
+    }
+
     let mut dropped: Vec<usize> = edits
         .iter()
         .filter_map(|edit| match edit {
@@ -1226,8 +1439,10 @@ fn apply_edits(base: &[Prop], edits: &[Edit], pid: bool) -> Vec<Prop> {
         };
         let added = added_prop(*seed, pid);
         // NOTE: one instance per name per side, so an identity stays unique
-        // inside each card and the merged card can be indexed by it.
-        if props.iter().all(|prop| prop.name != added.name) {
+        // inside each card and the merged card can be indexed by it, and none
+        // of a name the base holds, so a side that dropped one and added
+        // another is not read as one edit by position.
+        if props.iter().chain(base).all(|prop| prop.name != added.name) {
             props.push(added);
         }
     }
@@ -1311,7 +1526,7 @@ fn arb_edit() -> impl Strategy<Value = Edit> {
             .prop_map(|(prop, key, word)| Edit::Param { prop, key, word }),
         3 => (arb_target(), 0usize..4).prop_map(|(prop, key)| Edit::DropParam { prop, key }),
         2 => arb_target().prop_map(|prop| Edit::DropProp { prop }),
-        3 => (0usize..6).prop_map(|seed| Edit::AddProp { seed }),
+        3 => (0usize..8).prop_map(|seed| Edit::AddProp { seed }),
     ]
 }
 
@@ -2397,7 +2612,9 @@ fn a_list_item_edit_does_not_land_on_a_replaced_value() {
         card("CATEGORIES;VALUE=text:x,c\r\n"),
         "a hybrid value"
     );
-    assert_eq!(conflicts, 1, "the collision was not reported");
+    // NOTE: the item meets two left actions: the replaced value, and the
+    // `VALUE` that says the new value is no list (RFC 6350 5.2).
+    assert_eq!(conflicts, 2, "the collision was not reported");
 }
 
 #[test]
@@ -2618,4 +2835,189 @@ fn sees_a_parameter_edit_past_the_value_its_decode_reads() {
 
     assert_eq!(merged, right);
     assert_eq!(conflicts, 0);
+}
+
+/// A 4.0 card holding a note and a revision stamp.
+fn stamped(note: &str, rev: &str) -> String {
+    card(&format!("FN:Ada\r\nNOTE:{note}\r\n{rev}\r\n"))
+}
+
+#[test]
+fn settles_the_revision_both_sides_wrote_without_a_conflict() {
+    // NOTE: RFC 6350 6.7.4: REV is when the card was last revised, no
+    // content two people contest, so the later stamp stands whichever side
+    // wrote it, read as an instant across the basic and extended forms.
+    let base = card("FN:Ada\r\nNOTE:hi\r\nREV:20261009T070000Z\r\n");
+    let early = card("FN:Ada Lovelace\r\nNOTE:hi\r\nREV:20261009T080000Z\r\n");
+    let late = card("FN:Ada\r\nNOTE:hello\r\nREV:2026-10-09T10:00:00+01:00\r\n");
+
+    for (left, right) in [(&early, &late), (&late, &early)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 0, "{merged}");
+        assert_eq!(
+            merged,
+            card("FN:Ada Lovelace\r\nNOTE:hello\r\nREV:2026-10-09T10:00:00+01:00\r\n"),
+        );
+    }
+}
+
+#[test]
+fn settles_two_revisions_added_over_a_base_without_one() {
+    let base = card("FN:Ada\r\nNOTE:hi\r\n");
+    let early = stamped("hi", "REV:20261009T080000Z");
+    let late = stamped("hi", "REV:20261009T090000Z");
+
+    for (left, right) in [(&early, &late), (&late, &early)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 0, "{merged}");
+        assert_eq!(merged, late);
+    }
+}
+
+#[test]
+fn a_tie_between_two_spellings_of_one_instant_keeps_the_left_stamp() {
+    let base = stamped("hi", "REV:20261009T070000Z");
+    let basic = stamped("hi", "REV:20261009T080000Z");
+    let extended = stamped("hi", "REV:2026-10-09T09:00:00+01:00");
+
+    for (left, right) in [(&basic, &extended), (&extended, &basic)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 0);
+        assert_eq!(merged, *left);
+    }
+}
+
+#[test]
+fn the_later_revision_stands_with_the_value_type_it_was_written_in() {
+    // NOTE: RFC 2426 3.6.4: a 3.0 REV may be a date, declared by VALUE, and
+    // RFC 2425 5.8.4 lets a date-time carry a fraction of a second. The later
+    // stamp's whole line stands, so its value never lands under the other
+    // side's type.
+    let card =
+        |rev: &str| format!("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada\r\n{rev}\r\nEND:VCARD\r\n");
+    let base = card("REV:1995-10-31T22:27:10Z");
+    let dated = card("REV;VALUE=date:1997-11-15");
+    let timed = card("REV:1997-11-15T10:00:00,5Z");
+
+    for (left, right) in [(&dated, &timed), (&timed, &dated)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 0, "{merged}");
+        assert_eq!(merged, timed);
+    }
+}
+
+#[test]
+fn a_revision_that_does_not_read_is_contested() {
+    let base = stamped("hi", "REV:20261009T070000Z");
+    let left = stamped("hi", "REV:soon");
+    let right = stamped("hi", "REV:20261009T080000Z");
+
+    for (left, right) in [(&left, &right), (&right, &left)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 1);
+        assert_eq!(merged, *left);
+    }
+}
+
+#[test]
+fn a_language_change_contests_a_text_change_both_ways() {
+    // NOTE: RFC 6350 5.1: LANGUAGE says what language the text is in, so
+    // landing one side's language on the other side's text writes English
+    // labelled French, which neither side wrote.
+    let base = card("NOTE;LANGUAGE=en:Good morning\r\n");
+    let rewritten = card("NOTE;LANGUAGE=en:Good evening\r\n");
+    let relabelled = card("NOTE;LANGUAGE=fr:Bonjour\r\n");
+    let retagged = card("NOTE;LANGUAGE=fr:Good morning\r\n");
+
+    for other in [&relabelled, &retagged] {
+        for (left, right) in [(&rewritten, other), (other, &rewritten)] {
+            let (merged, conflicts) = merge_text(&base, left, right);
+
+            assert!(conflicts > 0, "{merged}");
+            assert_eq!(merged, *left, "the left side's line stands whole");
+        }
+    }
+}
+
+#[test]
+fn a_calendar_change_contests_a_date_change_both_ways() {
+    // NOTE: RFC 6350 5.8: CALSCALE says which calendar the date counts in.
+    let base = card("BDAY:19850412\r\n");
+    let moved = card("BDAY:19850413\r\n");
+    let recounted = card("BDAY;CALSCALE=x-hebrew:19850412\r\n");
+
+    for (left, right) in [(&moved, &recounted), (&recounted, &moved)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 1);
+        assert_eq!(merged, *left);
+    }
+}
+
+#[test]
+fn a_language_change_meets_every_component_the_other_side_changed() {
+    // NOTE: one pair per component, read either way round, so swapping the
+    // sides reports as many conflicts.
+    let base = card("N;LANGUAGE=en:Doe;John;;;\r\n");
+    let renamed = card("N;LANGUAGE=en:Roe;Jack;;;\r\n");
+    let relabelled = card("N;LANGUAGE=de:Doe;John;;;\r\n");
+
+    for (left, right) in [(&renamed, &relabelled), (&relabelled, &renamed)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 2);
+        assert_eq!(merged, *left);
+    }
+}
+
+#[test]
+fn a_meaning_both_sides_changed_alike_contests_nothing() {
+    // NOTE: both sides relabelled the note, so the text one of them wrote
+    // beside the label was written for the label the merged card carries.
+    let base = card("NOTE;LANGUAGE=en:Good morning\r\n");
+    let relabelled = card("NOTE;LANGUAGE=fr:Good morning\r\n");
+    let translated = card("NOTE;LANGUAGE=fr:Bonjour\r\n");
+
+    for (left, right) in [(&relabelled, &translated), (&translated, &relabelled)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 0);
+        assert_eq!(merged, translated);
+    }
+}
+
+#[test]
+fn a_parameter_describing_the_thing_still_merges_beside_a_value_change() {
+    // NOTE: RFC 6350 5.3 and 5.6: PREF and TYPE describe the thing a value
+    // names, not what the value means, so both edits land.
+    let base = card("TITLE:dev\r\n");
+    let left = card("TITLE:lead\r\n");
+    let right = card("TITLE;TYPE=work;PREF=1:dev\r\n");
+
+    let (merged, conflicts) = merge_text(&base, &left, &right);
+
+    assert_eq!(conflicts, 0);
+    assert_eq!(merged, card("TITLE;TYPE=work;PREF=1:lead\r\n"));
+}
+
+#[test]
+fn a_language_removal_gives_way_to_a_relabelled_rewrite() {
+    // NOTE: an update beats a removal, so the right side's label survives
+    // the left side's removal of it, and the text written for that label
+    // lands beside it rather than being contested by a removal that lost.
+    let base = card("FN;LANGUAGE=en:Ada\r\n");
+    let dropped = card("FN:Ada\r\n");
+    let relabelled = card("FN;LANGUAGE=fr:Adah\r\n");
+
+    for (left, right) in [(&dropped, &relabelled), (&relabelled, &dropped)] {
+        let (merged, conflicts) = merge_text(&base, left, right);
+
+        assert_eq!(conflicts, 1);
+        assert_eq!(merged, relabelled);
+    }
 }

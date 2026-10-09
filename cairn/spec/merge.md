@@ -147,6 +147,8 @@ A parameter or a property that loses SHALL NOT be written beside the one that be
 
 For every field of the merged card, the merge SHALL leave what one side made it and that side changed it, or what the base held and neither side changed it. A side's change that did not land SHALL appear in the `VcardMergeReport`'s conflicts, and no field SHALL hold a value neither side wrote, except a set-valued field, which carries both sides' additions and removals.
 
+Two exceptions follow from the rules below. A set-valued field a meaning change contests holds the left side's items and is reported, since what the other side's items were written for is gone. A revision stamp the bookkeeping rule settled is the one change that neither lands nor is reported: the later stamp's line stands, and the earlier one's edits go with it.
+
 The field granularities are the ones the merge diffs at: the whole property, the whole value of a non-structured property, one component of a structured value, the item set of a list value, one parameter, and the item set of a list parameter.
 
 #### Scenario: A change that cannot land
@@ -237,6 +239,65 @@ A right-side item edit of a list value the left side replaced as a whole SHALL b
 - GIVEN a base `CATEGORIES:a,b`, a left copy replacing the whole value and a right copy adding one item
 - WHEN they are merged
 - THEN the merged value is the left copy's, and the collision is reported
+
+### Requirement: A parameter that says what the value means contests it
+
+A change to a parameter that says what its property's value means SHALL collide with a value-level action on the other side, a whole-value change, a component change or a list item edit, both ways. What the other side wrote was written for the old meaning, and landing both writes a value neither side wrote: English text labelled French, a Gregorian date read in another calendar. The left side's line SHALL stand, and each such pair SHALL be reported, so one parameter against two changed components is two conflicts whichever side is called left.
+
+The parameters are those that say how the value is read: `VALUE` (RFC 6350 5.2), `LANGUAGE` (5.1), `CALSCALE` (5.8), `MEDIATYPE` (5.7), the RFC 9554 `PHONETIC` and `SCRIPT`, and the vCard 2.1 and 3.0 transfer encoding and character set, `ENCODING` and `CHARSET`, with the bare 2.1 `QUOTED-PRINTABLE`. A parameter describing the thing a value names rather than the value SHALL still merge beside a value change: `TYPE` (5.6), `PREF` (5.3), `ALTID` (5.4), `PID` (5.5), `SORT-AS` (5.9), `GEO` (5.10), `TZ` (5.11), the `ADR` `LABEL` (6.3.1) and the other RFC 9554 parameters.
+
+`TYPE` names a media format on a vCard 3.0 `PHOTO`, `LOGO`, `SOUND` or `KEY` (RFC 2426 3.1.4, 3.5.3, 3.6.6, 3.7.2), but those values are their own identity, so a changed one is a replacement and never meets a `TYPE` change on the same instance.
+
+Two meaning actions SHALL contest nothing. One both sides made alike: both stood on it, so the value either side wrote beside it was written for it. And a parameter removal the other side's update of that parameter beats: the update is the meaning that stands, so the value written beside it lands.
+
+ical-rs states the same rule over its own parameters.
+
+#### Scenario: A language change against a text change
+- GIVEN a base `NOTE;LANGUAGE=en:Good morning`, one copy rewriting the text and the other relabelling it `LANGUAGE=fr`, in either order
+- WHEN they are merged
+- THEN the left copy's line stands whole and the collision is reported
+
+#### Scenario: A calendar against a date
+- GIVEN a base `BDAY:19850412`, one copy moving the day and the other declaring `CALSCALE=x-hebrew`, in either order
+- WHEN they are merged
+- THEN the left copy's line stands whole and one conflict is reported
+
+#### Scenario: A meaning both sides gave
+- GIVEN a base `NOTE;LANGUAGE=en:Good morning`, both copies relabelling it `LANGUAGE=fr` and one also translating the text
+- WHEN they are merged
+- THEN the merged card carries the translation and nothing is reported
+
+#### Scenario: A describing parameter beside a value change
+- GIVEN a base `TITLE:dev`, one copy rewriting the title and the other adding `TYPE` and `PREF`
+- WHEN they are merged
+- THEN both land and nothing is reported
+
+### Requirement: Bookkeeping is settled, not contested
+
+`REV` records when the card was last revised (RFC 6350 6.7.4), not what it says, and a client restamps it on every write. Two sides each writing a new `REV`, by a value change or by two additions over a base without one, SHALL NOT be a collision: the later stamp's line SHALL stand whole, whichever side wrote it, and nothing SHALL be reported for it. A tie keeps the left side's line.
+
+The whole line stands because the one parameter `REV` takes, `VALUE`, says how its own stamp reads (a vCard 3.0 `REV` may be a date, RFC 2426 3.6.4), so the later stamp never lands under the other side's type. Any other edit either side made to that `REV` goes with its stamp.
+
+A stamp SHALL be read as an instant across every form the crate reads: the ISO 8601 basic and extended forms, a `Z` or a numeric offset folded into UTC, reduced precision, a date alone, a missing zone read as UTC (the reading `VcardTimestamp::to_unix_seconds` documents), and the fraction of a second RFC 2425 section 5.8.4 allows a vCard 3.0 date-time. Two sides writing the same bytes agree, as anywhere else. A stamp that does not read SHALL be left to the ordinary rules and contested as any other value is.
+
+No other property is bookkeeping in that sense. `PRODID` (6.7.3) names the product that wrote the card and says nothing about the contact, but it carries no order to settle by, and settling it by the `REV` beside it would tie one property's fate to another's; ical-rs leaves its own `PRODID` contested too. `CREATED` (RFC 9554) is written once rather than on every write, so two values are two claims about one fact. `UID` (6.7.6) is the card's identity, `VERSION` is not reconciled, and `CLIENTPIDMAP` (6.7.7) is the synchronisation data the sides' `PID`s point into.
+
+ical-rs states the twin rule over `DTSTAMP`, `LAST-MODIFIED` and `SEQUENCE`.
+
+#### Scenario: Two edits each restamping the card
+- GIVEN two copies each changing a different property and writing its own `REV`, one in the basic form and one in the extended form with an offset, in either order
+- WHEN they are merged
+- THEN both edits land, the later `REV` stands, and nothing is reported
+
+#### Scenario: A date against a date-time
+- GIVEN a 3.0 base, one copy writing `REV;VALUE=date:1997-11-15` and the other `REV:1997-11-15T10:00:00,5Z`, in either order
+- WHEN they are merged
+- THEN the date-time's line stands whole, its type with it, and nothing is reported
+
+#### Scenario: A stamp that does not read
+- GIVEN one copy writing `REV:soon` and the other a timestamp
+- WHEN they are merged
+- THEN the collision is reported and the left copy's stamp stands
 
 ### Requirement: The merged card is a card
 
