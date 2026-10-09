@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-09
+
 ### Added
 
 - Added `VcardTimestamp::to_unix_nanos`, the instant a timestamp names with its fraction of a second kept, so two revisions one second apart or less still order.
@@ -342,7 +344,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `Vcard::to_jscontact` and `from_jscontact` convert to and from an RFC 9553 Card, infallibly aside from a non-object import root. Unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams`, and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.5.1..HEAD
+[unreleased]: https://github.com/pimalaya/vcard/compare/v0.5.2..HEAD
+[0.5.2]: https://github.com/pimalaya/vcard/compare/v0.5.1..v0.5.2
 [0.5.1]: https://github.com/pimalaya/vcard/compare/v0.5.0..v0.5.1
 [0.5.0]: https://github.com/pimalaya/vcard/compare/v0.4.0..v0.5.0
 [0.4.0]: https://github.com/pimalaya/vcard/compare/v0.3.1..v0.4.0
