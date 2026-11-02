@@ -22,7 +22,7 @@ vCard parser, validator, editor, merger and builder library for Rust
 - **Strict building and validation**: construct cards checked against the standard, with an escape hatch to step outside it.
 - **Three-way merge**: reconcile two divergent edits of a card against their common base, every action and conflict reported.
 - **Small and portable**: no_std compatible, with an allocation-only core that pulls in no dependencies.
-- **Optional content decoding**: quoted-printable text, inline base64 binary and foreign character sets, each behind its own feature.
+- **Optional content decoding**: quoted-printable text, inline base64 binary and foreign character sets, each behind its own feature; quoted-printable and base64 run SIMD kernels (AVX-512, AVX2, SSSE3, NEON) once the application installs its CPU token with [simd-cpu](https://github.com/pimalaya/simd-cpu)'s `SimdCpu::install_detected()`.
 - **Optional jCard**: read and write a card as JSON.
 - **Optional JSContact**: convert a card to and from the Card object exchanged over JMAP.
 

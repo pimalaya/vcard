@@ -61,10 +61,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "base64"
-version = "0.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+name = "base64-codec"
+version = "0.0.1"
+source = "git+https://github.com/pimalaya/base64-codec?rev=d39f6b90f02abf8eb91ef041b7601320df8def99#d39f6b90f02abf8eb91ef041b7601320df8def99"
+dependencies = [
+ "simd-cpu",
+]
 
 [[package]]
 name = "bit-set"
@@ -808,10 +810,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "quoted_printable"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "478e0585659a122aa407eb7e3c0e1fa51b1d8a870038bd29f0cf4a8551eea972"
+name = "quoted-printable-codec"
+version = "0.0.1"
+source = "git+https://github.com/pimalaya/quoted-printable-codec?rev=d63612b0f9c046717e183e3be534c98f300d913a#d63612b0f9c046717e183e3be534c98f300d913a"
+dependencies = [
+ "simd-cpu",
+]
 
 [[package]]
 name = "r-efi"
@@ -948,6 +952,11 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
+name = "simd-cpu"
+version = "0.0.1"
+source = "git+https://github.com/pimalaya/simd-cpu?rev=f2eb72cff2fafad8ae135e00685bc19f9e80e5cc#f2eb72cff2fafad8ae135e00685bc19f9e80e5cc"
 
 [[package]]
 name = "simdutf8"
@@ -1135,15 +1144,16 @@ checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
 name = "vcard-rs"
 version = "0.5.2"
 dependencies = [
- "base64",
+ "base64-codec",
  "calcard",
  "criterion",
  "encoding_rs",
  "ical_vcard",
  "memchr",
  "proptest",
- "quoted_printable",
+ "quoted-printable-codec",
  "serde_json",
+ "simd-cpu",
  "vcard_parser",
  "vparser",
 ]

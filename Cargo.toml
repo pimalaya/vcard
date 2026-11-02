@@ -3,7 +3,7 @@ name = "vcard-rs"
 description = "vCard parser, validator, editor, merger and builder library"
 version = "0.5.2"
 authors = ["Clément DOUIN (soywod) <pimalaya.org@posteo.net>"]
-rust-version = "1.88"
+rust-version = "1.89"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 categories = ["data-structures", "parser-implementations", "encoding", "no-std"]
@@ -24,8 +24,8 @@ default = ["parser", "quoted-printable", "base64", "encoding"]
 parser = ["dep:memchr"]
 jcard = ["dep:serde_json"]
 jscontact = ["jcard"]
-quoted-printable = ["dep:quoted_printable"]
-base64 = ["dep:base64"]
+quoted-printable = ["dep:quoted-printable-codec"]
+base64 = ["dep:base64-codec"]
 encoding = ["dep:encoding_rs"]
 
 [[bench]]
@@ -99,12 +99,13 @@ calcard = { version = "0.3", default-features = false }
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 ical_vcard = { version = "0.5", default-features = false }
 proptest = { version = "1", default-features = false, features = ["bit-set", "std"] }
+simd-cpu = { version = "0.0.1", git = "https://github.com/pimalaya/simd-cpu", rev = "f2eb72cff2fafad8ae135e00685bc19f9e80e5cc", features = ["std"] }
 vcard_parser = { version = "0.2", default-features = false }
 vparser = { version = "1", default-features = false }
 
 [dependencies]
-base64 = { version = "0.23", default-features = false, features = ["alloc"], optional = true }
+base64-codec = { version = "0.0.1", git = "https://github.com/pimalaya/base64-codec", rev = "d39f6b90f02abf8eb91ef041b7601320df8def99", features = ["alloc"], optional = true }
 encoding_rs = { version = "0.8", default-features = false, features = ["alloc"], optional = true }
 memchr = { version = "2", default-features = false, optional = true }
-quoted_printable = { version = "0.5", default-features = false, optional = true }
+quoted-printable-codec = { version = "0.0.1", git = "https://github.com/pimalaya/quoted-printable-codec", rev = "d63612b0f9c046717e183e3be534c98f300d913a", features = ["alloc"], optional = true }
 serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }

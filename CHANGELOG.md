@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: `VcardBinary::decode_base64` returns `Option<(Vec<u8>, bool)>`, the decoded bytes and whether the payload was well-formed, in place of a `Result` carrying the base64 crate's error. Decoding is liberal: line breaks and blanks are skipped, any other byte outside the alphabet is skipped and reported, missing padding is accepted.
+
+- The `base64` and `quoted-printable` features run on base64-codec and quoted-printable-codec in place of the base64 and quoted_printable crates, with SIMD kernels for the CPU token the application installs through simd-cpu (`SimdCpu::install_detected()` in `main`), the portable code otherwise. The three are git dependencies until they are published, and `rust-version` is 1.89.
+
+### Fixed
+
+- Fixed `decode_base64` failing on a 2.1 or 3.0 inline value whose continuation lines carry more than the one folding space, which most 2.1 exporters write.
+
+- Fixed `VcardValueCursor::quoted_printable` (and `charset` through it) dropping every byte outside printable ASCII, and the blanks before one: a 2.1 value mixing raw 8-bit text with `=XX` octets lost its letters. Every byte is kept.
+
 ## [0.5.2] - 2026-10-09
 
 ### Added

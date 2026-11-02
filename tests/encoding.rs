@@ -175,7 +175,45 @@ fn base64_helper_decodes_inline_binary() {
 
     match &card.properties[0].value {
         VcardValue::Binary(binary) => {
-            assert_eq!(binary.decode_base64().unwrap().unwrap(), b"foobar");
+            assert_eq!(binary.decode_base64(), Some((b"foobar".to_vec(), true)));
+        }
+        other => panic!("expected an inline binary value, got {other:?}"),
+    }
+}
+
+#[cfg(feature = "quoted-printable")]
+#[test]
+fn quoted_printable_helper_keeps_a_raw_8_bit_byte() {
+    let mut raw = Vec::new();
+    raw.extend_from_slice(b"BEGIN:VCARD\r\nVERSION:2.1\r\nNOTE;ENCODING=QUOTED-PRINTABLE:caf=E9 ");
+    raw.push(0xFF);
+    raw.extend_from_slice(b"\r\nEND:VCARD\r\n");
+
+    let mut card = VcardCst::parse(&raw).unwrap();
+    let bytes = card.prop_mut::<NOTE>().unwrap().quoted_printable();
+    assert_eq!(bytes, b"caf\xE9 \xFF");
+}
+
+#[cfg(feature = "base64")]
+#[test]
+fn base64_helper_skips_an_indented_continuation() {
+    // NOTE: unfolding drops one folding space; the other three stay in the
+    // value, as 2.1 exporters indent base64 by four.
+    let cst = VcardCst::parse(concat!(
+        "BEGIN:VCARD\r\n",
+        "VERSION:2.1\r\n",
+        "PHOTO;ENCODING=BASE64:\r\n",
+        "    Zm9v\r\n",
+        "    YmFy\r\n",
+        "\r\n",
+        "END:VCARD\r\n",
+    ))
+    .unwrap();
+    let card = cst.decode();
+
+    match &card.properties[0].value {
+        VcardValue::Binary(binary) => {
+            assert_eq!(binary.decode_base64(), Some((b"foobar".to_vec(), true)));
         }
         other => panic!("expected an inline binary value, got {other:?}"),
     }

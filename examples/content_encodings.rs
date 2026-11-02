@@ -14,6 +14,10 @@ use vcard::{
 };
 
 fn main() {
+    // The decoders run SIMD kernels for the CPU the application detected, once,
+    // first thing in `main`; without it they run their portable code.
+    let _ = simd_cpu::SimdCpu::install_detected();
+
     // "café" written in ISO-8859-1 (its 0xE9 is not valid UTF-8), through
     // quoted-printable octets, the way a 2.1 exporter writes it.
     let input = concat!(
@@ -47,8 +51,9 @@ fn main() {
     match card.prop::<PHOTO>().unwrap() {
         VcardValue::Binary(binary) => {
             println!("\nphoto payload:   {binary:?}");
-            let bytes = binary.decode_base64().unwrap().unwrap();
+            let (bytes, clean) = binary.decode_base64().unwrap();
             println!("photo bytes:     {} bytes, {:02x?}", bytes.len(), bytes);
+            println!("well-formed:     {clean}");
         }
         other => println!("\nphoto:           {other:?}"),
     }

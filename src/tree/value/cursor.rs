@@ -28,6 +28,9 @@
 use alloc::string::String;
 use alloc::{borrow::Cow, vec::Vec};
 
+#[cfg(feature = "quoted-printable")]
+use quoted_printable_codec::codec::QuotedPrintableCodec;
+
 use crate::tree::{line::VcardLine, param::lens::VcardParamLens, value::node::VcardValueNode};
 
 /// A typed cursor over a content line's value, editing in place and byte
@@ -72,16 +75,22 @@ impl<'a> VcardValueCursor<'_, 'a> {
     /// The raw [`bytes`](Self::bytes) when the line declares no such encoding.
     /// Still in the value's own (possibly foreign) charset, so pair with
     /// [`charset`](Self::charset) for text. Requires `quoted-printable`.
+    ///
+    /// Decoding loses no byte and runs the backend of the CPU token the
+    /// application installed through simd-cpu: an `=` starting no valid
+    /// sequence stays literal, a raw 8-bit byte and a bare CR pass through,
+    /// and a hex digit reads in either case.
     #[cfg(feature = "quoted-printable")]
     pub fn quoted_printable(&self) -> Vec<u8> {
         let raw = self.bytes();
 
-        if self.line.is_quoted_printable() {
-            quoted_printable::decode(raw.as_ref(), quoted_printable::ParseMode::Robust)
-                .unwrap_or_else(|_| raw.into_owned())
-        } else {
-            raw.into_owned()
+        if !self.line.is_quoted_printable() {
+            return raw.into_owned();
         }
+
+        let mut bytes = Vec::new();
+        QuotedPrintableCodec::default().decode_vec(&raw, &mut bytes);
+        bytes
     }
 
     /// Transcode the value to text using its `CHARSET` parameter (defaulting to
