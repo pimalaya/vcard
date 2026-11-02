@@ -122,23 +122,12 @@ impl<'a> VcardCst<'a> {
         let mut rest = input;
 
         while !is_blank(rest) {
-            let (line, tail) = VcardLine::take(rest)?;
-            props.push(line);
-            rest = tail;
+            props.push(VcardLine::empty());
+            let last = props.len() - 1;
+            rest = VcardLine::take_into(rest, &mut props[last])?;
         }
 
-        let escaper = props
-            .iter()
-            .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
-            .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
-            .unwrap_or_default();
-
-        for line in &mut props {
-            line.value.escaper = escaper;
-            for param in &mut line.params {
-                param.escaper = escaper;
-            }
-        }
+        stamp_escaper(&mut props);
 
         let mut card = Self {
             begin: None,
@@ -220,7 +209,7 @@ impl<'a> VcardCst<'a> {
             return Err(VcardParseError::ExpectedBegin(begin.name.get().to_string()));
         }
 
-        let mut props: Vec<VcardLine<'a>> = Vec::new();
+        let mut props: Vec<VcardLine<'a>> = Vec::with_capacity(16);
         let mut depth = 0usize;
 
         loop {
@@ -230,41 +219,32 @@ impl<'a> VcardCst<'a> {
                 ));
             }
 
-            let (line, tail) = VcardLine::take(rest)?;
-            rest = tail;
+            props.push(VcardLine::empty());
+            let last = props.len() - 1;
+            rest = VcardLine::take_into(rest, &mut props[last])?;
 
-            let name = line.name.get();
+            let name = props[last].name.get();
 
             if name.eq_ignore_ascii_case("END") {
                 if let Some(next) = depth.checked_sub(1) {
                     // NOTE: a nested END closes an embedded (AGENT) card, not
                     // this one; keep it as a verbatim line.
                     depth = next;
-                    props.push(line);
                     continue;
                 }
+
+                let line = props.pop();
 
                 // NOTE: VERSION can sit anywhere, so the escaping mode is only
                 // known once the whole card is parsed: stamp every value and
                 // parameter node with it.
-                let escaper = props
-                    .iter()
-                    .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
-                    .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
-                    .unwrap_or_default();
-
-                for line in &mut props {
-                    line.value.escaper = escaper;
-                    for param in &mut line.params {
-                        param.escaper = escaper;
-                    }
-                }
+                stamp_escaper(&mut props);
 
                 return Ok((
                     Self {
                         begin: Some(begin),
                         props,
-                        end: Some(line),
+                        end: line,
                         trailing: Cow::Borrowed(""),
                     },
                     rest,
@@ -274,8 +254,6 @@ impl<'a> VcardCst<'a> {
             if name.eq_ignore_ascii_case("BEGIN") {
                 depth += 1;
             }
-
-            props.push(line);
         }
     }
 
@@ -406,7 +384,9 @@ impl<'a> VcardCst<'a> {
     /// [`Display`](core::fmt::Display) (which is lossy for a value carrying a
     /// non-UTF-8 charset), this is always byte-faithful.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::new();
+        let lines = self.begin.iter().chain(&self.props).chain(&self.end);
+        let size = lines.map(|line| line.wire.size_hint() + 2).sum::<usize>();
+        let mut out = Vec::with_capacity(size + self.trailing.len());
 
         if let Some(begin) = &self.begin {
             begin.write_bytes(&mut out);
@@ -420,6 +400,29 @@ impl<'a> VcardCst<'a> {
         out.extend_from_slice(self.trailing.as_bytes());
 
         out
+    }
+}
+
+/// Stamp every value and parameter node with the escaping mode of the card's
+/// `VERSION` line, wherever it sits, which is only known once the whole card
+/// is parsed. The parser leaves the default mode on every node, so a card in
+/// that mode is already stamped.
+fn stamp_escaper(props: &mut [VcardLine<'_>]) {
+    let escaper = props
+        .iter()
+        .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
+        .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
+        .unwrap_or_default();
+
+    if escaper == VcardEscaper::default() {
+        return;
+    }
+
+    for line in props {
+        line.value.escaper = escaper;
+        for param in &mut line.params {
+            param.escaper = escaper;
+        }
     }
 }
 

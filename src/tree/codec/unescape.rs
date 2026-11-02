@@ -82,11 +82,21 @@ pub(crate) fn unescape_param(text: &str, escaper: VcardEscaper) -> Cow<'_, str> 
     Cow::Owned(out)
 }
 
-/// Interpret unescaped bytes as UTF-8, keeping the borrow when possible.
+/// Interpret unescaped bytes as UTF-8, keeping the borrow or the buffer when
+/// possible.
+///
+/// Validated strictly first, which runs word at a time over ASCII, so the
+/// replacing walk only ever runs on bytes that need it.
 fn lossy(bytes: Cow<'_, [u8]>) -> Cow<'_, str> {
     match bytes {
-        Cow::Borrowed(bytes) => String::from_utf8_lossy(bytes),
-        Cow::Owned(bytes) => Cow::Owned(String::from_utf8_lossy(&bytes).into_owned()),
+        Cow::Borrowed(bytes) => match str::from_utf8(bytes) {
+            Ok(text) => Cow::Borrowed(text),
+            Err(_) => String::from_utf8_lossy(bytes),
+        },
+        Cow::Owned(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => Cow::Owned(text),
+            Err(error) => Cow::Owned(String::from_utf8_lossy(error.as_bytes()).into_owned()),
+        },
     }
 }
 

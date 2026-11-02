@@ -101,6 +101,18 @@ impl<'a> VcardWire<'a> {
         self.parts.is_empty()
     }
 
+    /// About how many bytes the line takes on the wire, its ending aside:
+    /// exact for an unedited parsed line folded with `\r\n`, a guess to size
+    /// a buffer by otherwise.
+    pub(crate) fn size_hint(&self) -> usize {
+        self.len + 3 * self.parts.len()
+    }
+
+    /// Make room for `additional` more pieces.
+    pub(crate) fn reserve(&mut self, additional: usize) {
+        self.parts.reserve_exact(additional);
+    }
+
     /// Record a fold at `offset`.
     pub(crate) fn fold(&mut self, offset: usize, crlf: bool, wsp: u8) {
         self.parts.push((offset, VcardWirePart::Fold { crlf, wsp }));
@@ -115,6 +127,26 @@ impl<'a> VcardWire<'a> {
     pub(crate) fn skipped(&mut self, offset: usize, bytes: &'a str) {
         self.parts
             .push((offset, VcardWirePart::Skipped(Cow::Borrowed(bytes))));
+    }
+
+    /// Record `count` dropped `=` at `offset`, after every piece recorded at
+    /// or before it, the pieces being in offset order.
+    ///
+    /// The dangling `=` of a `QUOTED-PRINTABLE` value, which the head
+    /// splitter finds once the tokeniser recorded the rest: a soft break at
+    /// the same offset or past it would otherwise go out first and swallow a
+    /// line.
+    pub(crate) fn insert_skipped_equals(&mut self, offset: usize, count: usize) {
+        const EQUALS: &str = "================================================================";
+
+        let bytes = match EQUALS.get(..count) {
+            Some(bytes) => Cow::Borrowed(bytes),
+            None => Cow::Owned("=".repeat(count)),
+        };
+
+        let at = self.parts.partition_point(|(at, _)| *at <= offset);
+        self.parts
+            .insert(at, (offset, VcardWirePart::Skipped(bytes)));
     }
 
     /// Pin the logical length the offsets were taken against.
@@ -132,18 +164,28 @@ impl<'a> VcardWire<'a> {
             return;
         }
 
+        if self.parts.is_empty() {
+            self.parts = earlier.parts;
+            return;
+        }
+
         earlier.parts.append(&mut self.parts);
         earlier.parts.sort_by_key(|(offset, _)| *offset);
         self.parts = earlier.parts;
     }
 
-    /// Write `logical` back to the wire, re-inserting every piece.
+    /// Lay the logical line written in `out` from `start` on back out to the
+    /// wire, re-inserting every piece, in place.
     ///
-    /// A shape whose sealed length no longer matches `logical` is stale, left
-    /// by an edit, and is dropped: the logical bytes go out unfolded.
-    pub(crate) fn write_bytes(&self, logical: &[u8], out: &mut Vec<u8>) {
-        if self.parts.is_empty() || self.len != logical.len() {
-            out.extend_from_slice(logical);
+    /// The wire bytes are written past the logical ones, then moved down over
+    /// them, so no buffer is allocated for a folded line.
+    ///
+    /// A shape whose sealed length no longer matches the logical line is
+    /// stale, left by an edit, and is dropped: the line goes out unfolded.
+    pub(crate) fn lay_out(&self, out: &mut Vec<u8>, start: usize) {
+        let len = out.len() - start;
+
+        if self.parts.is_empty() || self.len != len {
             return;
         }
 
@@ -152,13 +194,15 @@ impl<'a> VcardWire<'a> {
         for (offset, part) in &self.parts {
             // NOTE: Clamped, so a shape recorded against other bytes can never
             // index out of this line or walk backwards.
-            let offset = (*offset).clamp(at, logical.len());
-            out.extend_from_slice(&logical[at..offset]);
+            let offset = (*offset).clamp(at, len);
+            out.extend_from_within(start + at..start + offset);
             part.write_bytes(out);
             at = offset;
         }
 
-        out.extend_from_slice(&logical[at..]);
+        out.extend_from_within(start + at..start + len);
+        out.copy_within(start + len.., start);
+        out.truncate(out.len() - len);
     }
 
     /// Convert into an owned shape (`'static`).
@@ -181,9 +225,12 @@ mod tests {
     use crate::tree::wire::VcardWire;
 
     fn written(wire: &VcardWire<'_>, logical: &[u8]) -> Vec<u8> {
-        let mut out = Vec::new();
-        wire.write_bytes(logical, &mut out);
-        out
+        let mut out = b"before".to_vec();
+        out.extend_from_slice(logical);
+        wire.lay_out(&mut out, 6);
+        let line = out.split_off(6);
+        assert_eq!(out, b"before");
+        line
     }
 
     #[test]

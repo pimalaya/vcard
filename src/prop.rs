@@ -172,7 +172,7 @@ impl From<&VcardPropKind> for VcardPropName<'_> {
 
 impl<'a> From<Cow<'a, str>> for VcardPropName<'a> {
     fn from(kind: Cow<'a, str>) -> Self {
-        match kind.parse().ok() {
+        match VcardPropKind::from_name(&kind) {
             Some(kind) => Self::Kind(kind),
             None => Self::Unknown(kind),
         }
@@ -348,62 +348,77 @@ impl VcardPropKind {
     ];
 }
 
+impl VcardPropKind {
+    /// The known property for a wire name (case-insensitive), or `None`.
+    ///
+    /// The name is upper-cased into a stack copy and matched exactly, with no
+    /// allocation for an unknown one.
+    pub(crate) fn from_name(kind: &str) -> Option<Self> {
+        let mut upper = [0; 13];
+        let upper = upper.get_mut(..kind.len())?;
+        upper.copy_from_slice(kind.as_bytes());
+        upper.make_ascii_uppercase();
+
+        Some(match &*upper {
+            b"ADR" => Self::Adr,
+            b"AGENT" => Self::Agent,
+            b"ANNIVERSARY" => Self::Anniversary,
+            b"BDAY" => Self::Bday,
+            b"CALADRURI" => Self::CalAdrUri,
+            b"CALURI" => Self::CalUri,
+            b"CATEGORIES" => Self::Categories,
+            b"CLASS" => Self::Class,
+            b"CLIENTPIDMAP" => Self::ClientPidMap,
+            b"CREATED" => Self::Created,
+            b"EMAIL" => Self::Email,
+            b"FBURL" => Self::FbUrl,
+            b"FN" => Self::Fn,
+            b"GENDER" => Self::Gender,
+            b"GEO" => Self::Geo,
+            b"GRAMGENDER" => Self::GramGender,
+            b"IMPP" => Self::Impp,
+            b"JSPROP" => Self::JsProp,
+            b"KEY" => Self::Key,
+            b"KIND" => Self::Kind,
+            b"LABEL" => Self::Label,
+            b"LANG" => Self::Lang,
+            b"LANGUAGE" => Self::Language,
+            b"LOGO" => Self::Logo,
+            b"MAILER" => Self::Mailer,
+            b"MEMBER" => Self::Member,
+            b"N" => Self::N,
+            b"NAME" => Self::Name,
+            b"NICKNAME" => Self::Nickname,
+            b"NOTE" => Self::Note,
+            b"ORG" => Self::Org,
+            b"PHOTO" => Self::Photo,
+            b"PRODID" => Self::ProdId,
+            b"PROFILE" => Self::Profile,
+            b"PRONOUNS" => Self::Pronouns,
+            b"RELATED" => Self::Related,
+            b"REV" => Self::Rev,
+            b"ROLE" => Self::Role,
+            b"SOCIALPROFILE" => Self::SocialProfile,
+            b"SORT-STRING" => Self::SortString,
+            b"SOUND" => Self::Sound,
+            b"SOURCE" => Self::Source,
+            b"TEL" => Self::Tel,
+            b"TITLE" => Self::Title,
+            b"TZ" => Self::Tz,
+            b"UID" => Self::Uid,
+            b"URL" => Self::Url,
+            b"XML" => Self::Xml,
+            _ => return None,
+        })
+    }
+}
+
 impl str::FromStr for VcardPropKind {
     type Err = VcardPropKindParseError;
 
     /// The known property for a wire name (case-insensitive), or `None`.
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
-        match kind {
-            kind if kind.eq_ignore_ascii_case("ADR") => Ok(Self::Adr),
-            kind if kind.eq_ignore_ascii_case("AGENT") => Ok(Self::Agent),
-            kind if kind.eq_ignore_ascii_case("ANNIVERSARY") => Ok(Self::Anniversary),
-            kind if kind.eq_ignore_ascii_case("BDAY") => Ok(Self::Bday),
-            kind if kind.eq_ignore_ascii_case("CALADRURI") => Ok(Self::CalAdrUri),
-            kind if kind.eq_ignore_ascii_case("CALURI") => Ok(Self::CalUri),
-            kind if kind.eq_ignore_ascii_case("CATEGORIES") => Ok(Self::Categories),
-            kind if kind.eq_ignore_ascii_case("CLASS") => Ok(Self::Class),
-            kind if kind.eq_ignore_ascii_case("CLIENTPIDMAP") => Ok(Self::ClientPidMap),
-            kind if kind.eq_ignore_ascii_case("CREATED") => Ok(Self::Created),
-            kind if kind.eq_ignore_ascii_case("EMAIL") => Ok(Self::Email),
-            kind if kind.eq_ignore_ascii_case("FBURL") => Ok(Self::FbUrl),
-            kind if kind.eq_ignore_ascii_case("FN") => Ok(Self::Fn),
-            kind if kind.eq_ignore_ascii_case("GENDER") => Ok(Self::Gender),
-            kind if kind.eq_ignore_ascii_case("GEO") => Ok(Self::Geo),
-            kind if kind.eq_ignore_ascii_case("GRAMGENDER") => Ok(Self::GramGender),
-            kind if kind.eq_ignore_ascii_case("IMPP") => Ok(Self::Impp),
-            kind if kind.eq_ignore_ascii_case("JSPROP") => Ok(Self::JsProp),
-            kind if kind.eq_ignore_ascii_case("KEY") => Ok(Self::Key),
-            kind if kind.eq_ignore_ascii_case("KIND") => Ok(Self::Kind),
-            kind if kind.eq_ignore_ascii_case("LABEL") => Ok(Self::Label),
-            kind if kind.eq_ignore_ascii_case("LANG") => Ok(Self::Lang),
-            kind if kind.eq_ignore_ascii_case("LANGUAGE") => Ok(Self::Language),
-            kind if kind.eq_ignore_ascii_case("LOGO") => Ok(Self::Logo),
-            kind if kind.eq_ignore_ascii_case("MAILER") => Ok(Self::Mailer),
-            kind if kind.eq_ignore_ascii_case("MEMBER") => Ok(Self::Member),
-            kind if kind.eq_ignore_ascii_case("N") => Ok(Self::N),
-            kind if kind.eq_ignore_ascii_case("NAME") => Ok(Self::Name),
-            kind if kind.eq_ignore_ascii_case("NICKNAME") => Ok(Self::Nickname),
-            kind if kind.eq_ignore_ascii_case("NOTE") => Ok(Self::Note),
-            kind if kind.eq_ignore_ascii_case("ORG") => Ok(Self::Org),
-            kind if kind.eq_ignore_ascii_case("PHOTO") => Ok(Self::Photo),
-            kind if kind.eq_ignore_ascii_case("PRODID") => Ok(Self::ProdId),
-            kind if kind.eq_ignore_ascii_case("PROFILE") => Ok(Self::Profile),
-            kind if kind.eq_ignore_ascii_case("PRONOUNS") => Ok(Self::Pronouns),
-            kind if kind.eq_ignore_ascii_case("RELATED") => Ok(Self::Related),
-            kind if kind.eq_ignore_ascii_case("REV") => Ok(Self::Rev),
-            kind if kind.eq_ignore_ascii_case("ROLE") => Ok(Self::Role),
-            kind if kind.eq_ignore_ascii_case("SOCIALPROFILE") => Ok(Self::SocialProfile),
-            kind if kind.eq_ignore_ascii_case("SORT-STRING") => Ok(Self::SortString),
-            kind if kind.eq_ignore_ascii_case("SOUND") => Ok(Self::Sound),
-            kind if kind.eq_ignore_ascii_case("SOURCE") => Ok(Self::Source),
-            kind if kind.eq_ignore_ascii_case("TEL") => Ok(Self::Tel),
-            kind if kind.eq_ignore_ascii_case("TITLE") => Ok(Self::Title),
-            kind if kind.eq_ignore_ascii_case("TZ") => Ok(Self::Tz),
-            kind if kind.eq_ignore_ascii_case("UID") => Ok(Self::Uid),
-            kind if kind.eq_ignore_ascii_case("URL") => Ok(Self::Url),
-            kind if kind.eq_ignore_ascii_case("XML") => Ok(Self::Xml),
-            _ => Err(VcardPropKindParseError(kind.to_string())),
-        }
+        Self::from_name(kind).ok_or_else(|| VcardPropKindParseError(kind.to_string()))
     }
 }
 

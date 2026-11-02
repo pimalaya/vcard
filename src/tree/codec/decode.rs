@@ -52,13 +52,21 @@ impl VcardCst<'_> {
         let version = self.version();
 
         // NOTE: VERSION is held as the card's indicator, not as a free
-        // property.
-        let properties = self
-            .props
+        // property. The runs between VERSION lines are decoded slice by slice
+        // rather than through a filter: an exact-length extend writes each
+        // property in place, where a filtered one copies it twice.
+        let mut properties = Vec::with_capacity(self.props.len());
+        let mut rest = &self.props[..];
+
+        while let Some(i) = rest
             .iter()
-            .filter(|line| !line.name.get().eq_ignore_ascii_case("VERSION"))
-            .map(|line| line.decode(version))
-            .collect();
+            .position(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
+        {
+            properties.extend(rest[..i].iter().map(|line| line.decode(version)));
+            rest = &rest[i + 1..];
+        }
+
+        properties.extend(rest.iter().map(|line| line.decode(version)));
 
         Vcard {
             version,
@@ -75,14 +83,19 @@ impl VcardLine<'_> {
         let name = self.bare_name();
         let params = self.params.iter().map(VcardParamNode::decode).collect();
 
-        let value = match name.parse::<VcardPropKind>() {
-            Ok(prop) => self.decode_value(prop, version),
-            Err(_) => VcardValue::Unknown(VcardValueUnknown::decode(&self.value)),
+        let kind = VcardPropKind::from_name(name);
+
+        let value = match kind {
+            Some(prop) => self.decode_value(prop, version),
+            None => VcardValue::Unknown(VcardValueUnknown::decode(&self.value)),
         };
 
         VcardProp {
             group: self.group().map(Cow::Borrowed),
-            name: VcardPropName::from(name),
+            name: match kind {
+                Some(kind) => VcardPropName::Kind(kind),
+                None => VcardPropName::Unknown(Cow::Borrowed(name)),
+            },
             params,
             value,
         }
@@ -108,9 +121,9 @@ impl VcardLine<'_> {
     fn declared_value_kind(&self) -> Option<VcardValueKind> {
         self.params
             .iter()
-            .find(|param| matches!(param.name.get().parse(), Ok(VcardParamKind::Value)))
+            .find(|param| param.name.get().eq_ignore_ascii_case("VALUE"))
             .and_then(|param| param.values.first())
-            .and_then(|value| value.get().parse::<VcardValueKind>().ok())
+            .and_then(|value| VcardValueKind::from_name(value.get()))
     }
 
     /// Whether the line declares the `QUOTED-PRINTABLE` encoding, as an
@@ -158,7 +171,7 @@ fn decode_value_kind<'v>(kind: VcardValueKind, node: &'v VcardValueNode<'_>) -> 
 impl VcardParamNode<'_> {
     /// Decode the parameter into a typed parameter, dispatching on the name.
     pub fn decode(&self) -> VcardParam<'_> {
-        let Ok(kind) = self.name.get().parse::<VcardParamKind>() else {
+        let Some(kind) = VcardParamKind::from_name(self.name.get()) else {
             return VcardParam::Unknown {
                 // NOTE: a parameter name is a token (RFC 6350 3.3), with no
                 // encoding of any kind to resolve.

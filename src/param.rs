@@ -92,40 +92,53 @@ pub enum VcardParamKind {
     Value,
 }
 
+impl VcardParamKind {
+    /// The known parameter for a wire name (case-insensitive).
+    ///
+    /// The name is upper-cased into a stack copy and matched exactly, with no
+    /// allocation for an unknown one.
+    pub(crate) fn from_name(kind: &str) -> Option<Self> {
+        let mut upper = [0; 12];
+        let upper = upper.get_mut(..kind.len())?;
+        upper.copy_from_slice(kind.as_bytes());
+        upper.make_ascii_uppercase();
+
+        Some(match &*upper {
+            b"ALTID" => Self::AltId,
+            b"AUTHOR" => Self::Author,
+            b"AUTHOR-NAME" => Self::AuthorName,
+            b"CALSCALE" => Self::CalScale,
+            b"CHARSET" => Self::Charset,
+            b"CREATED" => Self::Created,
+            b"DERIVED" => Self::Derived,
+            b"ENCODING" => Self::Encoding,
+            b"GEO" => Self::Geo,
+            b"JSPTR" => Self::Jsptr,
+            b"LABEL" => Self::Label,
+            b"LANGUAGE" => Self::Language,
+            b"MEDIATYPE" => Self::MediaType,
+            b"PHONETIC" => Self::Phonetic,
+            b"PID" => Self::Pid,
+            b"PREF" => Self::Pref,
+            b"PROP-ID" => Self::PropId,
+            b"SCRIPT" => Self::Script,
+            b"SERVICE-TYPE" => Self::ServiceType,
+            b"SORT-AS" => Self::SortAs,
+            b"TYPE" => Self::Type,
+            b"TZ" => Self::Tz,
+            b"USERNAME" => Self::Username,
+            b"VALUE" => Self::Value,
+            _ => return None,
+        })
+    }
+}
+
 impl str::FromStr for VcardParamKind {
     type Err = VcardParamKindParseError;
 
     /// The known parameter for a wire name (case-insensitive).
     fn from_str(kind: &str) -> Result<Self, Self::Err> {
-        let kind = match kind {
-            kind if kind.eq_ignore_ascii_case("ALTID") => Self::AltId,
-            kind if kind.eq_ignore_ascii_case("AUTHOR") => Self::Author,
-            kind if kind.eq_ignore_ascii_case("AUTHOR-NAME") => Self::AuthorName,
-            kind if kind.eq_ignore_ascii_case("CALSCALE") => Self::CalScale,
-            kind if kind.eq_ignore_ascii_case("CHARSET") => Self::Charset,
-            kind if kind.eq_ignore_ascii_case("CREATED") => Self::Created,
-            kind if kind.eq_ignore_ascii_case("DERIVED") => Self::Derived,
-            kind if kind.eq_ignore_ascii_case("ENCODING") => Self::Encoding,
-            kind if kind.eq_ignore_ascii_case("GEO") => Self::Geo,
-            kind if kind.eq_ignore_ascii_case("JSPTR") => Self::Jsptr,
-            kind if kind.eq_ignore_ascii_case("LABEL") => Self::Label,
-            kind if kind.eq_ignore_ascii_case("LANGUAGE") => Self::Language,
-            kind if kind.eq_ignore_ascii_case("MEDIATYPE") => Self::MediaType,
-            kind if kind.eq_ignore_ascii_case("PHONETIC") => Self::Phonetic,
-            kind if kind.eq_ignore_ascii_case("PID") => Self::Pid,
-            kind if kind.eq_ignore_ascii_case("PREF") => Self::Pref,
-            kind if kind.eq_ignore_ascii_case("PROP-ID") => Self::PropId,
-            kind if kind.eq_ignore_ascii_case("SCRIPT") => Self::Script,
-            kind if kind.eq_ignore_ascii_case("SERVICE-TYPE") => Self::ServiceType,
-            kind if kind.eq_ignore_ascii_case("SORT-AS") => Self::SortAs,
-            kind if kind.eq_ignore_ascii_case("TYPE") => Self::Type,
-            kind if kind.eq_ignore_ascii_case("TZ") => Self::Tz,
-            kind if kind.eq_ignore_ascii_case("USERNAME") => Self::Username,
-            kind if kind.eq_ignore_ascii_case("VALUE") => Self::Value,
-            _ => return Err(VcardParamKindParseError(kind.to_string())),
-        };
-
-        Ok(kind)
+        Self::from_name(kind).ok_or_else(|| VcardParamKindParseError(kind.to_string()))
     }
 }
 

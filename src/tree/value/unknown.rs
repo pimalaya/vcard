@@ -14,9 +14,7 @@ use crate::{
 impl<'v> VcardCodec<'v> for VcardValueUnknown<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
         VcardValueUnknown {
-            components: (0..node.component_count())
-                .map(|i| node.decode_component_list(i))
-                .collect(),
+            components: node.decode_component_lists().collect(),
         }
     }
 

@@ -15,25 +15,28 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardAdr<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
+        let mut lists = node.decode_component_lists();
+        let mut next = || lists.next().unwrap_or_default();
+
         VcardAdr {
-            po_box: node.decode_component_list(0),
-            extended: node.decode_component_list(1),
-            street: node.decode_component_list(2),
-            locality: node.decode_component_list(3),
-            region: node.decode_component_list(4),
-            postal_code: node.decode_component_list(5),
-            country: node.decode_component_list(6),
-            room: node.decode_component_list(7),
-            apartment: node.decode_component_list(8),
-            floor: node.decode_component_list(9),
-            street_number: node.decode_component_list(10),
-            street_name: node.decode_component_list(11),
-            building: node.decode_component_list(12),
-            block: node.decode_component_list(13),
-            subdistrict: node.decode_component_list(14),
-            district: node.decode_component_list(15),
-            landmark: node.decode_component_list(16),
-            direction: node.decode_component_list(17),
+            po_box: next(),
+            extended: next(),
+            street: next(),
+            locality: next(),
+            region: next(),
+            postal_code: next(),
+            country: next(),
+            room: next(),
+            apartment: next(),
+            floor: next(),
+            street_number: next(),
+            street_name: next(),
+            building: next(),
+            block: next(),
+            subdistrict: next(),
+            district: next(),
+            landmark: next(),
+            direction: next(),
         }
     }
 

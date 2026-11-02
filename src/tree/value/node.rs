@@ -54,8 +54,14 @@ impl<'a> VcardValueNode<'a> {
     /// name and eol are the line's business; this is only the bytes after the
     /// colon.
     pub fn parse(value: &'a [u8]) -> Self {
+        Self::parse_cow(Cow::Borrowed(value))
+    }
+
+    /// Wrap a raw value, unsplit, borrowed or owned (the bytes of a folded
+    /// line, joined once).
+    pub(crate) fn parse_cow(value: Cow<'a, [u8]>) -> Self {
         Self {
-            raw: Some(Cow::Borrowed(value)),
+            raw: Some(value),
             components: Vec::new(),
             escaper: VcardEscaper::default(),
         }
@@ -78,11 +84,7 @@ impl<'a> VcardValueNode<'a> {
     /// value is one empty component).
     pub fn component_count(&self) -> usize {
         match &self.raw {
-            Some(raw) => {
-                let mut count = 0;
-                split_on(raw, b';', |_| count += 1);
-                count
-            }
+            Some(raw) => pieces(raw, b';').count(),
             None => self.components.len(),
         }
     }
@@ -161,11 +163,42 @@ impl<'a> VcardValueNode<'a> {
     /// is `N`, `ADR`, `GENDER`, `ORG`, `GEO` and `CLIENTPIDMAP`; on any other,
     /// naming a component drops everything past the first `;`.
     pub fn decode_component(&self, i: usize) -> Cow<'_, str> {
-        match self.component_at(i) {
+        self.component_at(i)
+            .map_or(Cow::Borrowed(""), |component| self.decode_whole(component))
+    }
+
+    /// Decode the `i`th `;`-component as its `,`-separated list.
+    ///
+    /// Carries the caveat of [`decode_component`](Self::decode_component): a
+    /// value with no `;`-structure of its own wants
+    /// [`decode_list`](Self::decode_list) instead.
+    pub fn decode_component_list(&self, i: usize) -> Vec<Cow<'_, str>> {
+        self.component_at(i)
+            .map_or(Vec::new(), |component| self.decode_items(component))
+    }
+
+    /// Every `;`-component decoded as by
+    /// [`decode_component`](Self::decode_component), in one pass rather than
+    /// one walk from the start per index.
+    pub(crate) fn decode_components(&self) -> impl Iterator<Item = Cow<'_, str>> {
+        self.components()
+            .map(|component| self.decode_whole(component))
+    }
+
+    /// Every `;`-component decoded as by
+    /// [`decode_component_list`](Self::decode_component_list), in one pass.
+    pub(crate) fn decode_component_lists(&self) -> impl Iterator<Item = Vec<Cow<'_, str>>> {
+        self.components()
+            .map(|component| self.decode_items(component))
+    }
+
+    /// A component as one string, its `,` kept literal.
+    fn decode_whole<'s>(&'s self, component: Component<'s, 'a>) -> Cow<'s, str> {
+        match component {
             // NOTE: The whole component slice already has the commas in place,
             // so unescaping it verbatim keeps them literal.
-            Some(Component::Raw(bytes)) => unescape_with(bytes, self.escaper),
-            Some(Component::Split(leaves)) => {
+            Component::Raw(bytes) => unescape_with(bytes, self.escaper),
+            Component::Split(leaves) => {
                 if leaves.len() <= 1 {
                     return leaves
                         .first()
@@ -183,29 +216,19 @@ impl<'a> VcardValueNode<'a> {
 
                 Cow::Owned(unescape_with(&raw, self.escaper).into_owned())
             }
-            None => Cow::Borrowed(""),
         }
     }
 
-    /// Decode the `i`th `;`-component as its `,`-separated list.
-    ///
-    /// Carries the caveat of [`decode_component`](Self::decode_component): a
-    /// value with no `;`-structure of its own wants
-    /// [`decode_list`](Self::decode_list) instead.
-    pub fn decode_component_list(&self, i: usize) -> Vec<Cow<'_, str>> {
-        match self.component_at(i) {
-            Some(Component::Raw(bytes)) => {
-                let mut values = Vec::new();
-                split_on(bytes, b',', |value| {
-                    values.push(unescape_with(value, self.escaper))
-                });
-                values
-            }
-            Some(Component::Split(leaves)) => leaves
+    /// A component as its `,`-separated list.
+    fn decode_items<'s>(&'s self, component: Component<'s, 'a>) -> Vec<Cow<'s, str>> {
+        match component {
+            Component::Raw(bytes) => pieces(bytes, b',')
+                .map(|value| unescape_with(value, self.escaper))
+                .collect(),
+            Component::Split(leaves) => leaves
                 .iter()
                 .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
                 .collect(),
-            None => Vec::new(),
         }
     }
 
@@ -415,22 +438,26 @@ impl<'a> VcardValueNode<'a> {
     /// or as the already-split leaves.
     fn component_at(&self, i: usize) -> Option<Component<'_, 'a>> {
         match &self.raw {
-            Some(raw) => {
-                let mut found = None;
-                let mut index = 0;
-                split_on(raw, b';', |component| {
-                    if index == i {
-                        found = Some(component);
-                    }
-                    index += 1;
-                });
-                found.map(Component::Raw)
-            }
+            Some(raw) => pieces(raw, b';').nth(i).map(Component::Raw),
             None => self
                 .components
                 .get(i)
                 .map(|leaves| Component::Split(leaves)),
         }
+    }
+
+    /// Every component in order, as [`component_at`](Self::component_at)
+    /// gives them one by one.
+    fn components(&self) -> impl Iterator<Item = Component<'_, 'a>> {
+        let (raw, split): (_, &[Vec<VcardValueLeaf<'a>>]) = match &self.raw {
+            Some(raw) => (Some(pieces(raw, b';')), &[]),
+            None => (None, &self.components),
+        };
+
+        raw.into_iter()
+            .flatten()
+            .map(Component::Raw)
+            .chain(split.iter().map(|leaves| Component::Split(leaves)))
     }
 
     /// Borrow the `i`th component's leaves for in-place editing, splitting the
@@ -496,11 +523,7 @@ enum Component<'s, 'a> {
 /// The first `,`-separated value of a component (escape-aware): the bytes up to
 /// the first unescaped comma, or the whole component when it has none.
 fn first_value(component: &[u8]) -> &[u8] {
-    let mut first = None;
-    split_on(component, b',', |value| {
-        first.get_or_insert(value);
-    });
-    first.unwrap_or(component)
+    pieces(component, b',').next().unwrap_or(component)
 }
 
 /// Split a value into its `;`-separated components, each a list of its
@@ -536,22 +559,48 @@ fn split_all_owned(bytes: &[u8]) -> Vec<Vec<VcardValueLeaf<'static>>> {
 /// A backslash escapes the next byte, so `\;` and `\,` do not split, and
 /// `memchr` skips straight to the next `sep` or backslash, so a large
 /// separator-free value (base64, say) passes in one go.
-fn split_on<'b>(bytes: &'b [u8], sep: u8, mut piece: impl FnMut(&'b [u8])) {
-    let mut start = 0;
-    let mut i = 0;
+fn split_on<'b>(bytes: &'b [u8], sep: u8, piece: impl FnMut(&'b [u8])) {
+    pieces(bytes, sep).for_each(piece);
+}
 
-    while let Some(offset) = memchr::memchr2(b'\\', sep, &bytes[i..]) {
-        let pos = i + offset;
-        if bytes[pos] == b'\\' {
-            i = (pos + 2).min(bytes.len());
-        } else {
-            piece(&bytes[start..pos]);
-            start = pos + 1;
-            i = pos + 1;
-        }
+/// The pieces [`split_on`] hands out, as an iterator, so a reader after one
+/// of them stops there.
+fn pieces(bytes: &[u8], sep: u8) -> Pieces<'_> {
+    Pieces {
+        bytes,
+        sep,
+        start: Some(0),
     }
+}
 
-    piece(&bytes[start..]);
+/// The iterator behind [`pieces`].
+struct Pieces<'b> {
+    bytes: &'b [u8],
+    sep: u8,
+    /// Where the next piece starts, `None` once the last one went out.
+    start: Option<usize>,
+}
+
+impl<'b> Iterator for Pieces<'b> {
+    type Item = &'b [u8];
+
+    fn next(&mut self) -> Option<&'b [u8]> {
+        let start = self.start?;
+        let mut i = start;
+
+        while let Some(offset) = memchr::memchr2(b'\\', self.sep, &self.bytes[i..]) {
+            let pos = i + offset;
+            if self.bytes[pos] == b'\\' {
+                i = (pos + 2).min(self.bytes.len());
+            } else {
+                self.start = Some(pos + 1);
+                return Some(&self.bytes[start..pos]);
+            }
+        }
+
+        self.start = None;
+        Some(&self.bytes[start..])
+    }
 }
 
 #[cfg(test)]

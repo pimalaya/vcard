@@ -73,6 +73,17 @@ impl<'a> VcardLine<'a> {
     /// drops them into the line's wire shape. A folded line is rebuilt owned,
     /// since its bytes are no longer contiguous; an unfolded one borrows.
     pub fn take(rest: &'a [u8]) -> Result<(Self, &'a [u8]), VcardParseError> {
+        let mut line = Self::empty();
+        let tail = Self::take_into(rest, &mut line)?;
+        Ok((line, tail))
+    }
+
+    /// [`take`](Self::take) the line into `slot`, returning the rest.
+    ///
+    /// The card parser grows its line list by an [`empty`](Self::empty) line
+    /// and fills it here: a line returned by value is staged on the stack and
+    /// copied, which stalls the loads that follow.
+    pub(crate) fn take_into(rest: &'a [u8], slot: &mut Self) -> Result<&'a [u8], VcardParseError> {
         // NOTE: Everything this tokeniser resolves is recorded here, so
         // serialization can put it back.
         let mut wire = VcardWire::default();
@@ -113,66 +124,124 @@ impl<'a> VcardLine<'a> {
         // ENCODING=QUOTED-PRINTABLE and whose value ends with `=` continues on
         // the next physical line. Param-driven, so it applies to any version's
         // card that uses the encoding, not just 2.1.
-        if first.ends_with(b"=") && head_is_quoted_printable(first) {
-            let mut logical = Vec::from(&first[..first.len() - 1]);
-            wire.soft(logical.len(), is_crlf(eol));
+        let soft = first.ends_with(b"=") && head_is_quoted_printable(first);
 
-            let mut last_eol;
+        if !soft && !starts_with_wsp(tail) {
+            let Some(colon) = value_colon(first) else {
+                return Err(VcardParseError::MissingPropertyColon(lossy(first)));
+            };
+
+            Self::build(
+                slot,
+                &first[..colon],
+                Cow::Borrowed(&first[colon + 1..]),
+                eol_leaf(eol),
+                wire,
+            )?;
+
+            return Ok(tail);
+        }
+
+        // NOTE: The line goes on past its first physical line. With the colon
+        // on that first line (outside quotes, the scan that finds the same
+        // colon on the joined line), the head borrows the input and only the
+        // value is joined, once, into the buffer the line keeps. Otherwise the
+        // whole logical line is joined, parsed, then copied out.
+        let colon = unquoted_colon(first);
+        let base = colon.map_or(0, |colon| colon + 1);
+        let mut logical = Vec::new();
+        let last_eol;
+
+        if !soft {
+            // NOTE: Sized first, so the value of a folded `PHOTO` is copied
+            // once rather than through every doubling of its buffer.
+            let (mut len, mut folds) = (first.len() - base, 0);
+            let mut next = tail;
+
+            while starts_with_wsp(next) {
+                let (continuation, _, rest) = physical_line(&next[1..]);
+                len += continuation.len();
+                folds += 1;
+                next = rest;
+            }
+
+            logical.reserve_exact(len);
+            wire.reserve(folds);
+        }
+
+        logical.extend_from_slice(&first[base..]);
+
+        if soft {
+            logical.pop();
+            wire.soft(base + logical.len(), is_crlf(eol));
+
             loop {
                 let (continuation, eol, next) = physical_line(tail);
-                last_eol = eol;
                 tail = next;
 
                 match continuation.strip_suffix(b"=") {
                     Some(head) => {
-                        push_content(&mut logical, &mut wire, head);
+                        push_content(&mut logical, base, &mut wire, head);
                         if tail.is_empty() {
                             // NOTE: The last continuation ends with a
                             // soft-break marker and nothing follows: the `=` is
                             // on the wire, the break after it is the line's own
                             // ending.
-                            wire.skipped(logical.len(), "=");
+                            wire.skipped(base + logical.len(), "=");
+                            last_eol = eol;
                             break;
                         }
-                        wire.soft(logical.len(), is_crlf(eol));
+                        wire.soft(base + logical.len(), is_crlf(eol));
                     }
                     None => {
-                        push_content(&mut logical, &mut wire, continuation);
+                        push_content(&mut logical, base, &mut wire, continuation);
+                        last_eol = eol;
                         break;
                     }
                 }
             }
+        } else {
+            let mut eol = eol;
 
-            let mut line = Self::parse(&logical, b"")?.into_static();
-            line.eol = eol_leaf(last_eol);
-            line.wire.prepend(wire.into_static());
+            while starts_with_wsp(tail) {
+                let (continuation, next_eol, next) = physical_line(&tail[1..]);
+                wire.fold(base + logical.len(), is_crlf(eol), tail[0]);
+                push_content(&mut logical, base, &mut wire, continuation);
+                eol = next_eol;
+                tail = next;
+            }
 
-            return Ok((line, tail));
-        }
-
-        if !starts_with_wsp(tail) {
-            let mut line = Self::parse(first, eol)?;
-            line.wire.prepend(wire);
-
-            return Ok((line, tail));
-        }
-
-        let mut logical = Vec::from(first);
-        let mut last_eol = eol;
-
-        while starts_with_wsp(tail) {
-            let (continuation, eol, next) = physical_line(&tail[1..]);
-            wire.fold(logical.len(), is_crlf(last_eol), tail[0]);
-            push_content(&mut logical, &mut wire, continuation);
             last_eol = eol;
-            tail = next;
         }
 
-        let mut line = Self::parse(&logical, b"")?.into_static();
-        line.eol = eol_leaf(last_eol);
-        line.wire.prepend(wire.into_static());
+        match colon {
+            Some(colon) => Self::build(
+                slot,
+                &first[..colon],
+                Cow::Owned(logical),
+                eol_leaf(last_eol),
+                wire,
+            )?,
+            None => {
+                let mut line = Self::parse(&logical)?.into_static();
+                line.eol = eol_leaf(last_eol);
+                line.wire.prepend(wire);
+                *slot = line;
+            }
+        }
 
-        Ok((line, tail))
+        Ok(tail)
+    }
+
+    /// A placeholder line for [`take_into`](Self::take_into) to fill in place.
+    pub(crate) fn empty() -> Self {
+        Self {
+            name: VcardLeaf(Cow::Borrowed("")),
+            params: Vec::new(),
+            value: VcardValueNode::default(),
+            eol: VcardLeaf(Cow::Borrowed("")),
+            wire: VcardWire::default(),
+        }
     }
 
     /// Convert into an owned line whose every leaf is owned (`'static`).
@@ -215,13 +284,9 @@ impl<'a> VcardLine<'a> {
     /// Serialize the whole line to bytes, exactly as parsed: its logical
     /// content, laid back out in the wire shape it arrived in.
     pub(crate) fn write_bytes(&self, out: &mut Vec<u8>) {
-        if self.wire.is_empty() {
-            self.write_logical(out);
-        } else {
-            let mut logical = Vec::new();
-            self.write_logical(&mut logical);
-            self.wire.write_bytes(&logical, out);
-        }
+        let start = out.len();
+        self.write_logical(out);
+        self.wire.lay_out(out, start);
 
         out.extend_from_slice(self.eol.get().as_bytes());
     }
@@ -260,42 +325,68 @@ impl<'a> VcardLine<'a> {
     /// name, its parameters and the value. The head (name and parameters) must
     /// be valid UTF-8, as every version's grammar guarantees; only the value
     /// may carry a foreign charset, so it is kept as raw bytes.
-    fn parse<'b>(content: &'b [u8], eol: &'b [u8]) -> Result<VcardLine<'b>, VcardParseError> {
+    fn parse(content: &[u8]) -> Result<VcardLine<'_>, VcardParseError> {
         let Some(colon) = value_colon(content) else {
             return Err(VcardParseError::MissingPropertyColon(lossy(content)));
         };
 
-        let head = str::from_utf8(&content[..colon])
-            .map_err(|_| VcardParseError::NonUtf8Header(lossy(&content[..colon])))?;
-        let (name, params) = split_head(head);
+        let mut line = VcardLine::empty();
 
-        let mut value = &content[colon + 1..];
-        let mut wire = VcardWire::default();
+        VcardLine::build(
+            &mut line,
+            &content[..colon],
+            Cow::Borrowed(&content[colon + 1..]),
+            VcardLeaf(Cow::Borrowed("")),
+            VcardWire::default(),
+        )?;
+
+        Ok(line)
+    }
+
+    /// Fill `slot` from a line's head (the name and parameters before the
+    /// colon), its value bytes, its line ending and the wire shape the
+    /// tokeniser recorded, in offset order.
+    ///
+    /// `slot` is untouched on an error.
+    fn build(
+        slot: &mut Self,
+        head: &'a [u8],
+        mut value: Cow<'a, [u8]>,
+        eol: VcardLeaf<'a>,
+        mut wire: VcardWire<'a>,
+    ) -> Result<(), VcardParseError> {
+        let head_str =
+            str::from_utf8(head).map_err(|_| VcardParseError::NonUtf8Header(lossy(head)))?;
+
+        let base = head.len() + 1;
 
         // NOTE: A trailing `=` on a QUOTED-PRINTABLE value is always a
         // dangling soft-break marker, real content encoding `=` as `=3D`. Left
         // in, it would re-trigger the join on reparse and swallow the next
         // line, so the logical line drops it and the wire shape keeps it.
-        if head_is_quoted_printable(content) {
+        if value.last() == Some(&b'=') && head_declares_quoted_printable(head) {
             let full = value.len();
-            while value.last() == Some(&b'=') {
-                value = &value[..value.len() - 1];
+            let kept = full - value.iter().rev().take_while(|&&b| b == b'=').count();
+
+            match &mut value {
+                Cow::Borrowed(bytes) => *bytes = &bytes[..kept],
+                Cow::Owned(bytes) => bytes.truncate(kept),
             }
-            if value.len() < full {
-                let end = colon + 1 + value.len();
-                wire.skipped(end, ascii(&content[end..colon + 1 + full]));
-            }
+
+            wire.insert_skipped_equals(base + kept, full - kept);
         }
 
-        wire.seal(colon + 1 + value.len());
+        wire.seal(base + value.len());
 
-        Ok(VcardLine {
-            name: VcardLeaf::from(name),
-            params,
-            value: VcardValueNode::parse(value),
-            eol: VcardLeaf::from(str::from_utf8(eol).unwrap_or("")),
-            wire,
-        })
+        let (name, params) = split_head(head_str);
+
+        slot.name = VcardLeaf::from(name);
+        slot.params = params;
+        slot.value = VcardValueNode::parse_cow(value);
+        slot.eol = eol;
+        slot.wire = wire;
+
+        Ok(())
     }
 }
 
@@ -324,15 +415,26 @@ impl fmt::Display for VcardLine<'_> {
 /// A logical line still empty here came from a whitespace-only physical line,
 /// so a leading whitespace on the continuation is a wire artifact rather than
 /// part of the name.
-fn push_content<'a>(logical: &mut Vec<u8>, wire: &mut VcardWire<'a>, content: &'a [u8]) {
-    let kept = if logical.is_empty() {
+///
+/// `logical` holds the line from offset `base` on, the bytes before it being
+/// the head kept borrowed from the first physical line.
+fn push_content<'a>(
+    logical: &mut Vec<u8>,
+    base: usize,
+    wire: &mut VcardWire<'a>,
+    content: &'a [u8],
+) {
+    let kept = if base + logical.len() == 0 {
         strip_leading_wsp(content)
     } else {
         content
     };
 
     if kept.len() < content.len() {
-        wire.skipped(logical.len(), ascii(&content[..content.len() - kept.len()]));
+        wire.skipped(
+            base + logical.len(),
+            ascii(&content[..content.len() - kept.len()]),
+        );
     }
 
     logical.extend_from_slice(kept);
@@ -340,24 +442,20 @@ fn push_content<'a>(logical: &mut Vec<u8>, wire: &mut VcardWire<'a>, content: &'
 
 /// Split a head into its name and its `;`-separated parameters.
 fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
-    let (name, mut rest) = match param_semicolon(head) {
-        Some(semi) => (&head[..semi], &head[semi..]),
-        None => return (head, Vec::new()),
+    let Some(semi) = param_semicolon(head) else {
+        return (head, Vec::new());
     };
 
     let mut params = Vec::new();
+    let mut rest = Some(&head[semi + 1..]);
 
-    while let Some(after) = rest.strip_prefix(';') {
-        let (param, tail) = match param_semicolon(after) {
-            Some(semi) => (&after[..semi], &after[semi..]),
-            None => (after, ""),
-        };
-
-        params.push(VcardParamNode::parse(param));
+    while let Some(after) = rest {
+        let (param, tail) = VcardParamNode::take(after);
+        params.push(param);
         rest = tail;
     }
 
-    (name, params)
+    (&head[..semi], params)
 }
 
 /// The index of the `:` separating a line's head from its value.
@@ -366,6 +464,12 @@ fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
 /// 6350 3.3 lets carry one. An unbalanced quote would swallow the rest of the
 /// line, so with no colon outside quotes the scan falls back to the first.
 fn value_colon(content: &[u8]) -> Option<usize> {
+    unquoted_colon(content).or_else(|| memchr::memchr(b':', content))
+}
+
+/// The index of the first `:` outside a double-quoted parameter value, with no
+/// fallback.
+fn unquoted_colon(content: &[u8]) -> Option<usize> {
     let mut quoted = false;
 
     for (i, &byte) in content.iter().enumerate() {
@@ -376,7 +480,7 @@ fn value_colon(content: &[u8]) -> Option<usize> {
         }
     }
 
-    memchr::memchr(b':', content)
+    None
 }
 
 /// The byte index of the first `;` of a head that sits outside a double-quoted
@@ -432,20 +536,29 @@ fn strip_leading_wsp(mut bytes: &[u8]) -> &[u8] {
 /// Whether a line's head (its name and parameters, before the `:`) declares the
 /// `QUOTED-PRINTABLE` encoding, as an `ENCODING=` parameter or a bare token.
 fn head_is_quoted_printable(line: &[u8]) -> bool {
-    let head = match value_colon(line) {
-        Some(colon) => &line[..colon],
-        None => return false,
-    };
+    match value_colon(line) {
+        Some(colon) => head_declares_quoted_printable(&line[..colon]),
+        None => false,
+    }
+}
 
+/// Whether a head (a line's bytes before its value colon) declares the
+/// `QUOTED-PRINTABLE` encoding.
+fn head_declares_quoted_printable(head: &[u8]) -> bool {
     head.split(|&b| b == b';').any(|token| {
         token.eq_ignore_ascii_case(b"QUOTED-PRINTABLE")
             || token.eq_ignore_ascii_case(b"ENCODING=QUOTED-PRINTABLE")
     })
 }
 
-/// An owned line-ending leaf from raw bytes (always an ASCII `\r\n` / `\n`).
+/// The line-ending leaf of raw line-ending bytes, which the splitter only
+/// ever cuts as `\r\n`, `\n` or nothing.
 fn eol_leaf(bytes: &[u8]) -> VcardLeaf<'static> {
-    VcardLeaf::from(String::from_utf8_lossy(bytes).into_owned())
+    VcardLeaf::from(match bytes {
+        b"\r\n" => "\r\n",
+        b"\n" => "\n",
+        _ => "",
+    })
 }
 
 /// Whether a line ending is a `\r\n` rather than a bare `\n`.

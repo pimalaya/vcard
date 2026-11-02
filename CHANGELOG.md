@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - The `base64` and `quoted-printable` features run on base64-codec and quoted-printable-codec in place of the base64 and quoted_printable crates, with SIMD kernels for the CPU token the application installs through simd-cpu (`SimdCpu::install_detected()` in `main`), the portable code otherwise. The three are git dependencies until they are published, and `rust-version` is 1.89.
 
+- Parsing, decoding and serializing are faster, with the same output: 40 to 44% fewer cycles over the test corpus, 35 to 41% on a short card. A folded line is joined once, its head borrowed from the input; lines are filled in place; decoding validates UTF-8 before any lossy walk and reads a structured value's components in one pass. A parsed card's line list now starts with room for 16 lines.
+
 ### Fixed
 
 - Fixed `decode_base64` failing on a 2.1 or 3.0 inline value whose continuation lines carry more than the one folding space, which most 2.1 exporters write.

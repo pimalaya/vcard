@@ -12,10 +12,7 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardOrg<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        let units = (0..node.component_count())
-            .map(|i| node.decode_component(i))
-            .collect();
-        VcardOrg(units)
+        VcardOrg(node.decode_components().collect())
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
