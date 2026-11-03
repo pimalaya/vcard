@@ -5,7 +5,7 @@
 
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::scalar_node, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::language::VcardLanguageTag,
@@ -17,6 +17,13 @@ impl<'v> VcardCodec<'v> for VcardLanguageTag<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        scalar_node(&self.0, escaper)
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardLanguageTag<'_> {
+    /// Write the tag as one component holding its text.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&[&*self.0]);
     }
 }

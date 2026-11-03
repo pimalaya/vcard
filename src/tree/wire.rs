@@ -96,6 +96,14 @@ pub struct VcardWire<'a> {
 }
 
 impl<'a> VcardWire<'a> {
+    /// The shape of a line laid out as it reads.
+    pub(crate) const fn new() -> Self {
+        Self {
+            parts: Vec::new(),
+            len: 0,
+        }
+    }
+
     /// Whether the line's wire shape is its logical shape.
     pub fn is_empty(&self) -> bool {
         self.parts.is_empty()
@@ -108,9 +116,13 @@ impl<'a> VcardWire<'a> {
         self.len + 3 * self.parts.len()
     }
 
-    /// Make room for `additional` more pieces.
-    pub(crate) fn reserve(&mut self, additional: usize) {
-        self.parts.reserve_exact(additional);
+    /// The folds recorded, each as its offset and whether the break before it
+    /// was a `\r\n`.
+    pub(crate) fn folds(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
+        self.parts.iter().filter_map(|(offset, part)| match part {
+            VcardWirePart::Fold { crlf, .. } => Some((*offset, *crlf)),
+            _ => None,
+        })
     }
 
     /// Record a fold at `offset`.
@@ -203,6 +215,50 @@ impl<'a> VcardWire<'a> {
         out.extend_from_within(start + at..start + len);
         out.copy_within(start + len.., start);
         out.truncate(out.len() - len);
+    }
+
+    /// Lay a line out to the wire as [`lay_out`](Self::lay_out) does, its
+    /// head (name, parameters and colon) written in `out` from `start` on and
+    /// its value read from `value`, which is copied once.
+    ///
+    /// The pieces before the head go in front of it. A piece inside the head
+    /// (a fold before the colon) takes the general way.
+    pub(crate) fn lay_out_value(&self, out: &mut Vec<u8>, start: usize, value: &[u8]) {
+        if self.parts.is_empty() {
+            return out.extend_from_slice(value);
+        }
+
+        let head = out.len() - start;
+        let len = head + value.len();
+
+        let lead = self.parts.iter().take_while(|(at, _)| *at == 0).count();
+        let (front, back) = self.parts.split_at(lead);
+
+        if self.len != len || back.iter().any(|(at, _)| *at < head) {
+            out.extend_from_slice(value);
+            return self.lay_out(out, start);
+        }
+
+        if !front.is_empty() {
+            for (_, part) in front {
+                part.write_bytes(out);
+            }
+
+            let pieces = out.len() - start - head;
+            out[start..].rotate_right(pieces);
+        }
+
+        let mut at = head;
+
+        for (offset, part) in back {
+            // NOTE: Clamped as in `lay_out`.
+            let offset = (*offset).clamp(at, len);
+            out.extend_from_slice(&value[at - head..offset - head]);
+            part.write_bytes(out);
+            at = offset;
+        }
+
+        out.extend_from_slice(&value[at - head..]);
     }
 
     /// Convert into an owned shape (`'static`).

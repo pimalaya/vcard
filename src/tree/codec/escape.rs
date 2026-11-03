@@ -17,13 +17,97 @@ use alloc::{borrow::Cow, string::String, vec::Vec};
 use crate::tree::codec::mode::VcardEscaper;
 
 /// Apply the value escapes by the card's escaping mode (RFC 6350 3.4 for the
-/// modern rules; vCard 2.1 escapes only `;`), over raw value bytes. Borrows
-/// when nothing needs escaping; non-UTF-8 content passes through verbatim.
+/// modern rules; vCard 2.1 escapes `;` and a line break), over raw value
+/// bytes. Borrows when nothing needs escaping; non-UTF-8 content passes
+/// through verbatim.
 pub(crate) fn escape_with(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8]> {
-    match escaper {
-        VcardEscaper::V3_0 | VcardEscaper::V4_0 => escape_modern(bytes),
-        VcardEscaper::V2_1 => escape_v21(bytes),
+    let Some(mut at) = escaped_at(bytes, escaper) else {
+        return Cow::Borrowed(bytes);
+    };
+
+    let mut out = Vec::with_capacity(bytes.len() + 2);
+    let mut rest = bytes;
+
+    loop {
+        out.extend_from_slice(&rest[..at]);
+        out.extend_from_slice(escape_of(rest[at]).as_bytes());
+        rest = &rest[at + 1..];
+
+        match escaped_at(rest, escaper) {
+            Some(next) => at = next,
+            None => break,
+        }
     }
+
+    out.extend_from_slice(rest);
+    Cow::Owned(out)
+}
+
+/// Append a value to `text`, escaped as [`escape_with`] escapes its bytes.
+///
+/// The writer of a decoded card's text: a value is a string there, and every
+/// escape is ASCII, so the pieces in between stay strings.
+pub(crate) fn escape_into(value: &str, escaper: VcardEscaper, text: &mut String) {
+    let mut rest = value;
+
+    while let Some(at) = escaped_at(rest.as_bytes(), escaper) {
+        let (run, tail) = rest.split_at(at);
+        text.push_str(run);
+        text.push_str(escape_of(tail.as_bytes()[0]));
+        rest = &tail[1..];
+    }
+
+    text.push_str(rest);
+}
+
+/// The index of the first byte a value escape rewrites, by escaping mode:
+/// `\`, `,`, `;` and a line break from 3.0 on, `;` and a line break in 2.1.
+///
+/// 2.1 writes `\n` for a line break though it reads it back literally: a raw
+/// one would end the content line and cut the value in two.
+fn escaped_at(bytes: &[u8], escaper: VcardEscaper) -> Option<usize> {
+    match escaper {
+        VcardEscaper::V3_0 | VcardEscaper::V4_0 => position(bytes, |b| {
+            (b == b'\\') | (b == b',') | (b == b';') | (b == b'\n')
+        }),
+        VcardEscaper::V2_1 => memchr::memchr2(b';', b'\n', bytes),
+    }
+}
+
+/// The escape written for a byte [`escaped_at`] finds.
+fn escape_of(byte: u8) -> &'static str {
+    match byte {
+        b'\\' => r"\\",
+        b',' => r"\,",
+        b';' => r"\;",
+        _ => r"\n",
+    }
+}
+
+/// The index of the first byte `hit` matches.
+///
+/// Sixteen bytes at a time, each block's hits gathered into a bit mask with
+/// no early exit, which compiles to vector compares and a mask move, so a
+/// long base64 value passes at several bytes a cycle. `hit` must join its
+/// tests with `|`: a `matches!` compiles to a branch per byte.
+fn position(bytes: &[u8], hit: impl Fn(u8) -> bool) -> Option<usize> {
+    let (blocks, tail) = bytes.as_chunks::<16>();
+
+    for (i, block) in blocks.iter().enumerate() {
+        let mut mask = 0u16;
+
+        for (j, &b) in block.iter().enumerate() {
+            mask |= u16::from(hit(b)) << j;
+        }
+
+        if mask != 0 {
+            return Some(i * 16 + mask.trailing_zeros() as usize);
+        }
+    }
+
+    tail.iter()
+        .position(|&b| hit(b))
+        .map(|j| blocks.len() * 16 + j)
 }
 
 /// Apply the RFC 6868 3.1 parameter value encoding: `^n`, `^^` and `^'`, then
@@ -37,7 +121,7 @@ pub(crate) fn escape_param(value: &str, escaper: VcardEscaper) -> Cow<'_, str> {
         Cow::Borrowed(value)
     };
 
-    if !escaper.has_param_quoting() || !value.contains([',', ';', ':']) {
+    if !escaper.has_param_quoting() || !value.bytes().any(|b| matches!(b, b',' | b';' | b':')) {
         return value;
     }
 
@@ -52,56 +136,9 @@ pub(crate) fn escape_param(value: &str, escaper: VcardEscaper) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
-/// Apply the RFC 2426 / 6350 3.4 value escapes `\\` `\,` `\;` `\n`.
-fn escape_modern(bytes: &[u8]) -> Cow<'_, [u8]> {
-    if !bytes
-        .iter()
-        .any(|b| matches!(b, b'\\' | b',' | b';' | b'\n'))
-    {
-        return Cow::Borrowed(bytes);
-    }
-
-    let mut out = Vec::with_capacity(bytes.len());
-
-    for &b in bytes {
-        match b {
-            b'\\' => out.extend_from_slice(b"\\\\"),
-            b',' => out.extend_from_slice(b"\\,"),
-            b';' => out.extend_from_slice(b"\\;"),
-            b'\n' => out.extend_from_slice(b"\\n"),
-            other => out.push(other),
-        }
-    }
-
-    Cow::Owned(out)
-}
-
-/// Apply the vCard 2.1 value escapes `\;` and `\n`.
-///
-/// 2.1 defines only the semicolon escape, so this half is deliberately not the
-/// reader's inverse: a raw line break would end the content line and cut the
-/// value in two, so it is written `\n` and read back as a literal backslash.
-fn escape_v21(bytes: &[u8]) -> Cow<'_, [u8]> {
-    if !bytes.iter().any(|b| matches!(b, b';' | b'\n')) {
-        return Cow::Borrowed(bytes);
-    }
-
-    let mut out = Vec::with_capacity(bytes.len() + 2);
-
-    for &b in bytes {
-        match b {
-            b';' => out.extend_from_slice(br"\;"),
-            b'\n' => out.extend_from_slice(br"\n"),
-            other => out.push(other),
-        }
-    }
-
-    Cow::Owned(out)
-}
-
 /// Apply the RFC 6868 caret encoding over every character of `value`.
 fn escape_carets(value: &str) -> Cow<'_, str> {
-    if !value.contains(['\n', '^', '"']) {
+    if !value.bytes().any(|b| matches!(b, b'\n' | b'^' | b'"')) {
         return Cow::Borrowed(value);
     }
 

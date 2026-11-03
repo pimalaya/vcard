@@ -23,6 +23,66 @@ pub(crate) fn unescape_with(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, str>
     lossy(unescape_bytes(bytes, escaper))
 }
 
+/// Resolve value escapes by the card's escaping mode over a value already
+/// checked for UTF-8, as [`unescape_with`] resolves them over its bytes.
+///
+/// Every escape is ASCII, so what an escape leaves is text too and the value
+/// is never checked again.
+pub(crate) fn unescape_text(text: &str, escaper: VcardEscaper) -> Cow<'_, str> {
+    let Some(mut at) = memchr::memchr(b'\\', text.as_bytes()) else {
+        return Cow::Borrowed(text);
+    };
+
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+
+    loop {
+        out.push_str(&rest[..at]);
+
+        // NOTE: A backslash before a non-ASCII character takes the backslash
+        // alone, the character going out with the run after it, as the byte
+        // readers keep its lead byte and then the rest.
+        let taken = match (escaper, rest.as_bytes().get(at + 1).copied()) {
+            (_, None) => {
+                out.push('\\');
+                1
+            }
+            (VcardEscaper::V2_1, Some(b';')) => {
+                out.push(';');
+                2
+            }
+            (VcardEscaper::V2_1, Some(byte)) if byte.is_ascii() => {
+                out.push('\\');
+                out.push(char::from(byte));
+                2
+            }
+            (VcardEscaper::V2_1, Some(_)) => {
+                out.push('\\');
+                1
+            }
+            (_, Some(b'n' | b'N')) => {
+                out.push('\n');
+                2
+            }
+            (_, Some(byte)) if byte.is_ascii() => {
+                out.push(char::from(byte));
+                2
+            }
+            (_, Some(_)) => 1,
+        };
+
+        rest = &rest[at + taken..];
+
+        match memchr::memchr(b'\\', rest.as_bytes()) {
+            Some(next) => at = next,
+            None => break,
+        }
+    }
+
+    out.push_str(rest);
+    Cow::Owned(out)
+}
+
 /// Resolve value escapes by the card's escaping mode at the byte level,
 /// preserving any non-UTF-8 content verbatim.
 pub(crate) fn unescape_bytes(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8]> {
@@ -82,6 +142,21 @@ pub(crate) fn unescape_param(text: &str, escaper: VcardEscaper) -> Cow<'_, str> 
     Cow::Owned(out)
 }
 
+/// The bytes as text, when they are UTF-8.
+///
+/// ASCII, which nearly every name, parameter and value is, passes an inlined
+/// word-at-a-time check instead of a call to `str::from_utf8`, whose result
+/// comes back through memory and stalls the loads that copy it out.
+pub(crate) fn text(bytes: &[u8]) -> Option<&str> {
+    if bytes.is_ascii() {
+        // SAFETY: Every ASCII byte is a whole UTF-8 character, so an ASCII
+        // byte string is valid UTF-8.
+        return Some(unsafe { str::from_utf8_unchecked(bytes) });
+    }
+
+    str::from_utf8(bytes).ok()
+}
+
 /// Interpret unescaped bytes as UTF-8, keeping the borrow or the buffer when
 /// possible.
 ///
@@ -89,9 +164,9 @@ pub(crate) fn unescape_param(text: &str, escaper: VcardEscaper) -> Cow<'_, str> 
 /// replacing walk only ever runs on bytes that need it.
 fn lossy(bytes: Cow<'_, [u8]>) -> Cow<'_, str> {
     match bytes {
-        Cow::Borrowed(bytes) => match str::from_utf8(bytes) {
-            Ok(text) => Cow::Borrowed(text),
-            Err(_) => String::from_utf8_lossy(bytes),
+        Cow::Borrowed(bytes) => match text(bytes) {
+            Some(text) => Cow::Borrowed(text),
+            None => String::from_utf8_lossy(bytes),
         },
         Cow::Owned(bytes) => match String::from_utf8(bytes) {
             Ok(text) => Cow::Owned(text),

@@ -5,7 +5,7 @@
 
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::VcardValueUnknown,
@@ -19,12 +19,15 @@ impl<'v> VcardCodec<'v> for VcardValueUnknown<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        VcardValueNode::from_components(
-            self.components
-                .iter()
-                .map(|component| encode_component(component, escaper))
-                .collect(),
-            escaper,
-        )
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardValueUnknown<'_> {
+    /// Write every component as it is held.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        for component in &self.components {
+            out.component(component);
+        }
     }
 }

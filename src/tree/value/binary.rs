@@ -7,7 +7,7 @@
 
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::scalar_node, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::binary::VcardBinary,
@@ -19,10 +19,14 @@ impl<'v> VcardCodec<'v> for VcardBinary<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        let raw = match self {
-            VcardBinary::Uri(value) | VcardBinary::Base64(value) => value.as_ref(),
-        };
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
 
-        scalar_node(raw, escaper)
+impl VcardBinary<'_> {
+    /// Write the value, either form, as one component holding its text.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        let (VcardBinary::Uri(value) | VcardBinary::Base64(value)) = self;
+        out.component(&[&**value]);
     }
 }

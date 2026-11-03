@@ -18,7 +18,7 @@
 //! back lives on this type, applying the rules of the sibling
 //! [`mode`](crate::tree::codec::mode) codec.
 
-use core::fmt;
+use core::{fmt, iter, ops::Range, slice, str};
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
@@ -26,7 +26,7 @@ use crate::tree::{
     codec::{
         encode::{encode_bytes_component, encode_component, encode_leaf},
         mode::VcardEscaper,
-        unescape::{unescape_bytes, unescape_with},
+        unescape::{text, unescape_bytes, unescape_text, unescape_with},
     },
     leaf::VcardValueLeaf,
 };
@@ -69,7 +69,7 @@ impl<'a> VcardValueNode<'a> {
 
     /// Build a value node from already-split components (the model encode
     /// path); there is no `raw`, so the components are the source of truth.
-    pub(crate) fn from_components(
+    pub(crate) const fn from_components(
         components: Vec<Vec<VcardValueLeaf<'a>>>,
         escaper: VcardEscaper,
     ) -> Self {
@@ -96,7 +96,10 @@ impl<'a> VcardValueNode<'a> {
     /// a component truncates `data:text/plain;base64,AAA` at the media type.
     pub fn decode(&self) -> Cow<'_, str> {
         match &self.raw {
-            Some(raw) => unescape_with(raw, self.escaper),
+            Some(raw) => match text(raw) {
+                Some(text) => unescape_text(text, self.escaper),
+                None => unescape_with(raw, self.escaper),
+            },
             None => {
                 let joined = self.joined_bytes();
                 Cow::Owned(unescape_with(&joined, self.escaper).into_owned())
@@ -112,9 +115,17 @@ impl<'a> VcardValueNode<'a> {
         let mut values = Vec::new();
 
         match &self.raw {
-            Some(raw) => split_on(raw, b',', |value| {
-                values.push(unescape_with(value, self.escaper))
-            }),
+            Some(raw) => match text(raw) {
+                Some(text) if memchr::memchr(b'\\', raw).is_none() => {
+                    values.extend(text.split(',').map(Cow::Borrowed));
+                }
+                Some(text) => values.extend(
+                    text_pieces(text, b',').map(|value| unescape_text(value, self.escaper)),
+                ),
+                None => split_on(raw, b',', |value| {
+                    values.push(unescape_with(value, self.escaper))
+                }),
+            },
             None => {
                 let joined = self.joined_bytes();
                 split_on(&joined, b',', |value| {
@@ -197,6 +208,11 @@ impl<'a> VcardValueNode<'a> {
         match component {
             // NOTE: The whole component slice already has the commas in place,
             // so unescaping it verbatim keeps them literal.
+            Component::Text {
+                text,
+                escaped: false,
+            } => Cow::Borrowed(text),
+            Component::Text { text, .. } => unescape_text(text, self.escaper),
             Component::Raw(bytes) => unescape_with(bytes, self.escaper),
             Component::Split(leaves) => {
                 if leaves.len() <= 1 {
@@ -222,6 +238,13 @@ impl<'a> VcardValueNode<'a> {
     /// A component as its `,`-separated list.
     fn decode_items<'s>(&'s self, component: Component<'s, 'a>) -> Vec<Cow<'s, str>> {
         match component {
+            Component::Text {
+                text,
+                escaped: false,
+            } => text.split(',').map(Cow::Borrowed).collect(),
+            Component::Text { text, .. } => text_pieces(text, b',')
+                .map(|value| unescape_text(value, self.escaper))
+                .collect(),
             Component::Raw(bytes) => pieces(bytes, b',')
                 .map(|value| unescape_with(value, self.escaper))
                 .collect(),
@@ -237,17 +260,18 @@ impl<'a> VcardValueNode<'a> {
     /// The raw twin of [`decode_component_list`](Self::decode_component_list),
     /// item for item, for the reason [`raw_list`](Self::raw_list) exists.
     pub(crate) fn raw_component_list(&self, i: usize) -> Vec<Vec<u8>> {
-        match self.component_at(i) {
-            Some(Component::Raw(bytes)) => {
-                let mut values = Vec::new();
-                split_on(bytes, b',', |value| values.push(value.to_vec()));
-                values
-            }
+        let bytes = match self.component_at(i) {
+            Some(Component::Text { text, .. }) => text.as_bytes(),
+            Some(Component::Raw(bytes)) => bytes,
             Some(Component::Split(leaves)) => {
-                leaves.iter().map(|leaf| leaf.as_bytes().to_vec()).collect()
+                return leaves.iter().map(|leaf| leaf.as_bytes().to_vec()).collect();
             }
-            None => Vec::new(),
-        }
+            None => return Vec::new(),
+        };
+
+        let mut values = Vec::new();
+        split_on(bytes, b',', |value| values.push(value.to_vec()));
+        values
     }
 
     /// Wrap owned value bytes unsplit, so they go back on the wire exactly as
@@ -263,12 +287,13 @@ impl<'a> VcardValueNode<'a> {
     /// The raw (still-escaped) bytes of the first component's first value, for
     /// the simple single-value lines (the envelope values and diagnostics).
     pub(crate) fn first_value_bytes(&self) -> &[u8] {
-        match self.component_at(0) {
-            Some(Component::Raw(bytes)) => first_value(bytes),
-            Some(Component::Split(leaves)) => {
-                leaves.first().map(|leaf| leaf.as_bytes()).unwrap_or(b"")
-            }
-            None => b"",
+        match &self.raw {
+            Some(raw) => pieces(raw, b';').next().map_or(b"", first_value),
+            None => self
+                .components
+                .first()
+                .and_then(|leaves| leaves.first())
+                .map_or(b"", |leaf| leaf.as_bytes()),
         }
     }
 
@@ -322,11 +347,8 @@ impl<'a> VcardValueNode<'a> {
     /// component does not exist).
     pub fn value_count(&self, i: usize) -> usize {
         match self.component_at(i) {
-            Some(Component::Raw(bytes)) => {
-                let mut count = 0;
-                split_on(bytes, b',', |_| count += 1);
-                count
-            }
+            Some(Component::Text { text, .. }) => pieces(text.as_bytes(), b',').count(),
+            Some(Component::Raw(bytes)) => pieces(bytes, b',').count(),
             Some(Component::Split(leaves)) => leaves.len(),
             None => 0,
         }
@@ -373,6 +395,13 @@ impl<'a> VcardValueNode<'a> {
         {
             component.remove(j);
         }
+    }
+
+    /// The value's bytes while it is unsplit, as [`write_bytes`] writes them.
+    ///
+    /// [`write_bytes`]: Self::write_bytes
+    pub(crate) fn unsplit_bytes(&self) -> Option<&[u8]> {
+        self.raw.as_deref()
     }
 
     /// Serialize the raw value bytes (name, colon and eol are the line's job)
@@ -434,30 +463,33 @@ impl<'a> VcardValueNode<'a> {
         out
     }
 
-    /// Locate the `i`th component, either as a raw slice of the unsplit value
-    /// or as the already-split leaves.
+    /// Locate the `i`th component, as a slice of the unsplit value or as the
+    /// already-split leaves.
     fn component_at(&self, i: usize) -> Option<Component<'_, 'a>> {
-        match &self.raw {
-            Some(raw) => pieces(raw, b';').nth(i).map(Component::Raw),
-            None => self
-                .components
-                .get(i)
-                .map(|leaves| Component::Split(leaves)),
-        }
+        self.components().nth(i)
     }
 
-    /// Every component in order, as [`component_at`](Self::component_at)
-    /// gives them one by one.
-    fn components(&self) -> impl Iterator<Item = Component<'_, 'a>> {
-        let (raw, split): (_, &[Vec<VcardValueLeaf<'a>>]) = match &self.raw {
-            Some(raw) => (Some(pieces(raw, b';')), &[]),
-            None => (None, &self.components),
+    /// Every component in order.
+    ///
+    /// An unsplit value is checked for UTF-8 and searched for a backslash
+    /// once, here: its components and their items are then slices of text
+    /// needing no check of their own, cut at every separator when no escape
+    /// can hide one.
+    fn components(&self) -> Components<'_, 'a> {
+        let Some(raw) = &self.raw else {
+            return Components::Split(self.components.iter());
         };
 
-        raw.into_iter()
-            .flatten()
-            .map(Component::Raw)
-            .chain(split.iter().map(|leaves| Component::Split(leaves)))
+        match text(raw) {
+            Some(text) if memchr::memchr(b'\\', raw).is_none() => {
+                Components::Plain(text.split(';'))
+            }
+            Some(text) => Components::Escaped {
+                text,
+                pieces: pieces(raw, b';'),
+            },
+            None => Components::Raw(pieces(raw, b';')),
+        }
     }
 
     /// Borrow the `i`th component's leaves for in-place editing, splitting the
@@ -513,11 +545,54 @@ impl fmt::Display for VcardValueNode<'_> {
 /// One located component: a slice of the still-unsplit value, or its leaves
 /// once the value has been split for editing.
 enum Component<'s, 'a> {
-    /// The component's bytes, still `,`-joined, borrowed from the unsplit
-    /// value.
+    /// The component's text, still `,`-joined, borrowed from an unsplit value
+    /// that is UTF-8.
+    Text {
+        /// The text, still escaped.
+        text: &'s str,
+        /// Whether the value holds a backslash, which may escape a `,`.
+        escaped: bool,
+    },
+    /// The component's bytes, still `,`-joined, borrowed from an unsplit
+    /// value that is not UTF-8.
     Raw(&'s [u8]),
     /// The component's already-split leaves.
     Split(&'s [VcardValueLeaf<'a>]),
+}
+
+/// The iterator behind [`components`](VcardValueNode::components).
+enum Components<'s, 'a> {
+    /// A UTF-8 value with no backslash, cut at every `;`.
+    Plain(str::Split<'s, char>),
+    /// A UTF-8 value whose backslashes may escape a `;`.
+    Escaped { text: &'s str, pieces: Pieces<'s> },
+    /// A value that is not UTF-8.
+    Raw(Pieces<'s>),
+    /// The leaves of a split value.
+    Split(slice::Iter<'s, Vec<VcardValueLeaf<'a>>>),
+}
+
+impl<'s, 'a> Iterator for Components<'s, 'a> {
+    type Item = Component<'s, 'a>;
+
+    fn next(&mut self) -> Option<Component<'s, 'a>> {
+        match self {
+            Self::Plain(split) => split.next().map(|text| Component::Text {
+                text,
+                escaped: false,
+            }),
+            Self::Escaped { text, pieces } => {
+                let text = *text;
+
+                pieces.span().map(|span| Component::Text {
+                    text: &text[span],
+                    escaped: true,
+                })
+            }
+            Self::Raw(pieces) => pieces.next().map(Component::Raw),
+            Self::Split(leaves) => leaves.next().map(|leaves| Component::Split(leaves)),
+        }
+    }
 }
 
 /// The first `,`-separated value of a component (escape-aware): the bytes up to
@@ -573,6 +648,13 @@ fn pieces(bytes: &[u8], sep: u8) -> Pieces<'_> {
     }
 }
 
+/// The pieces of a UTF-8 value, as [`pieces`] cuts its bytes: every cut sits
+/// at an ASCII separator, so each piece is text too.
+fn text_pieces(text: &str, sep: u8) -> impl Iterator<Item = &str> {
+    let mut pieces = pieces(text.as_bytes(), sep);
+    iter::from_fn(move || pieces.span().map(|span| &text[span]))
+}
+
 /// The iterator behind [`pieces`].
 struct Pieces<'b> {
     bytes: &'b [u8],
@@ -581,10 +663,9 @@ struct Pieces<'b> {
     start: Option<usize>,
 }
 
-impl<'b> Iterator for Pieces<'b> {
-    type Item = &'b [u8];
-
-    fn next(&mut self) -> Option<&'b [u8]> {
+impl Pieces<'_> {
+    /// Where the next piece sits in the bytes.
+    fn span(&mut self) -> Option<Range<usize>> {
         let start = self.start?;
         let mut i = start;
 
@@ -594,12 +675,21 @@ impl<'b> Iterator for Pieces<'b> {
                 i = (pos + 2).min(self.bytes.len());
             } else {
                 self.start = Some(pos + 1);
-                return Some(&self.bytes[start..pos]);
+                return Some(start..pos);
             }
         }
 
         self.start = None;
-        Some(&self.bytes[start..])
+        Some(start..self.bytes.len())
+    }
+}
+
+impl<'b> Iterator for Pieces<'b> {
+    type Item = &'b [u8];
+
+    fn next(&mut self) -> Option<&'b [u8]> {
+        let bytes = self.bytes;
+        self.span().map(|span| &bytes[span])
     }
 }
 

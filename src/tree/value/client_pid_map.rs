@@ -2,11 +2,9 @@
 //!
 //! [`VcardCodec`] for the client-PID map: a source id and its URI.
 
-use alloc::vec;
-
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::client_pid_map::VcardClientPidMap,
@@ -21,12 +19,14 @@ impl<'v> VcardCodec<'v> for VcardClientPidMap<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        VcardValueNode::from_components(
-            vec![
-                encode_component(&[self.id.as_ref()], escaper),
-                encode_component(&[self.uri.as_ref()], escaper),
-            ],
-            escaper,
-        )
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardClientPidMap<'_> {
+    /// Write the id and the URI as a component each.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&[&*self.id]);
+        out.component(&[&*self.uri]);
     }
 }

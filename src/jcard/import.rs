@@ -12,6 +12,7 @@
 
 use alloc::{
     borrow::Cow,
+    boxed::Box,
     string::{String, ToString},
     vec,
     vec::Vec,
@@ -184,7 +185,7 @@ impl<'a> VcardValue<'a> {
             VcardValueKind::Adr => {
                 let mut components = structured(values.first()).into_iter();
                 let mut next = || components.next().unwrap_or_default();
-                VcardValue::Adr(VcardAdr {
+                VcardValue::Adr(Box::new(VcardAdr {
                     po_box: next(),
                     extended: next(),
                     street: next(),
@@ -203,7 +204,7 @@ impl<'a> VcardValue<'a> {
                     district: next(),
                     landmark: next(),
                     direction: next(),
-                })
+                }))
             }
             VcardValueKind::Gender => {
                 let mut components = structured(values.first()).into_iter();

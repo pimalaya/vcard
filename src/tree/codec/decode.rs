@@ -15,7 +15,7 @@
 //! (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are left to the feature
 //! helpers.
 
-use alloc::{borrow::Cow, vec::Vec};
+use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 
 use crate::{
     param::{VcardParam, VcardParamKind},
@@ -80,7 +80,11 @@ impl VcardLine<'_> {
     /// value through the spec (see `decode_value`); an unknown one keeps its
     /// raw components so it round-trips.
     pub fn decode(&self, version: VcardVersion) -> VcardProp<'_> {
-        let name = self.bare_name();
+        let (group, name) = match self.name.get().split_once('.') {
+            Some((group, name)) => (Some(group), name),
+            None => (None, self.name.get()),
+        };
+
         let params = self.params.iter().map(VcardParamNode::decode).collect();
 
         let kind = VcardPropKind::from_name(name);
@@ -91,7 +95,7 @@ impl VcardLine<'_> {
         };
 
         VcardProp {
-            group: self.group().map(Cow::Borrowed),
+            group: group.map(Cow::Borrowed),
             name: match kind {
                 Some(kind) => VcardPropName::Kind(kind),
                 None => VcardPropName::Unknown(Cow::Borrowed(name)),
@@ -159,7 +163,7 @@ fn decode_value_kind<'v>(kind: VcardValueKind, node: &'v VcardValueNode<'_>) -> 
         VcardValueKind::LanguageTag => VcardValue::LanguageTag(VcardLanguageTag::decode(node)),
         VcardValueKind::UtcOffset => VcardValue::UtcOffset(VcardUtcOffset::decode(node)),
         VcardValueKind::N => VcardValue::N(VcardN::decode(node)),
-        VcardValueKind::Adr => VcardValue::Adr(VcardAdr::decode(node)),
+        VcardValueKind::Adr => VcardValue::Adr(Box::new(VcardAdr::decode(node))),
         VcardValueKind::Gender => VcardValue::Gender(VcardGender::decode(node)),
         VcardValueKind::Org => VcardValue::Org(VcardOrg::decode(node)),
         VcardValueKind::ClientPidMap => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),

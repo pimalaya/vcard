@@ -3,11 +3,9 @@
 //! [`VcardCodec`] for the structured gender: a sex component and an identity
 //! component.
 
-use alloc::vec;
-
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::gender::VcardGender,
@@ -22,12 +20,14 @@ impl<'v> VcardCodec<'v> for VcardGender<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        VcardValueNode::from_components(
-            vec![
-                encode_component(&[self.sex.as_ref()], escaper),
-                encode_component(&[self.identity.as_ref()], escaper),
-            ],
-            escaper,
-        )
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardGender<'_> {
+    /// Write the sex and the identity as a component each.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&[&*self.sex]);
+        out.component(&[&*self.identity]);
     }
 }

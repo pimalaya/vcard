@@ -24,7 +24,10 @@
 //! both the structural dispatch and the per-property lenses go through it.
 
 use crate::{
-    tree::{codec::mode::VcardEscaper, value::node::VcardValueNode},
+    tree::{
+        codec::{encode::VcardValueOut, mode::VcardEscaper},
+        value::node::VcardValueNode,
+    },
     value::{VcardValue, VcardValueUnknown},
 };
 
@@ -57,24 +60,31 @@ impl<'v> VcardCodec<'v> for VcardValue<'v> {
         VcardValue::Unknown(VcardValueUnknown::decode(node))
     }
 
-    /// Encode by dispatching to the held value's own codec.
+    /// Encode by dispatching to the held value's own shape.
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardValue<'_> {
+    /// Write the held value's wire shape.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
         match self {
-            VcardValue::Text(v) => v.encode(escaper),
-            VcardValue::TextList(v) => v.encode(escaper),
-            VcardValue::Uri(v) => v.encode(escaper),
-            VcardValue::DateAndOrTime(v) => v.encode(escaper),
-            VcardValue::Timestamp(v) => v.encode(escaper),
-            VcardValue::LanguageTag(v) => v.encode(escaper),
-            VcardValue::UtcOffset(v) => v.encode(escaper),
-            VcardValue::N(v) => v.encode(escaper),
-            VcardValue::Adr(v) => v.encode(escaper),
-            VcardValue::Binary(v) => v.encode(escaper),
-            VcardValue::Gender(v) => v.encode(escaper),
-            VcardValue::Geo(v) => v.encode(escaper),
-            VcardValue::Org(v) => v.encode(escaper),
-            VcardValue::ClientPidMap(v) => v.encode(escaper),
-            VcardValue::Unknown(v) => v.encode(escaper),
+            VcardValue::Text(v) => v.emit(out),
+            VcardValue::TextList(v) => v.emit(out),
+            VcardValue::Uri(v) => v.emit(out),
+            VcardValue::DateAndOrTime(v) => v.emit(out),
+            VcardValue::Timestamp(v) => v.emit(out),
+            VcardValue::LanguageTag(v) => v.emit(out),
+            VcardValue::UtcOffset(v) => v.emit(out),
+            VcardValue::N(v) => v.emit(out),
+            VcardValue::Adr(v) => v.emit(out),
+            VcardValue::Binary(v) => v.emit(out),
+            VcardValue::Gender(v) => v.emit(out),
+            VcardValue::Geo(v) => v.emit(out),
+            VcardValue::Org(v) => v.emit(out),
+            VcardValue::ClientPidMap(v) => v.emit(out),
+            VcardValue::Unknown(v) => v.emit(out),
         }
     }
 }

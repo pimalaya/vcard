@@ -4,7 +4,7 @@
 
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::org::VcardOrg,
@@ -16,12 +16,15 @@ impl<'v> VcardCodec<'v> for VcardOrg<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        VcardValueNode::from_components(
-            self.0
-                .iter()
-                .map(|unit| encode_component(&[unit.as_ref()], escaper))
-                .collect(),
-            escaper,
-        )
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardOrg<'_> {
+    /// Write each unit as its own component, holding one value.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        for unit in &self.0 {
+            out.component(&[&**unit]);
+        }
     }
 }

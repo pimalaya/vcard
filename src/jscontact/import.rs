@@ -13,6 +13,7 @@ use core::mem;
 
 use alloc::{
     borrow::Cow,
+    boxed::Box,
     format,
     string::{String, ToString},
     vec,
@@ -632,7 +633,7 @@ impl<'a> Import<'a> {
             if let Some(time_zone) = object.get("timeZone").and_then(Value::as_str) {
                 params.push(VcardParam::Tz(Cow::Borrowed(time_zone)));
             }
-            self.prop(VcardPropKind::Adr, params, VcardValue::Adr(adr));
+            self.prop(VcardPropKind::Adr, params, VcardValue::Adr(Box::new(adr)));
         }
     }
 

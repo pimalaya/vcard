@@ -10,9 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **BREAKING**: `VcardBinary::decode_base64` returns `Option<(Vec<u8>, bool)>`, the decoded bytes and whether the payload was well-formed, in place of a `Result` carrying the base64 crate's error. Decoding is liberal: line breaks and blanks are skipped, any other byte outside the alphabet is skipped and reported, missing padding is accepted.
 
+- **BREAKING**: `VcardValue::Adr` holds a `Box<VcardAdr>` in place of a `VcardAdr`, so a value takes 120 bytes rather than 432 and a property 192 rather than 504. Build one with `Box::new` (or `Box::default()`); its fields read through the box as before.
+
 - The `base64` and `quoted-printable` features run on base64-codec and quoted-printable-codec in place of the base64 and quoted_printable crates, with SIMD kernels for the CPU token the application installs through simd-cpu (`SimdCpu::install_detected()` in `main`), the portable code otherwise. The three are git dependencies until they are published, and `rust-version` is 1.89.
 
 - Parsing, decoding and serializing are faster, with the same output: 40 to 44% fewer cycles over the test corpus, 35 to 41% on a short card. A folded line is joined once, its head borrowed from the input; lines are filled in place; decoding validates UTF-8 before any lossy walk and reads a structured value's components in one pass. A parsed card's line list now starts with room for 16 lines.
+
+- A decoded card's `Display` (and so `to_string`) writes the text straight from the model rather than through an encoded syntax tree, with the same output: 94% fewer cycles over the test corpus, 90% on a short card. Parsing, decoding and `to_bytes` take a further 12 to 20% fewer: a value is checked for UTF-8 once rather than once a comma-separated piece, an ASCII name, parameter or value becomes text without the check (the crate's first `unsafe` block, run under Miri), each fold continuation is read once, and a folded value is copied once on output.
 
 ### Fixed
 

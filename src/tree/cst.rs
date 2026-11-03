@@ -122,7 +122,7 @@ impl<'a> VcardCst<'a> {
         let mut rest = input;
 
         while !is_blank(rest) {
-            props.push(VcardLine::empty());
+            props.push(const { VcardLine::empty() });
             let last = props.len() - 1;
             rest = VcardLine::take_into(rest, &mut props[last])?;
         }
@@ -219,7 +219,7 @@ impl<'a> VcardCst<'a> {
                 ));
             }
 
-            props.push(VcardLine::empty());
+            props.push(const { VcardLine::empty() });
             let last = props.len() - 1;
             rest = VcardLine::take_into(rest, &mut props[last])?;
 

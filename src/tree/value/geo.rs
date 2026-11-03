@@ -4,11 +4,9 @@
 //! a URI, so that form never reaches this codec (the spec routes it to
 //! [`VcardUri`](crate::value::uri::VcardUri)).
 
-use alloc::vec;
-
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::geo::VcardGeo,
@@ -33,20 +31,20 @@ impl<'v> VcardCodec<'v> for VcardGeo<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardGeo<'_> {
+    /// Write the pair in the card's own version.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
         // NOTE: mirror of decode: 2.1 writes the pair as `lat,long` (one
         // component, two values), 3.0 as `lat;long` (two components).
-        let components = if escaper == VcardEscaper::V2_1 {
-            vec![encode_component(
-                &[self.latitude.as_ref(), self.longitude.as_ref()],
-                escaper,
-            )]
+        if out.escaper == VcardEscaper::V2_1 {
+            out.component(&[&*self.latitude, &*self.longitude]);
         } else {
-            vec![
-                encode_component(&[self.latitude.as_ref()], escaper),
-                encode_component(&[self.longitude.as_ref()], escaper),
-            ]
-        };
-
-        VcardValueNode::from_components(components, escaper)
+            out.component(&[&*self.latitude]);
+            out.component(&[&*self.longitude]);
+        }
     }
 }

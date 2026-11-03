@@ -36,6 +36,7 @@ use core::{error, fmt, ops, str};
 
 use alloc::{
     borrow::Cow,
+    boxed::Box,
     string::{String, ToString},
     vec::Vec,
 };
@@ -180,13 +181,11 @@ impl ops::Deref for VcardValueKind {
 
 /// A decoded property value: one known kind, or `Unknown` (raw) for anything
 /// the model does not decode.
-// NOTE: the 18-component VcardAdr dominates the enum size; values are
-// decoded on demand, not stored in bulk, so plain variants beat boxing.
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VcardValue<'a> {
-    /// The structured `ADR` value.
-    Adr(VcardAdr<'a>),
+    /// The structured `ADR` value, boxed: its 18 components inline would make
+    /// every value, and every property, three times the size.
+    Adr(Box<VcardAdr<'a>>),
     /// A binary value (2.1 / 3.0 `PHOTO`, `LOGO`, `SOUND`, `KEY`): a URI
     /// reference or inline base64.
     Binary(VcardBinary<'a>),
@@ -249,7 +248,7 @@ impl VcardValue<'_> {
     /// [`fill_required`](crate::tree::cst::VcardCst::fill_required) writes.
     pub fn empty(kind: VcardValueKind) -> VcardValue<'static> {
         match kind {
-            VcardValueKind::Adr => VcardValue::Adr(VcardAdr::default()),
+            VcardValueKind::Adr => VcardValue::Adr(Box::default()),
             VcardValueKind::Binary => VcardValue::Binary(VcardBinary::Uri(Cow::Borrowed(""))),
             VcardValueKind::ClientPidMap => VcardValue::ClientPidMap(VcardClientPidMap::default()),
             VcardValueKind::DateAndOrTime => {

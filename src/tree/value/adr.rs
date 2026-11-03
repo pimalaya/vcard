@@ -3,11 +3,9 @@
 //! [`VcardCodec`] for the structured address: seven `;`-separated components,
 //! eighteen when any RFC 9554 component carries a value.
 
-use alloc::vec;
-
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::encode_component, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::adr::VcardAdr,
@@ -41,33 +39,35 @@ impl<'v> VcardCodec<'v> for VcardAdr<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        let mut components = vec![
-            encode_component(&self.po_box, escaper),
-            encode_component(&self.extended, escaper),
-            encode_component(&self.street, escaper),
-            encode_component(&self.locality, escaper),
-            encode_component(&self.region, escaper),
-            encode_component(&self.postal_code, escaper),
-            encode_component(&self.country, escaper),
-        ];
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardAdr<'_> {
+    /// Write the seven classic components, then the eleven RFC 9554 ones when
+    /// any of them carries a value.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&self.po_box);
+        out.component(&self.extended);
+        out.component(&self.street);
+        out.component(&self.locality);
+        out.component(&self.region);
+        out.component(&self.postal_code);
+        out.component(&self.country);
 
         if self.has_extended_components() {
-            components.extend([
-                encode_component(&self.room, escaper),
-                encode_component(&self.apartment, escaper),
-                encode_component(&self.floor, escaper),
-                encode_component(&self.street_number, escaper),
-                encode_component(&self.street_name, escaper),
-                encode_component(&self.building, escaper),
-                encode_component(&self.block, escaper),
-                encode_component(&self.subdistrict, escaper),
-                encode_component(&self.district, escaper),
-                encode_component(&self.landmark, escaper),
-                encode_component(&self.direction, escaper),
-            ]);
+            out.component(&self.room);
+            out.component(&self.apartment);
+            out.component(&self.floor);
+            out.component(&self.street_number);
+            out.component(&self.street_name);
+            out.component(&self.building);
+            out.component(&self.block);
+            out.component(&self.subdistrict);
+            out.component(&self.district);
+            out.component(&self.landmark);
+            out.component(&self.direction);
         }
-
-        VcardValueNode::from_components(components, escaper)
     }
 }
 

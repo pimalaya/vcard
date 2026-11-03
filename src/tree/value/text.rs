@@ -4,15 +4,9 @@
 //! single text value keeps its whole component, commas included, since a comma
 //! separates items only in a list.
 
-use alloc::vec;
-
 use crate::{
     tree::{
-        codec::{
-            VcardCodec,
-            encode::{encode_component, scalar_node},
-            mode::VcardEscaper,
-        },
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::text::{VcardText, VcardTextList},
@@ -27,7 +21,14 @@ impl<'v> VcardCodec<'v> for VcardText<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        scalar_node(&self.0, escaper)
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardText<'_> {
+    /// Write the text as one component holding one value.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&[&*self.0]);
     }
 }
 
@@ -37,6 +38,13 @@ impl<'v> VcardCodec<'v> for VcardTextList<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        VcardValueNode::from_components(vec![encode_component(&self.0, escaper)], escaper)
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardTextList<'_> {
+    /// Write the list as one component of its values.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&self.0);
     }
 }

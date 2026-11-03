@@ -17,12 +17,12 @@
 //! A card therefore round-trips byte for byte however it was laid out. The
 //! final line needs no trailing break.
 
-use core::{fmt, str};
+use core::{fmt, mem, str};
 
 use alloc::{borrow::Cow, string::String, vec, vec::Vec};
 
 use crate::tree::{
-    codec::mode::VcardEscaper,
+    codec::{mode::VcardEscaper, unescape::text},
     error::VcardParseError,
     leaf::{VcardLeaf, VcardValueLeaf},
     param::{lens::VcardParamLens, node::VcardParamNode},
@@ -83,6 +83,9 @@ impl<'a> VcardLine<'a> {
     /// The card parser grows its line list by an [`empty`](Self::empty) line
     /// and fills it here: a line returned by value is staged on the stack and
     /// copied, which stalls the loads that follow.
+    ///
+    /// `slot` must be an [`empty`](Self::empty) line: its fields are written
+    /// over without being dropped, there being nothing in them to free.
     pub(crate) fn take_into(rest: &'a [u8], slot: &mut Self) -> Result<&'a [u8], VcardParseError> {
         // NOTE: Everything this tokeniser resolves is recorded here, so
         // serialization can put it back.
@@ -152,26 +155,8 @@ impl<'a> VcardLine<'a> {
         let mut logical = Vec::new();
         let last_eol;
 
-        if !soft {
-            // NOTE: Sized first, so the value of a folded `PHOTO` is copied
-            // once rather than through every doubling of its buffer.
-            let (mut len, mut folds) = (first.len() - base, 0);
-            let mut next = tail;
-
-            while starts_with_wsp(next) {
-                let (continuation, _, rest) = physical_line(&next[1..]);
-                len += continuation.len();
-                folds += 1;
-                next = rest;
-            }
-
-            logical.reserve_exact(len);
-            wire.reserve(folds);
-        }
-
-        logical.extend_from_slice(&first[base..]);
-
         if soft {
+            logical.extend_from_slice(&first[base..]);
             logical.pop();
             wire.soft(base + logical.len(), is_crlf(eol));
 
@@ -200,7 +185,10 @@ impl<'a> VcardLine<'a> {
                     }
                 }
             }
-        } else {
+        } else if first.is_empty() {
+            // NOTE: A whitespace-only first line: a continuation may still be
+            // stripped, which moves the offsets after it, so each is joined
+            // as it is found.
             let mut eol = eol;
 
             while starts_with_wsp(tail) {
@@ -212,6 +200,38 @@ impl<'a> VcardLine<'a> {
             }
 
             last_eol = eol;
+        } else {
+            // NOTE: Each continuation is found once, its fold recorded and its
+            // length counted, so the value of a folded `PHOTO` is sized before
+            // its one copy, and the copy takes each continuation's length from
+            // the offset of the fold after it rather than scanning again.
+            let (mut len, mut eol, mut next) = (first.len(), eol, tail);
+
+            while starts_with_wsp(next) {
+                let (continuation, next_eol, rest) = physical_line(&next[1..]);
+                wire.fold(len, is_crlf(eol), next[0]);
+                len += continuation.len();
+                eol = next_eol;
+                next = rest;
+            }
+
+            last_eol = eol;
+            logical.reserve_exact(len - base);
+            logical.extend_from_slice(&first[base..]);
+
+            let mut folds = wire.folds().peekable();
+
+            while let Some((offset, _)) = folds.next() {
+                let (end, eol) = match folds.peek() {
+                    Some(&(end, crlf)) => (end, if crlf { 2 } else { 1 }),
+                    None => (len, last_eol.len()),
+                };
+
+                logical.extend_from_slice(&tail[1..1 + end - offset]);
+                tail = &tail[1 + end - offset + eol..];
+            }
+
+            debug_assert_eq!(tail.len(), next.len());
         }
 
         match colon {
@@ -234,13 +254,13 @@ impl<'a> VcardLine<'a> {
     }
 
     /// A placeholder line for [`take_into`](Self::take_into) to fill in place.
-    pub(crate) fn empty() -> Self {
+    pub(crate) const fn empty() -> Self {
         Self {
             name: VcardLeaf(Cow::Borrowed("")),
             params: Vec::new(),
-            value: VcardValueNode::default(),
+            value: VcardValueNode::from_components(Vec::new(), VcardEscaper::V4_0),
             eol: VcardLeaf(Cow::Borrowed("")),
-            wire: VcardWire::default(),
+            wire: VcardWire::new(),
         }
     }
 
@@ -282,19 +302,14 @@ impl<'a> VcardLine<'a> {
     }
 
     /// Serialize the whole line to bytes, exactly as parsed: its logical
-    /// content, laid back out in the wire shape it arrived in.
+    /// content (its name, parameters and value, the byte string the wire
+    /// offsets index), laid back out in the wire shape it arrived in.
+    ///
+    /// An unsplit value is laid out straight from its node, so the value of
+    /// a folded `PHOTO` is copied once.
     pub(crate) fn write_bytes(&self, out: &mut Vec<u8>) {
         let start = out.len();
-        self.write_logical(out);
-        self.wire.lay_out(out, start);
 
-        out.extend_from_slice(self.eol.get().as_bytes());
-    }
-
-    /// Serialize the logical line (its name, parameters and value), with no
-    /// line ending and no wire shape. This is the byte string the wire offsets
-    /// index.
-    fn write_logical(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(self.name.get().as_bytes());
 
         for param in &self.params {
@@ -303,7 +318,16 @@ impl<'a> VcardLine<'a> {
         }
 
         out.push(b':');
-        self.value.write_bytes(out);
+
+        match self.value.unsplit_bytes() {
+            Some(value) => self.wire.lay_out_value(out, start, value),
+            None => {
+                self.value.write_bytes(out);
+                self.wire.lay_out(out, start);
+            }
+        }
+
+        out.extend_from_slice(self.eol.get().as_bytes());
     }
 
     /// The first parameter of type `P`, decoded.
@@ -347,7 +371,7 @@ impl<'a> VcardLine<'a> {
     /// colon), its value bytes, its line ending and the wire shape the
     /// tokeniser recorded, in offset order.
     ///
-    /// `slot` is untouched on an error.
+    /// `slot` is an [`empty`](Self::empty) line, untouched on an error.
     fn build(
         slot: &mut Self,
         head: &'a [u8],
@@ -355,8 +379,7 @@ impl<'a> VcardLine<'a> {
         eol: VcardLeaf<'a>,
         mut wire: VcardWire<'a>,
     ) -> Result<(), VcardParseError> {
-        let head_str =
-            str::from_utf8(head).map_err(|_| VcardParseError::NonUtf8Header(lossy(head)))?;
+        let head_str = text(head).ok_or_else(|| VcardParseError::NonUtf8Header(lossy(head)))?;
 
         let base = head.len() + 1;
 
@@ -380,11 +403,16 @@ impl<'a> VcardLine<'a> {
 
         let (name, params) = split_head(head_str);
 
-        slot.name = VcardLeaf::from(name);
-        slot.params = params;
-        slot.value = VcardValueNode::parse_cow(value);
-        slot.eol = eol;
-        slot.wire = wire;
+        // NOTE: The empty line's fields hold no allocation, so forgetting
+        // them saves a drop per field, the value's an out-of-line call.
+        mem::forget(mem::replace(&mut slot.name, VcardLeaf::from(name)));
+        mem::forget(mem::replace(&mut slot.params, params));
+        mem::forget(mem::replace(
+            &mut slot.value,
+            VcardValueNode::parse_cow(value),
+        ));
+        mem::forget(mem::replace(&mut slot.eol, eol));
+        mem::forget(mem::replace(&mut slot.wire, wire));
 
         Ok(())
     }

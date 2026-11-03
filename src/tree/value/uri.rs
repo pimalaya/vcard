@@ -6,7 +6,7 @@
 
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::verbatim_node, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::uri::VcardUri,
@@ -18,6 +18,13 @@ impl<'v> VcardCodec<'v> for VcardUri<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        verbatim_node(&self.0, escaper)
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardUri<'_> {
+    /// Write the URI exactly as it is held.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.verbatim(&self.0);
     }
 }

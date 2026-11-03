@@ -124,10 +124,7 @@ fn every_kind_derefs_to_its_wire_name_and_round_trips() {
 #[test]
 fn every_value_variant_reports_its_kind() {
     let values = [
-        (
-            VcardValue::Adr(VcardAdr::default()),
-            Some(VcardValueKind::Adr),
-        ),
+        (VcardValue::Adr(Box::default()), Some(VcardValueKind::Adr)),
         (
             VcardValue::Binary(VcardBinary::Uri(Cow::Borrowed("x"))),
             Some(VcardValueKind::Binary),
@@ -287,10 +284,10 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
         ),
         (
             "ADR",
-            VcardValue::Adr(VcardAdr {
+            VcardValue::Adr(Box::new(VcardAdr {
                 street: vec![Cow::Borrowed("Main St")],
                 ..Default::default()
-            }),
+            })),
         ),
         (
             "GENDER",

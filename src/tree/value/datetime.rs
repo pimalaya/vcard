@@ -5,7 +5,7 @@
 
 use crate::{
     tree::{
-        codec::{VcardCodec, encode::scalar_node, mode::VcardEscaper},
+        codec::{VcardCodec, encode::VcardValueOut, mode::VcardEscaper},
         value::node::VcardValueNode,
     },
     value::datetime::{VcardDateAndOrTime, VcardTimestamp},
@@ -17,7 +17,14 @@ impl<'v> VcardCodec<'v> for VcardDateAndOrTime<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        scalar_node(&self.0, escaper)
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardDateAndOrTime<'_> {
+    /// Write the value as one component holding its text.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&[&*self.0]);
     }
 }
 
@@ -27,6 +34,13 @@ impl<'v> VcardCodec<'v> for VcardTimestamp<'v> {
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
-        scalar_node(&self.0, escaper)
+        VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl VcardTimestamp<'_> {
+    /// Write the value as one component holding its text.
+    pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
+        out.component(&[&*self.0]);
     }
 }
