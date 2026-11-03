@@ -90,7 +90,7 @@ fn escape_of(byte: u8) -> &'static str {
 /// no early exit, which compiles to vector compares and a mask move, so a
 /// long base64 value passes at several bytes a cycle. `hit` must join its
 /// tests with `|`: a `matches!` compiles to a branch per byte.
-fn position(bytes: &[u8], hit: impl Fn(u8) -> bool) -> Option<usize> {
+pub(crate) fn position(bytes: &[u8], hit: impl Fn(u8) -> bool) -> Option<usize> {
     let (blocks, tail) = bytes.as_chunks::<16>();
 
     for (i, block) in blocks.iter().enumerate() {
@@ -134,6 +134,37 @@ pub(crate) fn escape_param(value: &str, escaper: VcardEscaper) -> Cow<'_, str> {
     out.push_str(&value);
     out.push('"');
     Cow::Owned(out)
+}
+
+/// Append a parameter value to `text`, encoded as [`escape_param`] encodes it.
+///
+/// The writer of a decoded card's text, which writes the value in place: an
+/// encoded value returned through memory is copied by loads that wait on its
+/// stores. The caret encoding adds no delimiter, so whether the value needs
+/// quoting is read off the value as given.
+pub(crate) fn escape_param_into(value: &str, escaper: VcardEscaper, text: &mut String) {
+    let quoted = escaper.has_param_quoting()
+        && value
+            .bytes()
+            .any(|b| (b == b',') | (b == b';') | (b == b':'));
+
+    if quoted {
+        text.push('"');
+    }
+
+    if escaper.has_param_encoding()
+        && value
+            .bytes()
+            .any(|b| (b == b'\n') | (b == b'^') | (b == b'"'))
+    {
+        text.push_str(&escape_carets(value));
+    } else {
+        text.push_str(value);
+    }
+
+    if quoted {
+        text.push('"');
+    }
 }
 
 /// Apply the RFC 6868 caret encoding over every character of `value`.

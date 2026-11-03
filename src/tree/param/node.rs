@@ -7,11 +7,14 @@
 //! leaves, parsed from and serialized back to the wire verbatim. The per-name
 //! lens markers that give it meaning live alongside in [`crate::tree::param`].
 
-use core::fmt;
+use core::{fmt, mem};
 
-use alloc::vec::Vec;
+use alloc::{borrow::Cow, vec::Vec};
 
-use crate::tree::{codec::mode::VcardEscaper, leaf::VcardLeaf};
+use crate::tree::{
+    codec::mode::VcardEscaper,
+    leaf::{VcardLeaf, put},
+};
 
 /// One raw parameter: a name and its `,`-separated raw values (empty when the
 /// parameter has no `=` list). The syntactic peer of the decoded
@@ -44,19 +47,34 @@ impl<'a> VcardParamNode<'a> {
         }
     }
 
+    /// A placeholder node for [`take_into`](Self::take_into) to fill in place.
+    const fn empty() -> Self {
+        Self {
+            name: VcardLeaf(Cow::Borrowed("")),
+            values: Vec::new(),
+            escaper: VcardEscaper::V4_0,
+        }
+    }
+
     /// Take one parameter off the front of `rest`, the head bytes after a
-    /// `;`, up to the next `;` outside double quotes: the node, then what
-    /// follows that `;`, if one ends it.
+    /// `;`, up to the next `;` outside double quotes, onto `params`, and
+    /// return what follows that `;`, if one ends it.
     ///
     /// One walk does what [`parse`](Self::parse) does after the head splitter
     /// found the `;`: the first `=` ends the name, and a `,` outside quotes
     /// counted from that `=` on splits two values.
-    pub(crate) fn take(rest: &'a str) -> (Self, Option<&'a str>) {
+    ///
+    /// The node is pushed first and its values pushed where it lands: a node
+    /// built aside and moved in waits on the stores of its value list.
+    pub(crate) fn take_into(rest: &'a str, params: &mut Vec<Self>) -> Option<&'a str> {
+        params.push(const { Self::empty() });
+        let at = params.len() - 1;
+        let node = &mut params[at];
+
         let mut quoted = false;
         let mut values_quoted = false;
         let mut eq = None;
         let mut start = 0;
-        let mut values = Vec::new();
         let mut end = rest.len();
         let mut tail = None;
 
@@ -77,7 +95,7 @@ impl<'a> VcardParamNode<'a> {
                     values_quoted = false;
                 }
                 b',' if eq.is_some() && !values_quoted => {
-                    values.push(VcardLeaf::from(&rest[start..i]));
+                    node.values.push(VcardLeaf::from(&rest[start..i]));
                     start = i + 1;
                 }
                 _ => {}
@@ -86,19 +104,16 @@ impl<'a> VcardParamNode<'a> {
 
         let name = match eq {
             Some(eq) => {
-                values.push(VcardLeaf::from(&rest[start..end]));
+                node.values.push(VcardLeaf::from(&rest[start..end]));
                 &rest[..eq]
             }
             None => &rest[..end],
         };
 
-        let node = Self {
-            name: VcardLeaf::from(name),
-            values,
-            escaper: VcardEscaper::default(),
-        };
+        // NOTE: The placeholder's name holds no allocation.
+        mem::forget(mem::replace(&mut node.name, VcardLeaf::from(name)));
 
-        (node, tail)
+        tail
     }
 
     /// Convert into an owned parameter node (`'static`).
@@ -117,14 +132,14 @@ impl<'a> VcardParamNode<'a> {
     /// Serialize the parameter (`name` or `name=value,value`) into `out`,
     /// without the intermediate `String` a `Display`-based path would allocate.
     pub(crate) fn write_bytes(&self, out: &mut Vec<u8>) {
-        out.extend_from_slice(self.name.get().as_bytes());
+        put(out, self.name.get().as_bytes());
 
         if let Some((first, rest)) = self.values.split_first() {
             out.push(b'=');
-            out.extend_from_slice(first.get().as_bytes());
+            put(out, first.get().as_bytes());
             for value in rest {
                 out.push(b',');
-                out.extend_from_slice(value.get().as_bytes());
+                put(out, value.get().as_bytes());
             }
         }
     }

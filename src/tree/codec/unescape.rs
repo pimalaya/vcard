@@ -12,7 +12,7 @@
 //! `unescape_param`. RFC 6350 section 3.3 gives a parameter no backslash
 //! escapes at all, which is why RFC 6868 gives it the caret ones instead.
 
-use alloc::{borrow::Cow, string::String, vec::Vec};
+use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 
 use crate::tree::codec::mode::VcardEscaper;
 
@@ -28,11 +28,22 @@ pub(crate) fn unescape_with(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, str>
 ///
 /// Every escape is ASCII, so what an escape leaves is text too and the value
 /// is never checked again.
+///
+/// Inlined, so a value with no backslash comes back in registers: a `Cow`
+/// returned through memory stalls the copy that moves it into place. The
+/// unescaped text comes back boxed for the same reason, in two registers,
+/// where a `Cow` from either arm would be merged into one copied through
+/// memory.
+#[inline(always)]
 pub(crate) fn unescape_text(text: &str, escaper: VcardEscaper) -> Cow<'_, str> {
-    let Some(mut at) = memchr::memchr(b'\\', text.as_bytes()) else {
-        return Cow::Borrowed(text);
-    };
+    match memchr::memchr(b'\\', text.as_bytes()) {
+        None => Cow::Borrowed(text),
+        Some(at) => Cow::Owned(String::from(unescape_text_from(text, at, escaper))),
+    }
+}
 
+/// [`unescape_text`] from the first backslash, at `at`, on.
+pub(crate) fn unescape_text_from(text: &str, mut at: usize, escaper: VcardEscaper) -> Box<str> {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
 
@@ -80,7 +91,7 @@ pub(crate) fn unescape_text(text: &str, escaper: VcardEscaper) -> Cow<'_, str> {
     }
 
     out.push_str(rest);
-    Cow::Owned(out)
+    out.into_boxed_str()
 }
 
 /// Resolve value escapes by the card's escaping mode at the byte level,
@@ -98,23 +109,47 @@ pub(crate) fn unescape_bytes(bytes: &[u8], escaper: VcardEscaper) -> Cow<'_, [u8
 /// A caret before anything else, and a trailing one, stay literal, 3.1
 /// forbidding an error either way. No backslash is touched: RFC 6350 3.3 gives
 /// a parameter no escapes and RFC 6868 3.2 forbids adding the backslash ones.
+///
+/// Inlined, so a value with no caret comes back in registers, as in
+/// [`unescape_text`].
+#[inline(always)]
 pub(crate) fn unescape_param(text: &str, escaper: VcardEscaper) -> Cow<'_, str> {
-    // NOTE: RFC 6350 3.3 wraps a value carrying a delimiter in double quotes.
-    // The pair is the production's own, never part of what it encloses, so it
-    // goes before the carets are read. An unbalanced one closed nothing and is
-    // therefore content.
-    let text = if escaper.has_param_quoting() {
-        text.strip_prefix('"')
-            .and_then(|inner| inner.strip_suffix('"'))
-            .unwrap_or(text)
-    } else {
-        text
-    };
+    let text = param_text(text, escaper);
 
-    if !escaper.has_param_encoding() || !text.contains('^') {
+    if !has_carets(text, escaper) {
         return Cow::Borrowed(text);
     }
 
+    Cow::Owned(String::from(unescape_carets(text)))
+}
+
+/// A parameter value without its delimiters, its carets unread.
+///
+/// RFC 6350 3.3 wraps a value carrying a delimiter in double quotes. The pair
+/// is the production's own, never part of what it encloses, so it goes before
+/// the carets are read. An unbalanced one closed nothing and is therefore
+/// content.
+#[inline(always)]
+pub(crate) fn param_text(text: &str, escaper: VcardEscaper) -> &str {
+    if !escaper.has_param_quoting() {
+        return text;
+    }
+
+    text.strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'))
+        .unwrap_or(text)
+}
+
+/// Whether a parameter value, its delimiters stripped, holds a caret that
+/// `escaper` reads as an RFC 6868 encoding.
+#[inline(always)]
+pub(crate) fn has_carets(text: &str, escaper: VcardEscaper) -> bool {
+    escaper.has_param_encoding() && text.as_bytes().contains(&b'^')
+}
+
+/// Resolve the RFC 6868 3.1 carets of a parameter value holding one, boxed
+/// for the reason [`unescape_text`] boxes its text.
+fn unescape_carets(text: &str) -> Box<str> {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
 
@@ -139,7 +174,7 @@ pub(crate) fn unescape_param(text: &str, escaper: VcardEscaper) -> Cow<'_, str> 
         chars.next();
     }
 
-    Cow::Owned(out)
+    out.into_boxed_str()
 }
 
 /// The bytes as text, when they are UTF-8.

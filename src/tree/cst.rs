@@ -46,7 +46,7 @@
 //! assert_eq!(&*card.properties[0].name, "FN");
 //! ```
 
-use core::{fmt, iter, str};
+use core::{fmt, iter, mem, str};
 
 use alloc::{
     borrow::Cow,
@@ -103,10 +103,11 @@ impl<'a> VcardCst<'a> {
     /// bare RFC 2425 record parses whole, with no envelope in or out.
     pub fn parse<T: AsRef<[u8]> + ?Sized>(input: &'a T) -> Result<Self, VcardParseError> {
         let input = input.as_ref();
-        let (first, _rest) = VcardLine::take(input)?;
+        let mut first = VcardLine::empty();
+        let rest = VcardLine::take_into(input, &mut first)?;
 
         if first.name.get().eq_ignore_ascii_case("BEGIN") {
-            let (mut card, rest) = Self::take_card(input)?;
+            let (mut card, rest) = Self::take_body(input, &mut first, rest)?;
             card.take_trailing(rest);
             Ok(card)
         } else {
@@ -203,12 +204,28 @@ impl<'a> VcardCst<'a> {
     /// inline `AGENT` (a whole nested `BEGIN`..`END`) does not close the card
     /// early; the nested lines are kept verbatim so the card round-trips.
     fn take_card(input: &'a [u8]) -> Result<(Self, &'a [u8]), VcardParseError> {
-        let (begin, mut rest) = VcardLine::take(input)?;
+        // NOTE: The line is filled where it stays until the card is built, so
+        // it is copied once its stores have landed.
+        let mut begin = VcardLine::empty();
+        let rest = VcardLine::take_into(input, &mut begin)?;
 
         if !begin.name.get().eq_ignore_ascii_case("BEGIN") {
             return Err(VcardParseError::ExpectedBegin(begin.name.get().to_string()));
         }
 
+        Self::take_body(input, &mut begin, rest)
+    }
+
+    /// Take the lines of a card whose `BEGIN` line was taken off `input`,
+    /// `rest` following it, up to its `END` line.
+    ///
+    /// The `BEGIN` line is moved into the card only once the card is built,
+    /// its stores long landed, and left empty.
+    fn take_body(
+        input: &'a [u8],
+        begin: &mut VcardLine<'a>,
+        mut rest: &'a [u8],
+    ) -> Result<(Self, &'a [u8]), VcardParseError> {
         let mut props: Vec<VcardLine<'a>> = Vec::with_capacity(16);
         let mut depth = 0usize;
 
@@ -219,7 +236,9 @@ impl<'a> VcardCst<'a> {
                 ));
             }
 
-            props.push(const { VcardLine::empty() });
+            // NOTE: Grown by a closure, the empty line is written in place by
+            // constant stores; a pushed constant is copied by a call.
+            props.resize_with(props.len() + 1, VcardLine::empty);
             let last = props.len() - 1;
             rest = VcardLine::take_into(rest, &mut props[last])?;
 
@@ -233,16 +252,17 @@ impl<'a> VcardCst<'a> {
                     continue;
                 }
 
-                let line = props.pop();
-
                 // NOTE: VERSION can sit anywhere, so the escaping mode is only
                 // known once the whole card is parsed: stamp every value and
-                // parameter node with it.
-                stamp_escaper(&mut props);
+                // parameter node with it. Stamped before the END line is moved
+                // out, which leaves that line's stores time to land.
+                stamp_escaper(&mut props[..last]);
+
+                let line = props.pop();
 
                 return Ok((
                     Self {
-                        begin: Some(begin),
+                        begin: Some(mem::replace(begin, VcardLine::empty())),
                         props,
                         end: line,
                         trailing: Cow::Borrowed(""),
@@ -386,7 +406,10 @@ impl<'a> VcardCst<'a> {
     pub fn to_bytes(&self) -> Vec<u8> {
         let lines = self.begin.iter().chain(&self.props).chain(&self.end);
         let size = lines.map(|line| line.wire.size_hint() + 2).sum::<usize>();
-        let mut out = Vec::with_capacity(size + self.trailing.len());
+
+        // NOTE: Sixteen bytes of headroom, so writing the last short piece
+        // over sixteen zeroes never grows the buffer.
+        let mut out = Vec::with_capacity(size + self.trailing.len() + 16);
 
         if let Some(begin) = &self.begin {
             begin.write_bytes(&mut out);

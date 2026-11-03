@@ -12,20 +12,27 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardN<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        let mut lists = node.decode_component_lists();
-        let mut next = || lists.next().unwrap_or_default();
-
-        VcardN {
-            family: next(),
-            given: next(),
-            additional: next(),
-            prefixes: next(),
-            suffixes: next(),
-        }
+        let mut n = VcardN::default();
+        n.decode_into(node);
+        n
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl<'v> VcardN<'v> {
+    /// Decode `node` into this name, whose components are empty, each
+    /// filled where it lies.
+    pub(crate) fn decode_into(&mut self, node: &'v VcardValueNode<'_>) {
+        node.decode_component_lists_into([
+            &mut self.family,
+            &mut self.given,
+            &mut self.additional,
+            &mut self.prefixes,
+            &mut self.suffixes,
+        ]);
     }
 }
 

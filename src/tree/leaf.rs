@@ -103,11 +103,61 @@ impl<'a> From<Cow<'a, str>> for VcardValueLeaf<'a> {
     }
 }
 
+/// Append `bytes` to `out`, a piece of sixteen bytes or fewer by fixed-size
+/// moves rather than a call.
+///
+/// Most pieces of a line are a few bytes (a name, a parameter, a line ending),
+/// for which a call to `memcpy` costs more than the copy. The piece is written
+/// over sixteen zeroes by two moves that overlap when it is shorter than
+/// their sum, and the zeroes past it are cut off.
+#[inline(always)]
+pub(crate) fn put(out: &mut Vec<u8>, bytes: &[u8]) {
+    let len = bytes.len();
+
+    if len > 16 {
+        return out.extend_from_slice(bytes);
+    }
+
+    let at = out.len();
+    out.extend_from_slice(&[0; 16]);
+    let to = &mut out[at..at + 16];
+
+    if len >= 8 {
+        to[..8].copy_from_slice(&bytes[..8]);
+        to[len - 8..len].copy_from_slice(&bytes[len - 8..]);
+    } else if len >= 4 {
+        to[..4].copy_from_slice(&bytes[..4]);
+        to[len - 4..len].copy_from_slice(&bytes[len - 4..]);
+    } else if len > 0 {
+        to[0] = bytes[0];
+        to[len / 2] = bytes[len / 2];
+        to[len - 1] = bytes[len - 1];
+    }
+
+    out.truncate(at + len);
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
 
-    use crate::tree::leaf::{VcardLeaf, VcardValueLeaf};
+    use crate::tree::leaf::{VcardLeaf, VcardValueLeaf, put};
+
+    /// Every length a fixed-size move covers, each piece after one that left
+    /// bytes behind, comes out exactly.
+    #[test]
+    fn puts_every_short_length_exactly() {
+        let source: Vec<u8> = (b'a'..=b'z').collect();
+        let mut out = b"x".to_vec();
+        let mut expected = b"x".to_vec();
+
+        for len in 0..=source.len() {
+            put(&mut out, &source[..len]);
+            expected.extend_from_slice(&source[..len]);
+        }
+
+        assert_eq!(out, expected);
+    }
 
     #[test]
     fn replaces_leaf_contents() {

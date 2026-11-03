@@ -13,9 +13,9 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardValueUnknown<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        VcardValueUnknown {
-            components: node.decode_component_lists().collect(),
-        }
+        let mut unknown = VcardValueUnknown::default();
+        node.decode_component_lists_onto(&mut unknown.components);
+        unknown
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {

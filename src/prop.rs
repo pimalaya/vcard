@@ -113,6 +113,21 @@ pub struct VcardProp<'a> {
     pub value: VcardValue<'a>,
 }
 
+impl VcardProp<'_> {
+    /// A property holding nothing, for a decoder to fill in place.
+    #[cfg(feature = "parser")]
+    pub(crate) const fn empty() -> Self {
+        Self {
+            group: None,
+            name: VcardPropName::Unknown(Cow::Borrowed("")),
+            params: Vec::new(),
+            value: VcardValue::Unknown(crate::value::VcardValueUnknown {
+                components: Vec::new(),
+            }),
+        }
+    }
+}
+
 impl<'a> VcardProp<'a> {
     /// A text property with no group: a known kind or an `X-` name, its
     /// parameters and its raw value, escaped when the card is serialized.
@@ -351,65 +366,68 @@ impl VcardPropKind {
 impl VcardPropKind {
     /// The known property for a wire name (case-insensitive), or `None`.
     ///
-    /// The name is upper-cased into a stack copy and matched exactly, with no
-    /// allocation for an unknown one.
-    pub(crate) fn from_name(kind: &str) -> Option<Self> {
-        let mut upper = [0; 13];
-        let upper = upper.get_mut(..kind.len())?;
-        upper.copy_from_slice(kind.as_bytes());
-        upper.make_ascii_uppercase();
+    /// The length and the first byte name one candidate, the second byte
+    /// telling apart the few that share both, and the candidate is compared
+    /// whole, case aside. The name is never copied: a copy into a buffer, then
+    /// read back wider, waits on the copy's stores.
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        let bytes = name.as_bytes();
+        let first = bytes.first()?.to_ascii_uppercase();
+        let second = bytes.get(1).map_or(0, u8::to_ascii_uppercase);
 
-        Some(match &*upper {
-            b"ADR" => Self::Adr,
-            b"AGENT" => Self::Agent,
-            b"ANNIVERSARY" => Self::Anniversary,
-            b"BDAY" => Self::Bday,
-            b"CALADRURI" => Self::CalAdrUri,
-            b"CALURI" => Self::CalUri,
-            b"CATEGORIES" => Self::Categories,
-            b"CLASS" => Self::Class,
-            b"CLIENTPIDMAP" => Self::ClientPidMap,
-            b"CREATED" => Self::Created,
-            b"EMAIL" => Self::Email,
-            b"FBURL" => Self::FbUrl,
-            b"FN" => Self::Fn,
-            b"GENDER" => Self::Gender,
-            b"GEO" => Self::Geo,
-            b"GRAMGENDER" => Self::GramGender,
-            b"IMPP" => Self::Impp,
-            b"JSPROP" => Self::JsProp,
-            b"KEY" => Self::Key,
-            b"KIND" => Self::Kind,
-            b"LABEL" => Self::Label,
-            b"LANG" => Self::Lang,
-            b"LANGUAGE" => Self::Language,
-            b"LOGO" => Self::Logo,
-            b"MAILER" => Self::Mailer,
-            b"MEMBER" => Self::Member,
-            b"N" => Self::N,
-            b"NAME" => Self::Name,
-            b"NICKNAME" => Self::Nickname,
-            b"NOTE" => Self::Note,
-            b"ORG" => Self::Org,
-            b"PHOTO" => Self::Photo,
-            b"PRODID" => Self::ProdId,
-            b"PROFILE" => Self::Profile,
-            b"PRONOUNS" => Self::Pronouns,
-            b"RELATED" => Self::Related,
-            b"REV" => Self::Rev,
-            b"ROLE" => Self::Role,
-            b"SOCIALPROFILE" => Self::SocialProfile,
-            b"SORT-STRING" => Self::SortString,
-            b"SOUND" => Self::Sound,
-            b"SOURCE" => Self::Source,
-            b"TEL" => Self::Tel,
-            b"TITLE" => Self::Title,
-            b"TZ" => Self::Tz,
-            b"UID" => Self::Uid,
-            b"URL" => Self::Url,
-            b"XML" => Self::Xml,
+        let kind = match (bytes.len(), first) {
+            (1, b'N') => Self::N,
+            (2, b'F') => Self::Fn,
+            (2, b'T') => Self::Tz,
+            (3, b'A') => Self::Adr,
+            (3, b'G') => Self::Geo,
+            (3, b'K') => Self::Key,
+            (3, b'O') => Self::Org,
+            (3, b'R') => Self::Rev,
+            (3, b'T') => Self::Tel,
+            (3, b'U') if second == b'I' => Self::Uid,
+            (3, b'U') => Self::Url,
+            (3, b'X') => Self::Xml,
+            (4, b'B') => Self::Bday,
+            (4, b'I') => Self::Impp,
+            (4, b'K') => Self::Kind,
+            (4, b'L') if second == b'A' => Self::Lang,
+            (4, b'L') => Self::Logo,
+            (4, b'N') if second == b'A' => Self::Name,
+            (4, b'N') => Self::Note,
+            (4, b'R') => Self::Role,
+            (5, b'A') => Self::Agent,
+            (5, b'C') => Self::Class,
+            (5, b'E') => Self::Email,
+            (5, b'F') => Self::FbUrl,
+            (5, b'L') => Self::Label,
+            (5, b'P') => Self::Photo,
+            (5, b'S') => Self::Sound,
+            (5, b'T') => Self::Title,
+            (6, b'C') => Self::CalUri,
+            (6, b'G') => Self::Gender,
+            (6, b'J') => Self::JsProp,
+            (6, b'M') if second == b'A' => Self::Mailer,
+            (6, b'M') => Self::Member,
+            (6, b'P') => Self::ProdId,
+            (6, b'S') => Self::Source,
+            (7, b'C') => Self::Created,
+            (7, b'P') => Self::Profile,
+            (7, b'R') => Self::Related,
+            (8, b'L') => Self::Language,
+            (8, b'N') => Self::Nickname,
+            (8, b'P') => Self::Pronouns,
+            (9, b'C') => Self::CalAdrUri,
+            (10, b'C') => Self::Categories,
+            (10, b'G') => Self::GramGender,
+            (11, b'A') => Self::Anniversary,
+            (11, b'S') => Self::SortString,
+            (12, b'C') => Self::ClientPidMap,
+            (13, b'S') => Self::SocialProfile,
             _ => return None,
-        })
+        };
+
+        kind.eq_ignore_ascii_case(name).then_some(kind)
     }
 }
 
@@ -480,10 +498,16 @@ impl ops::Deref for VcardPropKind {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use core::str::FromStr;
 
-    use alloc::{borrow::Cow, vec};
+    use alloc::{
+        borrow::Cow,
+        format,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
 
     use crate::{
         param::VcardParam,
@@ -532,6 +556,47 @@ mod tests {
         }
         assert_eq!(VcardPropKind::from_str("fn").ok(), Some(VcardPropKind::Fn));
         assert!(VcardPropKind::from_str("X-CUSTOM").is_err());
+    }
+
+    /// Names a lookup could confuse with `name`: recased, one byte off, cut
+    /// short and grown.
+    pub(crate) fn near_names(name: &str) -> Vec<String> {
+        let mut names = vec![
+            name.to_string(),
+            name.to_ascii_lowercase(),
+            name[..name.len() - 1].to_string(),
+            format!("{name}X"),
+            format!("X{name}"),
+        ];
+
+        for i in 0..name.len() {
+            for flip in [0x01, 0x20] {
+                let mut bytes = name.as_bytes().to_vec();
+                bytes[i] ^= flip;
+                names.extend(String::from_utf8(bytes));
+            }
+        }
+
+        names
+    }
+
+    /// The lookup picks one candidate by length and first bytes, then compares
+    /// it whole, so it must find what a search of every kind finds.
+    #[test]
+    fn finds_what_a_search_of_every_kind_finds() {
+        let search = |name: &str| {
+            VcardPropKind::ALL
+                .into_iter()
+                .find(|kind| kind.eq_ignore_ascii_case(name))
+        };
+
+        for kind in VcardPropKind::ALL {
+            for name in near_names(&kind) {
+                assert_eq!(VcardPropKind::from_name(&name), search(&name), "{name:?}");
+            }
+        }
+
+        assert_eq!(VcardPropKind::from_name(""), None);
     }
 
     #[test]

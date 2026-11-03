@@ -13,33 +13,40 @@ use crate::{
 
 impl<'v> VcardCodec<'v> for VcardAdr<'v> {
     fn decode(node: &'v VcardValueNode<'_>) -> Self {
-        let mut lists = node.decode_component_lists();
-        let mut next = || lists.next().unwrap_or_default();
-
-        VcardAdr {
-            po_box: next(),
-            extended: next(),
-            street: next(),
-            locality: next(),
-            region: next(),
-            postal_code: next(),
-            country: next(),
-            room: next(),
-            apartment: next(),
-            floor: next(),
-            street_number: next(),
-            street_name: next(),
-            building: next(),
-            block: next(),
-            subdistrict: next(),
-            district: next(),
-            landmark: next(),
-            direction: next(),
-        }
+        let mut adr = VcardAdr::default();
+        adr.decode_into(node);
+        adr
     }
 
     fn encode(&self, escaper: VcardEscaper) -> VcardValueNode<'static> {
         VcardValueOut::node(escaper, |out| self.emit(out))
+    }
+}
+
+impl<'v> VcardAdr<'v> {
+    /// Decode `node` into this address, whose components are empty, each
+    /// filled where it lies.
+    pub(crate) fn decode_into(&mut self, node: &'v VcardValueNode<'_>) {
+        node.decode_component_lists_into([
+            &mut self.po_box,
+            &mut self.extended,
+            &mut self.street,
+            &mut self.locality,
+            &mut self.region,
+            &mut self.postal_code,
+            &mut self.country,
+            &mut self.room,
+            &mut self.apartment,
+            &mut self.floor,
+            &mut self.street_number,
+            &mut self.street_name,
+            &mut self.building,
+            &mut self.block,
+            &mut self.subdistrict,
+            &mut self.district,
+            &mut self.landmark,
+            &mut self.direction,
+        ]);
     }
 }
 

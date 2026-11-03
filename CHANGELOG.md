@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - A decoded card's `Display` (and so `to_string`) writes the text straight from the model rather than through an encoded syntax tree, with the same output: 94% fewer cycles over the test corpus, 90% on a short card. Parsing, decoding and `to_bytes` take a further 12 to 20% fewer: a value is checked for UTF-8 once rather than once a comma-separated piece, an ASCII name, parameter or value becomes text without the check (the crate's first `unsafe` block, run under Miri), each fold continuation is read once, and a folded value is copied once on output.
 
+- Parsing takes a further 16 to 21% fewer cycles (18 to 25% through `VcardCst::parse`, which no longer reads its first line twice), parsing and decoding 6 to 13%, parsing and `to_bytes` 13 to 18%, a decoded card's `to_string` 3 to 11%, with the same output: a common content line and a decoded property are written straight into place rather than built aside and moved, the property, parameter and value kinds are found without copying the name, the line end and the value colon are found sixteen bytes at a time, and `to_bytes` copies a short piece without a call. A decoded card takes 16 to 18% fewer bytes.
+
 ### Fixed
 
 - Fixed `decode_base64` failing on a 2.1 or 3.0 inline value whose continuation lines carry more than the one folding space, which most 2.1 exporters write.

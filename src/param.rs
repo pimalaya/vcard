@@ -95,41 +95,43 @@ pub enum VcardParamKind {
 impl VcardParamKind {
     /// The known parameter for a wire name (case-insensitive).
     ///
-    /// The name is upper-cased into a stack copy and matched exactly, with no
-    /// allocation for an unknown one.
-    pub(crate) fn from_name(kind: &str) -> Option<Self> {
-        let mut upper = [0; 12];
-        let upper = upper.get_mut(..kind.len())?;
-        upper.copy_from_slice(kind.as_bytes());
-        upper.make_ascii_uppercase();
+    /// Found as [`VcardPropKind`](crate::prop::VcardPropKind)'s names are: one
+    /// candidate by length and first byte, compared whole, the name never
+    /// copied.
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        let bytes = name.as_bytes();
+        let first = bytes.first()?.to_ascii_uppercase();
+        let second = bytes.get(1).map_or(0, u8::to_ascii_uppercase);
 
-        Some(match &*upper {
-            b"ALTID" => Self::AltId,
-            b"AUTHOR" => Self::Author,
-            b"AUTHOR-NAME" => Self::AuthorName,
-            b"CALSCALE" => Self::CalScale,
-            b"CHARSET" => Self::Charset,
-            b"CREATED" => Self::Created,
-            b"DERIVED" => Self::Derived,
-            b"ENCODING" => Self::Encoding,
-            b"GEO" => Self::Geo,
-            b"JSPTR" => Self::Jsptr,
-            b"LABEL" => Self::Label,
-            b"LANGUAGE" => Self::Language,
-            b"MEDIATYPE" => Self::MediaType,
-            b"PHONETIC" => Self::Phonetic,
-            b"PID" => Self::Pid,
-            b"PREF" => Self::Pref,
-            b"PROP-ID" => Self::PropId,
-            b"SCRIPT" => Self::Script,
-            b"SERVICE-TYPE" => Self::ServiceType,
-            b"SORT-AS" => Self::SortAs,
-            b"TYPE" => Self::Type,
-            b"TZ" => Self::Tz,
-            b"USERNAME" => Self::Username,
-            b"VALUE" => Self::Value,
+        let kind = match (bytes.len(), first) {
+            (2, b'T') => Self::Tz,
+            (3, b'G') => Self::Geo,
+            (3, b'P') => Self::Pid,
+            (4, b'P') => Self::Pref,
+            (4, b'T') => Self::Type,
+            (5, b'A') => Self::AltId,
+            (5, b'J') => Self::Jsptr,
+            (5, b'L') => Self::Label,
+            (5, b'V') => Self::Value,
+            (6, b'A') => Self::Author,
+            (6, b'S') => Self::Script,
+            (7, b'C') if second == b'H' => Self::Charset,
+            (7, b'C') => Self::Created,
+            (7, b'D') => Self::Derived,
+            (7, b'P') => Self::PropId,
+            (7, b'S') => Self::SortAs,
+            (8, b'C') => Self::CalScale,
+            (8, b'E') => Self::Encoding,
+            (8, b'L') => Self::Language,
+            (8, b'P') => Self::Phonetic,
+            (8, b'U') => Self::Username,
+            (9, b'M') => Self::MediaType,
+            (11, b'A') => Self::AuthorName,
+            (12, b'S') => Self::ServiceType,
             _ => return None,
-        })
+        };
+
+        kind.eq_ignore_ascii_case(name).then_some(kind)
     }
 }
 
@@ -285,7 +287,7 @@ pub(crate) const COMMON_PARAMS: &[VcardParamKind] = &[
 mod tests {
     use core::str::FromStr;
 
-    use crate::param::VcardParamKind;
+    use crate::{param::VcardParamKind, prop::tests::near_names};
 
     #[test]
     fn round_trips_every_kind_through_its_wire_name() {
@@ -301,5 +303,49 @@ mod tests {
             Some(VcardParamKind::Type),
         );
         assert!(VcardParamKind::from_str("X-CUSTOM").is_err());
+    }
+
+    /// The lookup picks one candidate by length and first bytes, then compares
+    /// it whole, so it must find what a search of every kind finds.
+    #[test]
+    fn finds_what_a_search_of_every_kind_finds() {
+        use VcardParamKind::*;
+
+        let all = [
+            AltId,
+            Author,
+            AuthorName,
+            CalScale,
+            Charset,
+            Created,
+            Derived,
+            Encoding,
+            Geo,
+            Jsptr,
+            Label,
+            Language,
+            MediaType,
+            Phonetic,
+            Pid,
+            Pref,
+            PropId,
+            Script,
+            ServiceType,
+            SortAs,
+            Type,
+            Tz,
+            Username,
+            Value,
+        ];
+
+        let search = |name: &str| all.into_iter().find(|kind| kind.eq_ignore_ascii_case(name));
+
+        for kind in all {
+            for name in near_names(&kind) {
+                assert_eq!(VcardParamKind::from_name(&name), search(&name), "{name:?}");
+            }
+        }
+
+        assert_eq!(VcardParamKind::from_name(""), None);
     }
 }

@@ -22,9 +22,9 @@ use core::{fmt, mem, str};
 use alloc::{borrow::Cow, string::String, vec, vec::Vec};
 
 use crate::tree::{
-    codec::{mode::VcardEscaper, unescape::text},
+    codec::{escape::position, mode::VcardEscaper, unescape::text},
     error::VcardParseError,
-    leaf::{VcardLeaf, VcardValueLeaf},
+    leaf::{VcardLeaf, VcardValueLeaf, put},
     param::{lens::VcardParamLens, node::VcardParamNode},
     value::node::VcardValueNode,
     wire::VcardWire,
@@ -87,6 +87,54 @@ impl<'a> VcardLine<'a> {
     /// `slot` must be an [`empty`](Self::empty) line: its fields are written
     /// over without being dropped, there being nothing in them to free.
     pub(crate) fn take_into(rest: &'a [u8], slot: &mut Self) -> Result<&'a [u8], VcardParseError> {
+        let (first, eol, tail) = physical_line(rest);
+
+        // NOTE: The common line is one physical line, neither blank nor
+        // indented, soft-broken or folded, so its wire shape is its logical
+        // shape. It is written into the slot field by field, every value
+        // passed in registers: a line staged in parts and moved into place
+        // waits on every part's stores.
+        let plain = first
+            .first()
+            .is_some_and(|&byte| !matches!(byte, b' ' | b'\t' | b'\r'))
+            && !starts_with_wsp(tail)
+            && !(first.ends_with(b"=") && head_is_quoted_printable(first));
+
+        if !plain {
+            return Self::take_wired(rest, slot);
+        }
+
+        let (colon, semi) = match head_marks(rest, first.len()) {
+            Some((colon, semi)) => (colon, Some(semi)),
+            None => match value_colon(first) {
+                Some(colon) => (colon, None),
+                None => return Err(VcardParseError::MissingPropertyColon(lossy(first))),
+            },
+        };
+
+        let head = &first[..colon];
+
+        let Some(head_str) = text(head) else {
+            return Err(VcardParseError::NonUtf8Header(lossy(head)));
+        };
+
+        let semi = semi.unwrap_or_else(|| param_semicolon(head_str));
+        let name = take_params(head_str, semi, &mut slot.params);
+
+        // NOTE: The empty line's fields hold no allocation, so forgetting
+        // them saves a drop per field.
+        mem::forget(mem::replace(&mut slot.name, VcardLeaf::from(name)));
+        slot.value.hold(&first[colon + 1..]);
+        mem::forget(mem::replace(&mut slot.eol, eol_leaf(eol)));
+        slot.wire.seal(first.len());
+
+        Ok(tail)
+    }
+
+    /// [`take_into`](Self::take_into) for a line whose wire shape is not its
+    /// logical shape: blank lines before it, an indented first line, folds
+    /// or soft breaks, each recorded on its wire shape.
+    fn take_wired(rest: &'a [u8], slot: &mut Self) -> Result<&'a [u8], VcardParseError> {
         // NOTE: Everything this tokeniser resolves is recorded here, so
         // serialization can put it back.
         let mut wire = VcardWire::default();
@@ -310,7 +358,7 @@ impl<'a> VcardLine<'a> {
     pub(crate) fn write_bytes(&self, out: &mut Vec<u8>) {
         let start = out.len();
 
-        out.extend_from_slice(self.name.get().as_bytes());
+        put(out, self.name.get().as_bytes());
 
         for param in &self.params {
             out.push(b';');
@@ -327,7 +375,7 @@ impl<'a> VcardLine<'a> {
             }
         }
 
-        out.extend_from_slice(self.eol.get().as_bytes());
+        put(out, self.eol.get().as_bytes());
     }
 
     /// The first parameter of type `P`, decoded.
@@ -401,12 +449,11 @@ impl<'a> VcardLine<'a> {
 
         wire.seal(base + value.len());
 
-        let (name, params) = split_head(head_str);
+        let name = take_params(head_str, param_semicolon(head_str), &mut slot.params);
 
         // NOTE: The empty line's fields hold no allocation, so forgetting
         // them saves a drop per field, the value's an out-of-line call.
         mem::forget(mem::replace(&mut slot.name, VcardLeaf::from(name)));
-        mem::forget(mem::replace(&mut slot.params, params));
         mem::forget(mem::replace(
             &mut slot.value,
             VcardValueNode::parse_cow(value),
@@ -468,22 +515,55 @@ fn push_content<'a>(
     logical.extend_from_slice(kept);
 }
 
-/// Split a head into its name and its `;`-separated parameters.
-fn split_head(head: &str) -> (&str, Vec<VcardParamNode<'_>>) {
-    let Some(semi) = param_semicolon(head) else {
-        return (head, Vec::new());
+/// Split a head's `;`-separated parameters into `params`, each built where it
+/// lands, and return its name, `semi` being the head's
+/// [first semicolon](param_semicolon).
+fn take_params<'a>(
+    head: &'a str,
+    semi: Option<usize>,
+    params: &mut Vec<VcardParamNode<'a>>,
+) -> &'a str {
+    let Some(semi) = semi else {
+        return head;
     };
 
-    let mut params = Vec::new();
     let mut rest = Some(&head[semi + 1..]);
 
     while let Some(after) = rest {
-        let (param, tail) = VcardParamNode::take(after);
-        params.push(param);
-        rest = tail;
+        rest = VcardParamNode::take_into(after, params);
     }
 
-    (&head[..semi], params)
+    &head[..semi]
+}
+
+/// The value colon of the line at the start of `rest`, the input from the line
+/// on, and the semicolon ending its name, if any, when no quote comes before
+/// the colon: the head has no quoted value then, so the first `:` is the
+/// value colon and the first `;` before it ends the name. `None` otherwise,
+/// for [`value_colon`] and [`param_semicolon`] to settle.
+///
+/// `len` is the length of the line's first physical line. Both bytes are found
+/// sixteen at a time over the rest of the input, which holds whole blocks past
+/// a short line, rather than byte by byte.
+#[inline(always)]
+fn head_marks(rest: &[u8], len: usize) -> Option<(usize, Option<usize>)> {
+    let at = position(rest, |byte| {
+        (byte == b':') | (byte == b';') | (byte == b'"')
+    })?;
+
+    if at >= len {
+        return None;
+    }
+
+    match rest[at] {
+        b':' => Some((at, None)),
+        b';' => {
+            let after = &rest[at + 1..];
+            let colon = at + 1 + position(after, |byte| (byte == b':') | (byte == b'"'))?;
+            (colon < len && rest[colon] == b':').then_some((colon, Some(at)))
+        }
+        _ => None,
+    }
 }
 
 /// The index of the `:` separating a line's head from its value.
@@ -530,8 +610,12 @@ fn param_semicolon(head: &str) -> Option<usize> {
 /// Split the first physical line off `rest`: its content (without the line
 /// ending), its line ending, and the remaining input. A final line with no
 /// trailing break is taken whole, with an empty ending.
+///
+/// The line feed is found sixteen bytes at a time by an inlined scan over the
+/// rest of the input: a call per line paid more than it searched, the lines
+/// running some 25 bytes.
 fn physical_line(rest: &[u8]) -> (&[u8], &[u8], &[u8]) {
-    let Some(lf) = memchr::memchr(b'\n', rest) else {
+    let Some(lf) = position(rest, |byte| byte == b'\n') else {
         return (rest, b"", b"");
     };
 

@@ -33,7 +33,7 @@ use crate::{
     tree::{
         codec::{
             VcardCodec,
-            escape::{escape_into, escape_param, escape_with},
+            escape::{escape_into, escape_param, escape_param_into, escape_with},
             mode::VcardEscaper,
         },
         cst::VcardCst,
@@ -156,7 +156,7 @@ impl VcardParam<'_> {
 
         for (i, value) in values.iter().enumerate() {
             text.push(if i == 0 { '=' } else { ',' });
-            text.push_str(&escape_param(value, escaper));
+            escape_param_into(value, escaper, text);
         }
     }
 

@@ -112,36 +112,39 @@ impl VcardValueKind {
     /// it maps every wire spelling (and a few aliases) onto a model kind,
     /// leaving membership checks to a later validation tier.
     ///
-    /// The name is upper-cased into a stack copy and matched exactly, with no
-    /// allocation for an unknown one.
-    pub(crate) fn from_name(kind: &str) -> Option<Self> {
-        let mut upper = [0; 16];
-        let upper = upper.get_mut(..kind.len())?;
-        upper.copy_from_slice(kind.as_bytes());
-        upper.make_ascii_uppercase();
+    /// Found as [`VcardPropKind`](crate::prop::VcardPropKind)'s names are: one
+    /// spelling by length and first byte, compared whole, the name never
+    /// copied.
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        let bytes = name.as_bytes();
+        let first = bytes.first()?.to_ascii_uppercase();
+        let second = bytes.get(1).map_or(0, u8::to_ascii_uppercase);
+        let last = bytes.last().map_or(0, u8::to_ascii_uppercase);
 
-        Some(match &*upper {
-            b"ADR" => Self::Adr,
-            b"B" => Self::Binary,
-            b"BINARY" => Self::Binary,
-            b"CLIENTPIDMAP" => Self::ClientPidMap,
-            b"DATE" => Self::DateAndOrTime,
-            b"DATE-AND-OR-TIME" => Self::DateAndOrTime,
-            b"DATE-TIME" => Self::DateAndOrTime,
-            b"GENDER" => Self::Gender,
-            b"GEO" => Self::Geo,
-            b"LANGUAGE-TAG" => Self::LanguageTag,
-            b"N" => Self::N,
-            b"ORG" => Self::Org,
-            b"TEXT" => Self::Text,
-            b"TEXT-LIST" => Self::TextList,
-            b"TIME" => Self::DateAndOrTime,
-            b"TIMESTAMP" => Self::Timestamp,
-            b"URI" => Self::Uri,
-            b"URL" => Self::Uri,
-            b"UTC-OFFSET" => Self::UtcOffset,
+        let (spelling, kind) = match (bytes.len(), first) {
+            (1, b'B') => ("B", Self::Binary),
+            (1, b'N') => ("N", Self::N),
+            (3, b'A') => ("ADR", Self::Adr),
+            (3, b'G') => ("GEO", Self::Geo),
+            (3, b'O') => ("ORG", Self::Org),
+            (3, b'U') if last == b'I' => ("URI", Self::Uri),
+            (3, b'U') => ("URL", Self::Uri),
+            (4, b'D') => ("DATE", Self::DateAndOrTime),
+            (4, b'T') if second == b'E' => ("TEXT", Self::Text),
+            (4, b'T') => ("TIME", Self::DateAndOrTime),
+            (6, b'B') => ("BINARY", Self::Binary),
+            (6, b'G') => ("GENDER", Self::Gender),
+            (9, b'D') => ("DATE-TIME", Self::DateAndOrTime),
+            (9, b'T') if second == b'E' => ("TEXT-LIST", Self::TextList),
+            (9, b'T') => ("TIMESTAMP", Self::Timestamp),
+            (10, b'U') => ("UTC-OFFSET", Self::UtcOffset),
+            (12, b'C') => ("CLIENTPIDMAP", Self::ClientPidMap),
+            (12, b'L') => ("LANGUAGE-TAG", Self::LanguageTag),
+            (16, b'D') => ("DATE-AND-OR-TIME", Self::DateAndOrTime),
             _ => return None,
-        })
+        };
+
+        spelling.eq_ignore_ascii_case(name).then_some(kind)
     }
 }
 
@@ -280,7 +283,53 @@ pub struct VcardValueUnknown<'a> {
 mod tests {
     use core::str::FromStr;
 
-    use crate::value::{VcardValue, VcardValueKind, VcardValueUnknown, text::VcardText};
+    use crate::{
+        prop::tests::near_names,
+        value::{VcardValue, VcardValueKind, VcardValueUnknown, text::VcardText},
+    };
+
+    /// The lookup picks one spelling by length and first bytes, then compares
+    /// it whole, so it must find what a search of every spelling finds.
+    #[test]
+    fn finds_what_a_search_of_every_spelling_finds() {
+        use crate::value::VcardValueKind::*;
+
+        let all = [
+            ("ADR", Adr),
+            ("B", Binary),
+            ("BINARY", Binary),
+            ("CLIENTPIDMAP", ClientPidMap),
+            ("DATE", DateAndOrTime),
+            ("DATE-AND-OR-TIME", DateAndOrTime),
+            ("DATE-TIME", DateAndOrTime),
+            ("GENDER", Gender),
+            ("GEO", Geo),
+            ("LANGUAGE-TAG", LanguageTag),
+            ("N", N),
+            ("ORG", Org),
+            ("TEXT", Text),
+            ("TEXT-LIST", TextList),
+            ("TIME", DateAndOrTime),
+            ("TIMESTAMP", Timestamp),
+            ("URI", Uri),
+            ("URL", Uri),
+            ("UTC-OFFSET", UtcOffset),
+        ];
+
+        let search = |name: &str| {
+            all.into_iter()
+                .find(|(spelling, _)| spelling.eq_ignore_ascii_case(name))
+                .map(|(_, kind)| kind)
+        };
+
+        for (spelling, _) in all {
+            for name in near_names(spelling) {
+                assert_eq!(VcardValueKind::from_name(&name), search(&name), "{name:?}");
+            }
+        }
+
+        assert_eq!(VcardValueKind::from_name(""), None);
+    }
 
     #[test]
     fn empty_is_the_inverse_of_kind() {

@@ -15,13 +15,18 @@
 //! (`QUOTED-PRINTABLE`, `BASE64`) and `CHARSET` are left to the feature
 //! helpers.
 
+use core::mem;
+
 use alloc::{borrow::Cow, boxed::Box, vec::Vec};
 
 use crate::{
     param::{VcardParam, VcardParamKind},
     prop::{VcardProp, VcardPropKind, VcardPropName, spec::prop_spec},
     tree::{
-        codec::{VcardCodec, unescape::unescape_param},
+        codec::{
+            VcardCodec,
+            unescape::{has_carets, param_text, unescape_param},
+        },
         cst::VcardCst,
         line::VcardLine,
         param::node::VcardParamNode,
@@ -52,21 +57,20 @@ impl VcardCst<'_> {
         let version = self.version();
 
         // NOTE: VERSION is held as the card's indicator, not as a free
-        // property. The runs between VERSION lines are decoded slice by slice
-        // rather than through a filter: an exact-length extend writes each
-        // property in place, where a filtered one copies it twice.
+        // property. Every other line is decoded into its slot, grown by a
+        // constant empty property: a property decoded aside and moved in
+        // waits on the stores of every part it was built from.
         let mut properties = Vec::with_capacity(self.props.len());
-        let mut rest = &self.props[..];
 
-        while let Some(i) = rest
-            .iter()
-            .position(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
-        {
-            properties.extend(rest[..i].iter().map(|line| line.decode(version)));
-            rest = &rest[i + 1..];
+        for line in &self.props {
+            if line.name.get().eq_ignore_ascii_case("VERSION") {
+                continue;
+            }
+
+            properties.resize_with(properties.len() + 1, VcardProp::empty);
+            let last = properties.len() - 1;
+            line.decode_into(version, &mut properties[last]);
         }
-
-        properties.extend(rest.iter().map(|line| line.decode(version)));
 
         Vcard {
             version,
@@ -80,28 +84,52 @@ impl VcardLine<'_> {
     /// value through the spec (see `decode_value`); an unknown one keeps its
     /// raw components so it round-trips.
     pub fn decode(&self, version: VcardVersion) -> VcardProp<'_> {
-        let (group, name) = match self.name.get().split_once('.') {
-            Some((group, name)) => (Some(group), name),
-            None => (None, self.name.get()),
-        };
+        let mut prop = VcardProp::empty();
+        self.decode_into(version, &mut prop);
+        prop
+    }
 
-        let params = self.params.iter().map(VcardParamNode::decode).collect();
+    /// [`decode`](Self::decode) the line into `slot`, an
+    /// [empty](VcardProp::empty) property whose fields are written over
+    /// without being dropped, there being nothing in them to free.
+    fn decode_into<'s>(&'s self, version: VcardVersion, slot: &mut VcardProp<'s>) {
+        // NOTE: The dot found by a byte search, a char pattern's searcher
+        // confirming its hit with a call to `bcmp`.
+        let full = self.name.get();
+        let (group, name) = match full.bytes().position(|byte| byte == b'.') {
+            Some(dot) => (Some(&full[..dot]), &full[dot + 1..]),
+            None => (None, full),
+        };
 
         let kind = VcardPropKind::from_name(name);
 
-        let value = match kind {
-            Some(prop) => self.decode_value(prop, version),
-            None => VcardValue::Unknown(VcardValueUnknown::decode(&self.value)),
-        };
-
-        VcardProp {
-            group: group.map(Cow::Borrowed),
-            name: match kind {
+        mem::forget(mem::replace(&mut slot.group, group.map(Cow::Borrowed)));
+        mem::forget(mem::replace(
+            &mut slot.name,
+            match kind {
                 Some(kind) => VcardPropName::Kind(kind),
                 None => VcardPropName::Unknown(Cow::Borrowed(name)),
             },
-            params,
-            value,
+        ));
+
+        // NOTE: Sized first: an empty list extended reserves room for four.
+        slot.params.reserve_exact(self.params.len());
+        slot.params
+            .extend(self.params.iter().map(VcardParamNode::decode));
+
+        match kind {
+            Some(prop) => {
+                let declared = self.declared_value_kind();
+                let kind = (prop_spec(prop).value)(version, declared);
+                decode_value_kind_into(kind, &self.value, &mut slot.value);
+            }
+            // NOTE: The empty property's value is an empty unknown one.
+            None => {
+                if let VcardValue::Unknown(unknown) = &mut slot.value {
+                    self.value
+                        .decode_component_lists_onto(&mut unknown.components);
+                }
+            }
         }
     }
 
@@ -152,24 +180,86 @@ impl VcardLine<'_> {
 /// [`VcardCodec`]. No version is needed: the one version-specific shape (the
 /// `GEO` pair separator) is resolved from the node's escaper inside its codec.
 fn decode_value_kind<'v>(kind: VcardValueKind, node: &'v VcardValueNode<'_>) -> VcardValue<'v> {
+    let mut value = VcardValue::Unknown(VcardValueUnknown::default());
+    decode_value_kind_into(kind, node, &mut value);
+    value
+}
+
+/// [`decode_value_kind`] into `slot`, a value holding nothing, written over
+/// without being dropped.
+///
+/// Each arm stores its own value: one value matched out of the arms and then
+/// moved is copied through memory, which waits on the stores of its parts.
+/// The kinds holding one text read it inline, once for all of them, so it
+/// is stored from registers.
+fn decode_value_kind_into<'v>(
+    kind: VcardValueKind,
+    node: &'v VcardValueNode<'_>,
+    slot: &mut VcardValue<'v>,
+) {
     match kind {
-        VcardValueKind::Text => VcardValue::Text(VcardText::decode(node)),
-        VcardValueKind::TextList => VcardValue::TextList(VcardTextList::decode(node)),
-        VcardValueKind::Uri => VcardValue::Uri(VcardUri::decode(node)),
-        VcardValueKind::DateAndOrTime => {
-            VcardValue::DateAndOrTime(VcardDateAndOrTime::decode(node))
+        VcardValueKind::Text
+        | VcardValueKind::Uri
+        | VcardValueKind::DateAndOrTime
+        | VcardValueKind::Timestamp
+        | VcardValueKind::LanguageTag
+        | VcardValueKind::UtcOffset
+        | VcardValueKind::Binary => match node.plain() {
+            Some(text) => put(slot, text_value(kind, Cow::Borrowed(text))),
+            None => decode_text_into(kind, node, slot),
+        },
+        VcardValueKind::TextList => put(slot, VcardValue::TextList(VcardTextList::decode(node))),
+        VcardValueKind::N => {
+            put(slot, VcardValue::N(VcardN::default()));
+
+            if let VcardValue::N(n) = slot {
+                n.decode_into(node);
+            }
         }
-        VcardValueKind::Timestamp => VcardValue::Timestamp(VcardTimestamp::decode(node)),
-        VcardValueKind::LanguageTag => VcardValue::LanguageTag(VcardLanguageTag::decode(node)),
-        VcardValueKind::UtcOffset => VcardValue::UtcOffset(VcardUtcOffset::decode(node)),
-        VcardValueKind::N => VcardValue::N(VcardN::decode(node)),
-        VcardValueKind::Adr => VcardValue::Adr(Box::new(VcardAdr::decode(node))),
-        VcardValueKind::Gender => VcardValue::Gender(VcardGender::decode(node)),
-        VcardValueKind::Org => VcardValue::Org(VcardOrg::decode(node)),
-        VcardValueKind::ClientPidMap => VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
-        VcardValueKind::Geo => VcardValue::Geo(VcardGeo::decode(node)),
-        VcardValueKind::Binary => VcardValue::Binary(VcardBinary::decode(node)),
+        VcardValueKind::Adr => {
+            let mut adr = Box::new(VcardAdr::default());
+            adr.decode_into(node);
+            put(slot, VcardValue::Adr(adr));
+        }
+        VcardValueKind::Gender => put(slot, VcardValue::Gender(VcardGender::decode(node))),
+        VcardValueKind::Org => put(slot, VcardValue::Org(VcardOrg::decode(node))),
+        VcardValueKind::ClientPidMap => put(
+            slot,
+            VcardValue::ClientPidMap(VcardClientPidMap::decode(node)),
+        ),
+        VcardValueKind::Geo => put(slot, VcardValue::Geo(VcardGeo::decode(node))),
     }
+}
+
+/// [`decode_value_kind_into`] for a kind holding one text that is not
+/// [plain](VcardValueNode::plain), out of line: a text from either arm is
+/// merged into one, copied through memory.
+fn decode_text_into<'v>(
+    kind: VcardValueKind,
+    node: &'v VcardValueNode<'_>,
+    slot: &mut VcardValue<'v>,
+) {
+    put(slot, text_value(kind, node.decode()));
+}
+
+/// The value of a kind holding one text.
+#[inline(always)]
+fn text_value(kind: VcardValueKind, text: Cow<'_, str>) -> VcardValue<'_> {
+    match kind {
+        VcardValueKind::Text => VcardValue::Text(VcardText(text)),
+        VcardValueKind::Uri => VcardValue::Uri(VcardUri(text)),
+        VcardValueKind::DateAndOrTime => VcardValue::DateAndOrTime(VcardDateAndOrTime(text)),
+        VcardValueKind::Timestamp => VcardValue::Timestamp(VcardTimestamp(text)),
+        VcardValueKind::LanguageTag => VcardValue::LanguageTag(VcardLanguageTag(text)),
+        VcardValueKind::UtcOffset => VcardValue::UtcOffset(VcardUtcOffset(text)),
+        _ => VcardValue::Binary(VcardBinary::Base64(text)),
+    }
+}
+
+/// Write `value` over `slot`, a value holding nothing, without dropping it.
+#[inline(always)]
+fn put<'v>(slot: &mut VcardValue<'v>, value: VcardValue<'v>) {
+    mem::forget(mem::replace(slot, value));
 }
 
 impl VcardParamNode<'_> {
@@ -184,49 +274,75 @@ impl VcardParamNode<'_> {
             };
         };
 
+        // NOTE: A first value with no caret to resolve is borrowed, and one
+        // that holds a caret is decoded out of line: a value from either arm
+        // is merged into one, copied through memory.
+        let text = self
+            .values
+            .first()
+            .map_or("", |value| param_text(value.get(), self.escaper));
+
+        if has_carets(text, self.escaper) {
+            return self.decode_carets(kind);
+        }
+
+        self.typed(kind, Cow::Borrowed(text))
+    }
+
+    /// [`decode`](Self::decode) a parameter whose first value holds a caret.
+    fn decode_carets(&self, kind: VcardParamKind) -> VcardParam<'_> {
+        let text = self.values.first().map_or("", |value| value.get());
+        self.typed(kind, unescape_param(text, self.escaper))
+    }
+
+    /// The parameter of `kind`: a list kind holds every value, a scalar one
+    /// `value`, its first value decoded.
+    #[inline(always)]
+    fn typed<'s>(&'s self, kind: VcardParamKind, value: Cow<'s, str>) -> VcardParam<'s> {
         match kind {
-            VcardParamKind::Language => VcardParam::Language(self.scalar()),
-            VcardParamKind::Charset => VcardParam::Charset(self.scalar()),
-            VcardParamKind::Encoding => VcardParam::Encoding(self.scalar()),
-            VcardParamKind::Value => VcardParam::Value(self.scalar()),
-            VcardParamKind::Pref => VcardParam::Pref(self.scalar()),
-            VcardParamKind::AltId => VcardParam::AltId(self.scalar()),
             VcardParamKind::Pid => VcardParam::Pid(self.list()),
             VcardParamKind::Type => VcardParam::Type(self.list()),
-            VcardParamKind::MediaType => VcardParam::MediaType(self.scalar()),
-            VcardParamKind::CalScale => VcardParam::CalScale(self.scalar()),
             VcardParamKind::SortAs => VcardParam::SortAs(self.list()),
-            VcardParamKind::Geo => VcardParam::Geo(self.scalar()),
-            VcardParamKind::Tz => VcardParam::Tz(self.scalar()),
-            VcardParamKind::Label => VcardParam::Label(self.scalar()),
-            VcardParamKind::Author => VcardParam::Author(self.scalar()),
-            VcardParamKind::AuthorName => VcardParam::AuthorName(self.scalar()),
-            VcardParamKind::Created => VcardParam::Created(self.scalar()),
-            VcardParamKind::Derived => VcardParam::Derived(self.scalar()),
-            VcardParamKind::Jsptr => VcardParam::Jsptr(self.scalar()),
-            VcardParamKind::Phonetic => VcardParam::Phonetic(self.scalar()),
-            VcardParamKind::PropId => VcardParam::PropId(self.scalar()),
-            VcardParamKind::Script => VcardParam::Script(self.scalar()),
-            VcardParamKind::ServiceType => VcardParam::ServiceType(self.scalar()),
-            VcardParamKind::Username => VcardParam::Username(self.scalar()),
+            VcardParamKind::Language => VcardParam::Language(value),
+            VcardParamKind::Charset => VcardParam::Charset(value),
+            VcardParamKind::Encoding => VcardParam::Encoding(value),
+            VcardParamKind::Value => VcardParam::Value(value),
+            VcardParamKind::Pref => VcardParam::Pref(value),
+            VcardParamKind::AltId => VcardParam::AltId(value),
+            VcardParamKind::MediaType => VcardParam::MediaType(value),
+            VcardParamKind::CalScale => VcardParam::CalScale(value),
+            VcardParamKind::Geo => VcardParam::Geo(value),
+            VcardParamKind::Tz => VcardParam::Tz(value),
+            VcardParamKind::Label => VcardParam::Label(value),
+            VcardParamKind::Author => VcardParam::Author(value),
+            VcardParamKind::AuthorName => VcardParam::AuthorName(value),
+            VcardParamKind::Created => VcardParam::Created(value),
+            VcardParamKind::Derived => VcardParam::Derived(value),
+            VcardParamKind::Jsptr => VcardParam::Jsptr(value),
+            VcardParamKind::Phonetic => VcardParam::Phonetic(value),
+            VcardParamKind::PropId => VcardParam::PropId(value),
+            VcardParamKind::Script => VcardParam::Script(value),
+            VcardParamKind::ServiceType => VcardParam::ServiceType(value),
+            VcardParamKind::Username => VcardParam::Username(value),
         }
     }
 
-    /// The parameter's first value, decoded by the RFC 6868 rules (empty when
-    /// there is none).
-    fn scalar(&self) -> Cow<'_, str> {
-        self.values
-            .first()
-            .map(|v| unescape_param(v.get(), self.escaper))
-            .unwrap_or(Cow::Borrowed(""))
-    }
-
-    /// The parameter's values, decoded by the RFC 6868 rules.
+    /// The parameter's values, decoded by the RFC 6868 rules, each pushed by
+    /// its own arm for the reason [`decode`](Self::decode) gives.
     fn list(&self) -> Vec<Cow<'_, str>> {
-        self.values
-            .iter()
-            .map(|v| unescape_param(v.get(), self.escaper))
-            .collect()
+        let mut values = Vec::with_capacity(self.values.len());
+
+        for value in &self.values {
+            let text = param_text(value.get(), self.escaper);
+
+            if has_carets(text, self.escaper) {
+                values.push(unescape_param(value.get(), self.escaper));
+            } else {
+                values.push(Cow::Borrowed(text));
+            }
+        }
+
+        values
     }
 }
 

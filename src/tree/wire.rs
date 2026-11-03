@@ -30,6 +30,8 @@
 
 use alloc::{borrow::Cow, vec::Vec};
 
+use crate::tree::leaf::put;
+
 /// One piece of wire the parser resolved away.
 #[derive(Clone, Debug)]
 pub enum VcardWirePart<'a> {
@@ -225,7 +227,7 @@ impl<'a> VcardWire<'a> {
     /// (a fold before the colon) takes the general way.
     pub(crate) fn lay_out_value(&self, out: &mut Vec<u8>, start: usize, value: &[u8]) {
         if self.parts.is_empty() {
-            return out.extend_from_slice(value);
+            return put(out, value);
         }
 
         let head = out.len() - start;

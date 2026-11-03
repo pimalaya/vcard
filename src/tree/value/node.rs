@@ -18,7 +18,7 @@
 //! back lives on this type, applying the rules of the sibling
 //! [`mode`](crate::tree::codec::mode) codec.
 
-use core::{fmt, iter, ops::Range, slice, str};
+use core::{fmt, iter, mem, ops::Range, slice, str};
 
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
@@ -26,7 +26,7 @@ use crate::tree::{
     codec::{
         encode::{encode_bytes_component, encode_component, encode_leaf},
         mode::VcardEscaper,
-        unescape::{text, unescape_bytes, unescape_text, unescape_with},
+        unescape::{text, unescape_bytes, unescape_text, unescape_text_from, unescape_with},
     },
     leaf::VcardValueLeaf,
 };
@@ -67,6 +67,13 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
+    /// Hold `value` unsplit and borrowed, as [`parse`](Self::parse) does, in
+    /// a node that holds nothing: what it held is not dropped.
+    #[inline(always)]
+    pub(crate) fn hold(&mut self, value: &'a [u8]) {
+        mem::forget(self.raw.replace(Cow::Borrowed(value)));
+    }
+
     /// Build a value node from already-split components (the model encode
     /// path); there is no `raw`, so the components are the source of truth.
     pub(crate) const fn from_components(
@@ -94,17 +101,34 @@ impl<'a> VcardValueNode<'a> {
     /// The read to reach for. A value the specification gives no structure of
     /// its own separates nothing with its semicolon (RFC 6350 4.2), so naming
     /// a component truncates `data:text/plain;base64,AAA` at the media type.
+    ///
+    /// Inlined, so a value with nothing to unescape comes back in registers:
+    /// a `Cow` returned through memory stalls the copy that moves it into
+    /// place.
+    #[inline(always)]
     pub fn decode(&self) -> Cow<'_, str> {
         match &self.raw {
             Some(raw) => match text(raw) {
                 Some(text) => unescape_text(text, self.escaper),
                 None => unescape_with(raw, self.escaper),
             },
-            None => {
-                let joined = self.joined_bytes();
-                Cow::Owned(unescape_with(&joined, self.escaper).into_owned())
-            }
+            None => self.decode_joined(),
         }
+    }
+
+    /// The value as text when it is unsplit and holds no backslash, so
+    /// [`decode`](Self::decode) would borrow it whole.
+    #[inline(always)]
+    pub(crate) fn plain(&self) -> Option<&str> {
+        let raw = self.raw.as_deref()?;
+        let text = text(raw)?;
+        memchr::memchr(b'\\', raw).is_none().then_some(text)
+    }
+
+    /// [`decode`](Self::decode) of a split value.
+    fn decode_joined(&self) -> Cow<'_, str> {
+        let joined = self.joined_bytes();
+        Cow::Owned(unescape_with(&joined, self.escaper).into_owned())
     }
 
     /// Decode the whole value as its `,`-separated list, `;` kept literal.
@@ -117,11 +141,15 @@ impl<'a> VcardValueNode<'a> {
         match &self.raw {
             Some(raw) => match text(raw) {
                 Some(text) if memchr::memchr(b'\\', raw).is_none() => {
-                    values.extend(text.split(',').map(Cow::Borrowed));
+                    values.reserve_exact(items_in(text));
+                    values.extend(plain_pieces(text, b',').map(Cow::Borrowed));
                 }
-                Some(text) => values.extend(
-                    text_pieces(text, b',').map(|value| unescape_text(value, self.escaper)),
-                ),
+                Some(text) => {
+                    values.reserve_exact(items_in(text));
+                    values.extend(
+                        text_pieces(text, b',').map(|value| unescape_text(value, self.escaper)),
+                    );
+                }
                 None => split_on(raw, b',', |value| {
                     values.push(unescape_with(value, self.escaper))
                 }),
@@ -196,13 +224,6 @@ impl<'a> VcardValueNode<'a> {
             .map(|component| self.decode_whole(component))
     }
 
-    /// Every `;`-component decoded as by
-    /// [`decode_component_list`](Self::decode_component_list), in one pass.
-    pub(crate) fn decode_component_lists(&self) -> impl Iterator<Item = Vec<Cow<'_, str>>> {
-        self.components()
-            .map(|component| self.decode_items(component))
-    }
-
     /// A component as one string, its `,` kept literal.
     fn decode_whole<'s>(&'s self, component: Component<'s, 'a>) -> Cow<'s, str> {
         match component {
@@ -235,23 +256,84 @@ impl<'a> VcardValueNode<'a> {
         }
     }
 
+    /// Every `;`-component decoded as by
+    /// [`decode_component_list`](Self::decode_component_list) into the next
+    /// of `lists`, empty lists filled where they lie: the lists past the last
+    /// component stay empty, the components past the last list are skipped.
+    pub(crate) fn decode_component_lists_into<'s, const N: usize>(
+        &'s self,
+        mut lists: [&mut Vec<Cow<'s, str>>; N],
+    ) {
+        // NOTE: Walked by reference: an array moved into its iterator is
+        // copied, the copy waiting on the stores that built the array.
+        for (list, component) in lists.iter_mut().zip(self.components()) {
+            self.decode_items_into(component, list);
+        }
+    }
+
+    /// Every `;`-component decoded as by
+    /// [`decode_component_list`](Self::decode_component_list), each pushed
+    /// onto `lists` as an empty list filled where it lands.
+    pub(crate) fn decode_component_lists_onto<'s>(&'s self, lists: &mut Vec<Vec<Cow<'s, str>>>) {
+        for component in self.components() {
+            lists.push(Vec::new());
+            let last = lists.len() - 1;
+            self.decode_items_into(component, &mut lists[last]);
+        }
+    }
+
     /// A component as its `,`-separated list.
     fn decode_items<'s>(&'s self, component: Component<'s, 'a>) -> Vec<Cow<'s, str>> {
+        let mut items = Vec::new();
+        self.decode_items_into(component, &mut items);
+        items
+    }
+
+    /// [`decode_items`](Self::decode_items) into `items`, an empty list,
+    /// sized once and filled where it lies: a list built aside and moved in
+    /// waits on the stores of its header.
+    fn decode_items_into<'s>(
+        &'s self,
+        component: Component<'s, 'a>,
+        items: &mut Vec<Cow<'s, str>>,
+    ) {
         match component {
             Component::Text {
                 text,
                 escaped: false,
-            } => text.split(',').map(Cow::Borrowed).collect(),
-            Component::Text { text, .. } => text_pieces(text, b',')
-                .map(|value| unescape_text(value, self.escaper))
-                .collect(),
-            Component::Raw(bytes) => pieces(bytes, b',')
-                .map(|value| unescape_with(value, self.escaper))
-                .collect(),
-            Component::Split(leaves) => leaves
-                .iter()
-                .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper))
-                .collect(),
+            } => {
+                items.reserve_exact(items_in(text));
+
+                for item in plain_pieces(text, b',') {
+                    items.push(Cow::Borrowed(item));
+                }
+            }
+            Component::Text { text, .. } => {
+                items.reserve_exact(items_in(text));
+
+                // NOTE: Each arm pushes its own item: an item from either arm
+                // is merged into one, copied through memory.
+                for item in text_pieces(text, b',') {
+                    match memchr::memchr(b'\\', item.as_bytes()) {
+                        None => items.push(Cow::Borrowed(item)),
+                        Some(at) => items.push(Cow::Owned(String::from(unescape_text_from(
+                            item,
+                            at,
+                            self.escaper,
+                        )))),
+                    }
+                }
+            }
+            Component::Raw(bytes) => {
+                items.extend(pieces(bytes, b',').map(|value| unescape_with(value, self.escaper)));
+            }
+            Component::Split(leaves) => {
+                items.extend(
+                    leaves
+                        .iter()
+                        .map(|leaf| unescape_with(leaf.as_bytes(), self.escaper)),
+                );
+            }
         }
     }
 
@@ -482,7 +564,7 @@ impl<'a> VcardValueNode<'a> {
 
         match text(raw) {
             Some(text) if memchr::memchr(b'\\', raw).is_none() => {
-                Components::Plain(text.split(';'))
+                Components::Plain(plain_pieces(text, b';'))
             }
             Some(text) => Components::Escaped {
                 text,
@@ -563,7 +645,7 @@ enum Component<'s, 'a> {
 /// The iterator behind [`components`](VcardValueNode::components).
 enum Components<'s, 'a> {
     /// A UTF-8 value with no backslash, cut at every `;`.
-    Plain(str::Split<'s, char>),
+    Plain(PlainPieces<'s>),
     /// A UTF-8 value whose backslashes may escape a `;`.
     Escaped { text: &'s str, pieces: Pieces<'s> },
     /// A value that is not UTF-8.
@@ -575,6 +657,9 @@ enum Components<'s, 'a> {
 impl<'s, 'a> Iterator for Components<'s, 'a> {
     type Item = Component<'s, 'a>;
 
+    /// Inlined, so a component comes back in registers rather than through
+    /// memory, where the copy moving it out waits on its stores.
+    #[inline(always)]
     fn next(&mut self) -> Option<Component<'s, 'a>> {
         match self {
             Self::Plain(split) => split.next().map(|text| Component::Text {
@@ -593,6 +678,54 @@ impl<'s, 'a> Iterator for Components<'s, 'a> {
             Self::Split(leaves) => leaves.next().map(|leaves| Component::Split(leaves)),
         }
     }
+}
+
+/// The pieces of a text holding no escape, cut at every `sep` as `str::split`
+/// cuts them.
+///
+/// Each cut is found by an inlined byte search: a char pattern's searcher
+/// confirms every hit with a call to `bcmp`.
+fn plain_pieces(text: &str, sep: u8) -> PlainPieces<'_> {
+    PlainPieces {
+        rest: Some(text),
+        sep,
+    }
+}
+
+/// The iterator behind [`plain_pieces`].
+struct PlainPieces<'s> {
+    /// What is left to cut, `None` once the last piece went out.
+    rest: Option<&'s str>,
+    sep: u8,
+}
+
+impl<'s> Iterator for PlainPieces<'s> {
+    type Item = &'s str;
+
+    #[inline]
+    fn next(&mut self) -> Option<&'s str> {
+        let rest = self.rest?;
+
+        // NOTE: `sep` is ASCII, so both sides of it are text.
+        match rest.bytes().position(|byte| byte == self.sep) {
+            Some(at) => {
+                self.rest = Some(&rest[at + 1..]);
+                Some(&rest[..at])
+            }
+            None => {
+                self.rest = None;
+                Some(rest)
+            }
+        }
+    }
+}
+
+/// How many `,`-separated items a text holds at most, one more than its commas
+/// (an escaped one splits nothing), so an item list is sized once: a list
+/// grown from empty is allocated twice its need and moves its first item
+/// through memory.
+fn items_in(text: &str) -> usize {
+    1 + text.bytes().filter(|&byte| byte == b',').count()
 }
 
 /// The first `,`-separated value of a component (escape-aware): the bytes up to
