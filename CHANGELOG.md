@@ -6,33 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Changed
 
-- Changed an edited or built 3.0 or 4.0 line longer than 75 octets to be folded, keeping the folds before the edit.
+- Changed an edited or built 3.0 or 4.0 line longer than 75 octets to be folded.
 
-  An edit through a cursor keeps every fold before the first byte it changed and refolds the rest of the line with its own whitespace and break. A built or model-encoded line, and a decoded card's `Display`, fold at 75 octets. A 2.1 line, a `QUOTED-PRINTABLE` line, a line pushed raw and a line nothing edited keep their shape.
+  An edit keeps the folds before the first byte it changed. A 2.1 line, a `QUOTED-PRINTABLE` line, a raw line and an unedited one keep their shape.
 
-- **BREAKING**: `VcardBinary::decode_base64` returns `Option<(Vec<u8>, bool)>`, the decoded bytes and whether the payload was well-formed, in place of a `Result` carrying the base64 crate's error. Decoding is liberal: line breaks and blanks are skipped, any other byte outside the alphabet is skipped and reported, missing padding is accepted.
+- **BREAKING**: Changed `VcardBinary::decode_base64` to return `Option<(Vec<u8>, bool)>`, the bytes and whether they were well-formed.
 
-- **BREAKING**: `VcardValue::Adr` holds a `Box<VcardAdr>` in place of a `VcardAdr`, so a value takes 120 bytes rather than 432 and a property 192 rather than 504. Build one with `Box::new` (or `Box::default()`); its fields read through the box as before.
+  Decoding is lenient: blanks, line breaks and missing padding are accepted, other stray bytes skipped and reported.
 
-- The `base64` and `quoted-printable` features run on base64-codec and quoted-printable-codec in place of the base64 and quoted_printable crates, with SIMD kernels for the CPU token the application installs through simd-cpu (`SimdCpu::install_detected()` in `main`), the portable code otherwise. The three are git dependencies until they are published, and `rust-version` is 1.89.
+- **BREAKING**: Changed `VcardValue::Adr` to hold a `Box<VcardAdr>`, so a property takes 192 bytes rather than 504.
+- Changed the `base64` and `quoted-printable` features to run on base64-codec and quoted-printable-codec.
 
-- Parsing, decoding and serializing are faster, with the same output: 40 to 44% fewer cycles over the test corpus, 35 to 41% on a short card. A folded line is joined once, its head borrowed from the input; lines are filled in place; decoding validates UTF-8 before any lossy walk and reads a structured value's components in one pass. A parsed card's line list now starts with room for 16 lines.
+  They use SIMD once the application calls simd-cpu's `SimdCpu::install_detected()`. `rust-version` is 1.89.
 
-- A decoded card's `Display` (and so `to_string`) writes the text straight from the model rather than through an encoded syntax tree, with the same output: 94% fewer cycles over the test corpus, 90% on a short card. Parsing, decoding and `to_bytes` take a further 12 to 20% fewer: a value is checked for UTF-8 once rather than once a comma-separated piece, an ASCII name, parameter or value becomes text without the check (the crate's first `unsafe` block, run under Miri), each fold continuation is read once, and a folded value is copied once on output.
+- Changed parsing, decoding and serializing to take less than half the cycles, with the same output.
 
-- Parsing takes a further 16 to 21% fewer cycles (18 to 25% through `VcardCst::parse`, which no longer reads its first line twice), parsing and decoding 6 to 13%, parsing and `to_bytes` 13 to 18%, a decoded card's `to_string` 3 to 11%, with the same output: a common content line and a decoded property are written straight into place rather than built aside and moved, the property, parameter and value kinds are found without copying the name, the line end and the value colon are found sixteen bytes at a time, and `to_bytes` copies a short piece without a call. A decoded card takes 16 to 18% fewer bytes.
-
-- Parsing takes a further 7 to 10% fewer cycles and parsing then `to_bytes` 8%, with the same output; decoding the test corpus's parsed cards takes 7% fewer, a short card's as many as before. The `VERSION` value is matched as bytes rather than read through a lossy string, and a parameter's value list is allocated once at its length.
+  A decoded card's `Display` writes straight from the model, in a tenth of the cycles or less, and a decoded card takes 16 to 18% fewer bytes.
 
 ### Fixed
 
-- Fixed an edit keeping a line's length writing invalid UTF-8 when it moved a multi-octet character across one of the line's folds.
-
-- Fixed `decode_base64` failing on a 2.1 or 3.0 inline value whose continuation lines carry more than the one folding space, which most 2.1 exporters write.
-
-- Fixed `VcardValueCursor::quoted_printable` (and `charset` through it) dropping every byte outside printable ASCII, and the blanks before one: a 2.1 value mixing raw 8-bit text with `=XX` octets lost its letters. Every byte is kept.
+- Fixed an edit moving a multi-octet character across a fold writing invalid UTF-8.
+- Fixed `VcardBinary::decode_base64` failing on a 2.1 or 3.0 value folded with more than one space, as most 2.1 exporters write.
+- Fixed `VcardValueCursor::quoted_printable` dropping bytes outside printable ASCII, and the blanks before them.
 
 ## [0.5.2] - 2026-10-09
 

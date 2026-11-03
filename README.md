@@ -16,15 +16,13 @@ vCard parser, validator, editor, merger and builder library for Rust
 
 ## Features
 
-- **All vCard versions**: parse and write 2.1, 3.0 and 4.0 through one version-agnostic model.
-- **Byte-faithful editing**: change one parameter or value and every other byte of the card comes back unchanged, line endings included.
-- **Forgiving parser**: accept any real card, even a malformed one, and round-trip it unchanged, its folds and blank lines included.
-- **Strict building and validation**: construct cards checked against the standard, with an escape hatch to step outside it.
-- **Three-way merge**: reconcile two divergent edits of a card against their common base, every action and conflict reported.
-- **Small and portable**: no_std compatible, with an allocation-only core that pulls in no dependencies.
-- **Optional content decoding**: quoted-printable text, inline base64 binary and foreign character sets, each behind its own feature; quoted-printable and base64 run SIMD kernels (AVX-512, AVX2, SSSE3, NEON) once the application installs its CPU token with [simd-cpu](https://github.com/pimalaya/simd-cpu)'s `SimdCpu::install_detected()`.
-- **Optional jCard**: read and write a card as JSON.
-- **Optional JSContact**: convert a card to and from the Card object exchanged over JMAP.
+- **All vCard versions**: read and write 2.1, 3.0 and 4.0 through one model.
+- **Byte-faithful editing**: change one value, every other byte comes back unchanged.
+- **Forgiving parser**: read any real card, even a malformed one, and round-trip it unchanged.
+- **Strict building and validation**: construct cards checked against the standard.
+- **Three-way merge**: reconcile two divergent edits against their common base.
+- **Small and fast**: no_std, with SIMD-accelerated base64 and quoted-printable decoding.
+- **jCard and JSContact**: convert a card to and from JSON and the JMAP Card object.
 
 > [!TIP]
 > vcard-rs uses [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to gate optional support. The default feature set is declared in [Cargo.toml](./Cargo.toml) or on [docs.rs](https://docs.rs/crate/vcard-rs/latest/features).
