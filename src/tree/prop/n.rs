@@ -76,29 +76,29 @@ impl VcardNCursor<'_, '_> {
 
     /// Set the family names, escaping and preserving the rest of the line.
     pub fn set_family<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(0, values);
+        self.line.edit_value(|node| node.set_component(0, values));
     }
 
     /// Set the given names, escaping and preserving the rest of the line.
     pub fn set_given<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(1, values);
+        self.line.edit_value(|node| node.set_component(1, values));
     }
 
     /// Set the additional names, escaping and preserving the rest of the line.
     pub fn set_additional<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(2, values);
+        self.line.edit_value(|node| node.set_component(2, values));
     }
 
     /// Set the honorific prefixes, escaping and preserving the rest of the
     /// line.
     pub fn set_prefixes<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(3, values);
+        self.line.edit_value(|node| node.set_component(3, values));
     }
 
     /// Set the honorific suffixes, escaping and preserving the rest of the
     /// line.
     pub fn set_suffixes<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(4, values);
+        self.line.edit_value(|node| node.set_component(4, values));
     }
 
     /// The first parameter of type `P` on this line, decoded.

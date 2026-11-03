@@ -25,12 +25,26 @@
 //! value's length moves every byte after it, so the old fold points would land
 //! in the wrong places.
 //!
-//! An edited line is written unfolded, which RFC 6350 3.2 permits (it
-//! recommends 75 octets, it does not require them).
+//! ## Edited and built lines fold
+//!
+//! An edit through a cursor cuts the shape at the first byte it changed: the
+//! pieces before it are kept, the rest of the line is refolded at 75 octets
+//! (RFC 6350 3.2) with the line's own whitespace and break. A built line, or
+//! one whose shape went stale, is folded whole.
+//!
+//! A vCard 2.1 line is never refolded: 2.1 unfolds as RFC 822 does, keeping the
+//! whitespace, so a fold this crate adds would change the value for a 2.1
+//! reader. Nor is a `QUOTED-PRINTABLE` line, a fold after one of its `=`
+//! reading back as a soft break.
 
 use alloc::{borrow::Cow, vec::Vec};
 
 use crate::tree::leaf::put;
+
+/// The octets a physical line holds at most, its line ending excluded.
+///
+/// Refs: <https://datatracker.ietf.org/doc/html/rfc6350#section-3.2>
+pub(crate) const FOLD_OCTETS: usize = 75;
 
 /// One piece of wire the parser resolved away.
 #[derive(Clone, Debug)]
@@ -84,6 +98,34 @@ fn write_eol(crlf: bool, out: &mut Vec<u8>) {
     out.extend_from_slice(if crlf { b"\r\n" } else { b"\n" });
 }
 
+/// Fold the physical line written in `out` from `from` on, in place, every
+/// physical line at most [`FOLD_OCTETS`] long and never cut inside a character.
+pub(crate) fn refold(out: &mut Vec<u8>, from: usize, crlf: bool, wsp: u8) {
+    let len = out.len() - from;
+    let mut at = 0;
+    let mut room = FOLD_OCTETS;
+
+    while len - at > room {
+        let mut cut = at + room;
+        let floor = (cut - 3).max(at + 1);
+
+        while cut > floor && out[from + cut] & 0xC0 == 0x80 {
+            cut -= 1;
+        }
+
+        out.extend_from_within(from + at..from + cut);
+        write_eol(crlf, out);
+        out.push(wsp);
+
+        at = cut;
+        room = FOLD_OCTETS - 1;
+    }
+
+    out.extend_from_within(from + at..from + len);
+    out.copy_within(from + len.., from);
+    out.truncate(out.len() - len);
+}
+
 /// The wire shape of one content line: every piece the parser resolved away,
 /// with the offset it sat at and the logical length those offsets index.
 ///
@@ -95,6 +137,8 @@ pub struct VcardWire<'a> {
     parts: Vec<(usize, VcardWirePart<'a>)>,
     /// The logical length these offsets were taken against.
     len: usize,
+    /// Whether an edit [`cut`](Self::cut) the shape, its tail to refold.
+    edited: bool,
 }
 
 impl<'a> VcardWire<'a> {
@@ -103,6 +147,7 @@ impl<'a> VcardWire<'a> {
         Self {
             parts: Vec::new(),
             len: 0,
+            edited: false,
         }
     }
 
@@ -168,6 +213,29 @@ impl<'a> VcardWire<'a> {
         self.len = len;
     }
 
+    /// Whether a line of `len` logical octets with no recorded piece goes out
+    /// refolded: an edited or built line past [`FOLD_OCTETS`].
+    pub(crate) fn refolds(&self, len: usize) -> bool {
+        self.parts.is_empty() && (self.edited || self.len != len) && len > FOLD_OCTETS
+    }
+
+    /// Keep the pieces before `at`, the first byte an edit changed, the
+    /// logical length going from `old` to `new`; the tail is refolded.
+    ///
+    /// A fold at `at` ends a physical line the edit left whole, so it stays. A
+    /// shape already stale (`old` not its length) is left to be dropped.
+    pub(crate) fn cut(&mut self, at: usize, old: usize, new: usize) {
+        if self.len != old {
+            return;
+        }
+
+        self.parts.retain(|(offset, part)| {
+            *offset < at || (*offset == at && matches!(part, VcardWirePart::Fold { .. }))
+        });
+        self.len = new;
+        self.edited = true;
+    }
+
     /// Put `earlier`'s pieces before this shape's, keeping the sealed length.
     ///
     /// A piece at a shared offset belongs to the tokeniser first, so a stable
@@ -194,16 +262,31 @@ impl<'a> VcardWire<'a> {
     /// The wire bytes are written past the logical ones, then moved down over
     /// them, so no buffer is allocated for a folded line.
     ///
-    /// A shape whose sealed length no longer matches the logical line is
-    /// stale, left by an edit, and is dropped: the line goes out unfolded.
-    pub(crate) fn lay_out(&self, out: &mut Vec<u8>, start: usize) {
+    /// A shape whose sealed length no longer matches the logical line is stale
+    /// and dropped. `fold` gives the
+    /// break to refold with, `\r\n` or not, or none when the line never folds.
+    pub(crate) fn lay_out(
+        &self,
+        out: &mut Vec<u8>,
+        start: usize,
+        fold: impl FnOnce() -> Option<bool>,
+    ) {
         let len = out.len() - start;
+        let stale = self.len != len;
 
-        if self.parts.is_empty() || self.len != len {
+        if self.parts.is_empty() || stale {
+            if (stale || self.edited)
+                && len > FOLD_OCTETS
+                && let Some(crlf) = fold()
+            {
+                refold(out, start, crlf, b' ');
+            }
+
             return;
         }
 
         let mut at = 0;
+        let (mut from, mut crlf, mut wsp) = (start + len, None, b' ');
 
         for (offset, part) in &self.parts {
             // NOTE: Clamped, so a shape recorded against other bytes can never
@@ -212,11 +295,32 @@ impl<'a> VcardWire<'a> {
             out.extend_from_within(start + at..start + offset);
             part.write_bytes(out);
             at = offset;
+
+            // NOTE: The physical line an edit's tail refolds from starts at
+            // its folding whitespace, or past a piece written before it.
+            match part {
+                VcardWirePart::Fold {
+                    crlf: eol,
+                    wsp: space,
+                } => {
+                    (from, crlf, wsp) = (out.len() - 1, Some(*eol), *space);
+                }
+                _ => from = out.len(),
+            }
         }
 
         out.extend_from_within(start + at..start + len);
         out.copy_within(start + len.., start);
         out.truncate(out.len() - len);
+
+        let from = from - len;
+
+        if self.edited
+            && out.len() - from > FOLD_OCTETS
+            && let Some(eol) = fold()
+        {
+            refold(out, from, crlf.unwrap_or(eol), wsp);
+        }
     }
 
     /// Lay a line out to the wire as [`lay_out`](Self::lay_out) does, its
@@ -224,21 +328,32 @@ impl<'a> VcardWire<'a> {
     /// its value read from `value`, which is copied once.
     ///
     /// The pieces before the head go in front of it. A piece inside the head
-    /// (a fold before the colon) takes the general way.
-    pub(crate) fn lay_out_value(&self, out: &mut Vec<u8>, start: usize, value: &[u8]) {
-        if self.parts.is_empty() {
-            return put(out, value);
-        }
-
+    /// (a fold before the colon), an edited shape and a stale one take the
+    /// general way.
+    pub(crate) fn lay_out_value(
+        &self,
+        out: &mut Vec<u8>,
+        start: usize,
+        value: &[u8],
+        fold: impl FnOnce() -> Option<bool>,
+    ) {
         let head = out.len() - start;
         let len = head + value.len();
+
+        if self.parts.is_empty() && !self.edited && (self.len == len || len <= FOLD_OCTETS) {
+            return put(out, value);
+        }
 
         let lead = self.parts.iter().take_while(|(at, _)| *at == 0).count();
         let (front, back) = self.parts.split_at(lead);
 
-        if self.len != len || back.iter().any(|(at, _)| *at < head) {
+        if self.parts.is_empty()
+            || self.len != len
+            || self.edited
+            || back.iter().any(|(at, _)| *at < head)
+        {
             out.extend_from_slice(value);
-            return self.lay_out(out, start);
+            return self.lay_out(out, start, fold);
         }
 
         if !front.is_empty() {
@@ -272,6 +387,7 @@ impl<'a> VcardWire<'a> {
                 .map(|(offset, part)| (offset, part.into_static()))
                 .collect(),
             len: self.len,
+            edited: self.edited,
         }
     }
 }
@@ -285,7 +401,7 @@ mod tests {
     fn written(wire: &VcardWire<'_>, logical: &[u8]) -> Vec<u8> {
         let mut out = b"before".to_vec();
         out.extend_from_slice(logical);
-        wire.lay_out(&mut out, 6);
+        wire.lay_out(&mut out, 6, || Some(true));
         let line = out.split_off(6);
         assert_eq!(out, b"before");
         line

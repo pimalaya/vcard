@@ -405,11 +405,21 @@ fn encodes_a_card_with_every_value_kind_and_parameter() {
         // above encodes to a shape this pins, so a value that silently encoded
         // to nothing would still have passed before.
         let expected = alloc_expected(wire_version, geo);
-        assert_eq!(card.to_string(), expected, "{wire_version} does not encode");
+        assert_eq!(
+            unfolded(card.to_string()),
+            expected,
+            "{wire_version} does not encode"
+        );
 
         // The From<Vcard> conversion (distinct from Display's encode path).
-        assert_eq!(VcardCst::from(card).to_string(), expected);
+        assert_eq!(unfolded(VcardCst::from(card).to_string()), expected);
     }
+}
+
+/// `text` with its RFC 6350 3.2 folds removed: an encoded line past 75 octets
+/// is folded, and these tests pin its bytes, not where it folds.
+fn unfolded(text: String) -> String {
+    text.replace("\r\n ", "")
 }
 
 /// The wire text [`encodes_a_card_with_every_value_kind_and_parameter`]
@@ -962,8 +972,8 @@ fn the_newer_parameters_decode_onto_their_own_variants_and_encode_back() {
         );
     }
 
-    // The decoded card writes the same line back out.
-    assert_eq!(VcardCst::from(card).to_string(), raw);
+    // The decoded card writes the same line back out, folded.
+    assert_eq!(unfolded(VcardCst::from(card).to_string()), raw);
 }
 
 /// RFC 6350 section 3.3 wraps a parameter value carrying a `:` or a `,` in
@@ -996,5 +1006,5 @@ fn a_quoted_parameter_reads_without_its_delimiters_and_writes_them_back() {
 
     // And the canonical projection quotes both again: one carries a `,` and a
     // `:`, the other a `:` and a line break the caret encoding spells `^n`.
-    assert_eq!(VcardCst::from(cst.decode()).to_string(), raw);
+    assert_eq!(unfolded(VcardCst::from(cst.decode()).to_string()), raw);
 }

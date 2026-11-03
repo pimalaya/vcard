@@ -52,7 +52,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the post office box.
     pub fn set_po_box<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(0, values);
+        self.line.edit_value(|node| node.set_component(0, values));
     }
 
     /// The extended address (deprecated), decoded.
@@ -62,7 +62,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the extended address.
     pub fn set_extended<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(1, values);
+        self.line.edit_value(|node| node.set_component(1, values));
     }
 
     /// The street address, decoded.
@@ -72,7 +72,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the street address.
     pub fn set_street<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(2, values);
+        self.line.edit_value(|node| node.set_component(2, values));
     }
 
     /// The locality (city), decoded.
@@ -82,7 +82,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the locality.
     pub fn set_locality<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(3, values);
+        self.line.edit_value(|node| node.set_component(3, values));
     }
 
     /// The region (state or province), decoded.
@@ -92,7 +92,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the region.
     pub fn set_region<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(4, values);
+        self.line.edit_value(|node| node.set_component(4, values));
     }
 
     /// The postal code, decoded.
@@ -102,7 +102,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the postal code.
     pub fn set_postal_code<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(5, values);
+        self.line.edit_value(|node| node.set_component(5, values));
     }
 
     /// The country name, decoded.
@@ -112,7 +112,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the country name.
     pub fn set_country<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(6, values);
+        self.line.edit_value(|node| node.set_component(6, values));
     }
 
     /// The room (RFC 9554), decoded.
@@ -122,7 +122,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the room.
     pub fn set_room<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(7, values);
+        self.line.edit_value(|node| node.set_component(7, values));
     }
 
     /// The apartment (RFC 9554), decoded.
@@ -132,7 +132,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the apartment.
     pub fn set_apartment<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(8, values);
+        self.line.edit_value(|node| node.set_component(8, values));
     }
 
     /// The floor (RFC 9554), decoded.
@@ -142,7 +142,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the floor.
     pub fn set_floor<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(9, values);
+        self.line.edit_value(|node| node.set_component(9, values));
     }
 
     /// The street number (RFC 9554), decoded.
@@ -152,7 +152,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the street number.
     pub fn set_street_number<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(10, values);
+        self.line.edit_value(|node| node.set_component(10, values));
     }
 
     /// The street name (RFC 9554), decoded.
@@ -162,7 +162,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the street name.
     pub fn set_street_name<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(11, values);
+        self.line.edit_value(|node| node.set_component(11, values));
     }
 
     /// The building (RFC 9554), decoded.
@@ -172,7 +172,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the building.
     pub fn set_building<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(12, values);
+        self.line.edit_value(|node| node.set_component(12, values));
     }
 
     /// The block (RFC 9554), decoded.
@@ -182,7 +182,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the block.
     pub fn set_block<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(13, values);
+        self.line.edit_value(|node| node.set_component(13, values));
     }
 
     /// The subdistrict (RFC 9554), decoded.
@@ -192,7 +192,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the subdistrict.
     pub fn set_subdistrict<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(14, values);
+        self.line.edit_value(|node| node.set_component(14, values));
     }
 
     /// The district (RFC 9554), decoded.
@@ -202,7 +202,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the district.
     pub fn set_district<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(15, values);
+        self.line.edit_value(|node| node.set_component(15, values));
     }
 
     /// The landmark (RFC 9554), decoded.
@@ -212,7 +212,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the landmark.
     pub fn set_landmark<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(16, values);
+        self.line.edit_value(|node| node.set_component(16, values));
     }
 
     /// The cardinal direction (RFC 9554), decoded.
@@ -222,7 +222,7 @@ impl VcardAdrCursor<'_, '_> {
 
     /// Set the cardinal direction.
     pub fn set_direction<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set_component(17, values);
+        self.line.edit_value(|node| node.set_component(17, values));
     }
 
     /// The first parameter of type `P` on this line, decoded.

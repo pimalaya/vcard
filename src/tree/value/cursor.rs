@@ -31,7 +31,7 @@ use alloc::{borrow::Cow, vec::Vec};
 #[cfg(feature = "quoted-printable")]
 use quoted_printable_codec::codec::QuotedPrintableCodec;
 
-use crate::tree::{line::VcardLine, param::lens::VcardParamLens, value::node::VcardValueNode};
+use crate::tree::{line::VcardLine, param::lens::VcardParamLens};
 
 /// A typed cursor over a content line's value, editing in place and byte
 /// preserving for the components it does not touch.
@@ -50,7 +50,7 @@ impl<'a> VcardValueCursor<'_, 'a> {
     /// a foreign charset, transcode yourself and use
     /// [`set_bytes`](Self::set_bytes).
     pub fn set_text(&mut self, value: impl AsRef<str>) {
-        self.line.value.set(&[value]);
+        self.line.edit_value(|node| node.set(&[value]));
     }
 
     /// The whole value's raw bytes, unescaped but not otherwise decoded.
@@ -67,7 +67,7 @@ impl<'a> VcardValueCursor<'_, 'a> {
     /// card's `CHARSET` parameter is left untouched: it is the caller's to keep
     /// consistent.
     pub fn set_bytes(&mut self, value: impl AsRef<[u8]>) {
-        self.line.value.set_bytes(&[value]);
+        self.line.edit_value(|node| node.set_bytes(&[value]));
     }
 
     /// Decode the value's `QUOTED-PRINTABLE` `=XX` octets to raw bytes.
@@ -121,7 +121,7 @@ impl<'a> VcardValueCursor<'_, 'a> {
 
     /// Set the whole value to a list, escaping each value.
     pub fn set_list<S: AsRef<str>>(&mut self, values: &[S]) {
-        self.line.value.set(values);
+        self.line.edit_value(|node| node.set(values));
     }
 
     /// The `i`th component as a decoded list, for structured values.
@@ -131,14 +131,14 @@ impl<'a> VcardValueCursor<'_, 'a> {
 
     /// Set the `i`th component, escaping each value and preserving the rest.
     pub fn set_component<S: AsRef<str>>(&mut self, i: usize, values: &[S]) {
-        self.line.value.set_component(i, values);
+        self.line.edit_value(|node| node.set_component(i, values));
     }
 
     /// Walk into the `i`th component to edit its `,`-separated values one at a
     /// time, splicing a single leaf per edit.
     pub fn list_at(&mut self, i: usize) -> VcardListCursor<'_, 'a> {
         VcardListCursor {
-            node: &mut self.line.value,
+            line: self.line,
             component: i,
         }
     }
@@ -161,14 +161,14 @@ impl<'a> VcardValueCursor<'_, 'a> {
 /// bytes it was parsed with, escaping and all. Obtained from
 /// [`VcardValueCursor::list_at`] / [`list_mut`](VcardValueCursor::list_mut).
 pub struct VcardListCursor<'c, 'a> {
-    node: &'c mut VcardValueNode<'a>,
+    line: &'c mut VcardLine<'a>,
     component: usize,
 }
 
 impl VcardListCursor<'_, '_> {
     /// The number of values in the walked component.
     pub fn len(&self) -> usize {
-        self.node.value_count(self.component)
+        self.line.value.value_count(self.component)
     }
 
     /// Whether the walked component has no values.
@@ -178,7 +178,8 @@ impl VcardListCursor<'_, '_> {
 
     /// The `j`th value, decoded, or `None` when the index is out of range.
     pub fn get(&self, j: usize) -> Option<Cow<'_, str>> {
-        self.node
+        self.line
+            .value
             .decode_component_list(self.component)
             .into_iter()
             .nth(j)
@@ -186,26 +187,34 @@ impl VcardListCursor<'_, '_> {
 
     /// Replace the `j`th value in place, re-escaping only that leaf.
     pub fn set<S: AsRef<str>>(&mut self, j: usize, value: S) -> &mut Self {
-        self.node.set_value_at(self.component, j, value);
+        let component = self.component;
+        self.line
+            .edit_value(|node| node.set_value_at(component, j, value));
         self
     }
 
     /// Insert a value at position `j` (clamped to the end), escaping only the
     /// new leaf.
     pub fn insert<S: AsRef<str>>(&mut self, j: usize, value: S) -> &mut Self {
-        self.node.insert_value_at(self.component, j, value);
+        let component = self.component;
+        self.line
+            .edit_value(|node| node.insert_value_at(component, j, value));
         self
     }
 
     /// Append a value, escaping only the new leaf.
     pub fn push<S: AsRef<str>>(&mut self, value: S) -> &mut Self {
-        self.node.push_value(self.component, value);
+        let component = self.component;
+        self.line
+            .edit_value(|node| node.push_value(component, value));
         self
     }
 
     /// Remove the `j`th value, splicing it out; a no-op when out of range.
     pub fn remove(&mut self, j: usize) -> &mut Self {
-        self.node.remove_value_at(self.component, j);
+        let component = self.component;
+        self.line
+            .edit_value(|node| node.remove_value_at(component, j));
         self
     }
 }

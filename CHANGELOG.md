@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed an edited or built 3.0 or 4.0 line longer than 75 octets to be folded, keeping the folds before the edit.
+
+  An edit through a cursor keeps every fold before the first byte it changed and refolds the rest of the line with its own whitespace and break. A built or model-encoded line, and a decoded card's `Display`, fold at 75 octets. A 2.1 line, a `QUOTED-PRINTABLE` line, a line pushed raw and a line nothing edited keep their shape.
+
 - **BREAKING**: `VcardBinary::decode_base64` returns `Option<(Vec<u8>, bool)>`, the decoded bytes and whether the payload was well-formed, in place of a `Result` carrying the base64 crate's error. Decoding is liberal: line breaks and blanks are skipped, any other byte outside the alphabet is skipped and reported, missing padding is accepted.
 
 - **BREAKING**: `VcardValue::Adr` holds a `Box<VcardAdr>` in place of a `VcardAdr`, so a value takes 120 bytes rather than 432 and a property 192 rather than 504. Build one with `Box::new` (or `Box::default()`); its fields read through the box as before.
@@ -23,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Parsing takes a further 7 to 10% fewer cycles and parsing then `to_bytes` 8%, with the same output; decoding the test corpus's parsed cards takes 7% fewer, a short card's as many as before. The `VERSION` value is matched as bytes rather than read through a lossy string, and a parameter's value list is allocated once at its length.
 
 ### Fixed
+
+- Fixed an edit keeping a line's length writing invalid UTF-8 when it moved a multi-octet character across one of the line's folds.
 
 - Fixed `decode_base64` failing on a 2.1 or 3.0 inline value whose continuation lines carry more than the one folding space, which most 2.1 exporters write.
 

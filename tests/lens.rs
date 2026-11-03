@@ -220,8 +220,9 @@ fn every_adr_component_writes_its_own_slot() {
         adr.set_direction(&[ADR_COMPONENTS[17]]);
     }
 
+    // NOTE: The edited line runs past 75 octets, so it is folded.
     assert_eq!(
-        cst.to_string(),
+        cst.to_string().replace("\r\n ", ""),
         format!(
             "BEGIN:VCARD\r\nVERSION:4.0\r\nADR:{}\r\nEND:VCARD\r\n",
             ADR_COMPONENTS.join(";")

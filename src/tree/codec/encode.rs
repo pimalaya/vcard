@@ -38,7 +38,7 @@ use crate::{
         },
         cst::VcardCst,
         leaf::{VcardLeaf, VcardValueLeaf},
-        line::VcardLine,
+        line::{VcardLine, fold_text},
         param::node::VcardParamNode,
         value::node::VcardValueNode,
         wire::VcardWire,
@@ -110,6 +110,7 @@ impl VcardProp<'_> {
             text.push('.');
         }
 
+        let start = text.len();
         text.push_str(&self.name);
 
         for param in &self.params {
@@ -127,6 +128,7 @@ impl VcardProp<'_> {
             },
         });
 
+        fold_text(text, start, escaper);
         text.push_str("\r\n");
     }
 }
@@ -424,6 +426,7 @@ mod tests {
         );
         let cst = VcardCst::parse(input).unwrap();
 
-        assert_eq!(cst.decode().to_string(), input);
+        // NOTE: The line runs past 75 octets, so the encoding folds it.
+        assert_eq!(cst.decode().to_string().replace("\r\n ", ""), input);
     }
 }

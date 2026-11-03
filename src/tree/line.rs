@@ -27,7 +27,7 @@ use crate::tree::{
     leaf::{VcardLeaf, VcardValueLeaf, put},
     param::{lens::VcardParamLens, node::VcardParamNode},
     value::node::VcardValueNode,
-    wire::VcardWire,
+    wire::{FOLD_OCTETS, VcardWire, refold},
 };
 
 /// One raw content line: a name, parameters, a value and the line ending.
@@ -46,8 +46,10 @@ pub struct VcardLine<'a> {
     /// The line ending (`\r\n` or `\n`).
     pub eol: VcardLeaf<'a>,
     /// How the line was laid out on the wire: its folds, the blank lines before
-    /// it, its soft breaks. Empty for a built line, and dropped on output once
-    /// an edit changes the line's length (see [`VcardWire`]).
+    /// it, its soft breaks.
+    ///
+    /// Empty for a built line, cut at the first byte a cursor edit changed and
+    /// dropped once another edit stales it (see [`VcardWire`]).
     pub wire: VcardWire<'a>,
 }
 
@@ -367,15 +369,77 @@ impl<'a> VcardLine<'a> {
 
         out.push(b':');
 
+        let fold = || self.fold_break();
+
         match self.value.unsplit_bytes() {
-            Some(value) => self.wire.lay_out_value(out, start, value),
+            Some(value) => self.wire.lay_out_value(out, start, value, fold),
             None => {
                 self.value.write_bytes(out);
-                self.wire.lay_out(out, start);
+                self.wire.lay_out(out, start, fold);
             }
         }
 
         put(out, self.eol.get().as_bytes());
+    }
+
+    /// Apply `edit` to the value, keeping the wire shape before the first byte
+    /// it changed, so the line refolds from there.
+    pub(crate) fn edit_value(&mut self, edit: impl FnOnce(&mut VcardValueNode<'a>)) {
+        if self.wire.is_empty() {
+            return edit(&mut self.value);
+        }
+
+        let mut before = Vec::new();
+        self.value.write_bytes(&mut before);
+        edit(&mut self.value);
+        let mut after = Vec::new();
+        self.value.write_bytes(&mut after);
+
+        if before == after {
+            return;
+        }
+
+        let head = self.head_len();
+        let same = before
+            .iter()
+            .zip(&after)
+            .take_while(|(a, b)| a == b)
+            .count();
+        self.wire
+            .cut(head + same, head + before.len(), head + after.len());
+    }
+
+    /// The break an edited or built line refolds with, `\r\n` unless it ends
+    /// on a bare `\n`; none for a 2.1 or `QUOTED-PRINTABLE` line.
+    fn fold_break(&self) -> Option<bool> {
+        if self.value.escaper == VcardEscaper::V2_1 || head_declares_quoted_printable(&self.head())
+        {
+            return None;
+        }
+
+        Some(self.eol.get() != "\n")
+    }
+
+    /// The length of the line's head as it serializes, its colon included.
+    fn head_len(&self) -> usize {
+        let params = self.params.iter().map(|param| {
+            let values = param.values.iter().map(|value| 1 + value.get().len());
+            1 + param.name.get().len() + values.sum::<usize>()
+        });
+
+        self.name.get().len() + params.sum::<usize>() + 1
+    }
+
+    /// The line's head as it serializes: its name and parameters.
+    fn head(&self) -> Vec<u8> {
+        let mut head = Vec::from(self.name.get().as_bytes());
+
+        for param in &self.params {
+            head.push(b';');
+            param.write_bytes(&mut head);
+        }
+
+        head
     }
 
     /// The first parameter of type `P`, decoded.
@@ -469,7 +533,13 @@ impl fmt::Display for VcardLine<'_> {
     /// The line as text, wire shape included, lossily for a non-UTF-8 value.
     /// `VcardLine::write_bytes` is the byte-faithful path.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.wire.is_empty() {
+        let quick = self.wire.is_empty()
+            && self
+                .value
+                .unsplit_bytes()
+                .is_some_and(|value| !self.wire.refolds(self.head_len() + value.len()));
+
+        if quick {
             f.write_str(self.name.get())?;
 
             for param in &self.params {
@@ -482,6 +552,25 @@ impl fmt::Display for VcardLine<'_> {
         let mut bytes = Vec::new();
         self.write_bytes(&mut bytes);
         f.write_str(&String::from_utf8_lossy(&bytes))
+    }
+}
+
+/// Fold the built line written in `text` from `start` on as `to_bytes` folds
+/// it: past 75 octets, unless it is a 2.1 or `QUOTED-PRINTABLE` line.
+pub(crate) fn fold_text(text: &mut String, start: usize, escaper: VcardEscaper) {
+    let line = &text.as_bytes()[start..];
+
+    if line.len() <= FOLD_OCTETS || escaper == VcardEscaper::V2_1 || head_is_quoted_printable(line)
+    {
+        return;
+    }
+
+    let mut bytes = text.split_off(start).into_bytes();
+    refold(&mut bytes, 0, true, b' ');
+
+    match String::from_utf8(bytes) {
+        Ok(line) => text.push_str(&line),
+        Err(error) => text.push_str(&String::from_utf8_lossy(error.as_bytes())),
     }
 }
 
@@ -771,7 +860,7 @@ mod tests {
     }
 
     /// The old offsets index bytes that are no longer there, so the edited
-    /// line goes out unfolded rather than folded in the wrong places.
+    /// line drops them, refolded only past 75 octets, which this one is not.
     #[test]
     fn drops_the_fold_points_once_the_value_is_edited() {
         let (mut line, _) = VcardLine::take(b"NOTE:foo\r\n bar\r\n").unwrap();

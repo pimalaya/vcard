@@ -47,7 +47,7 @@ impl VcardClientPidMapCursor<'_, '_> {
 
     /// Set the PID source identifier.
     pub fn set_id(&mut self, value: impl AsRef<str>) {
-        self.line.value.set_component(0, &[value]);
+        self.line.edit_value(|node| node.set_component(0, &[value]));
     }
 
     /// The client URI, decoded.
@@ -57,7 +57,7 @@ impl VcardClientPidMapCursor<'_, '_> {
 
     /// Set the client URI.
     pub fn set_uri(&mut self, value: impl AsRef<str>) {
-        self.line.value.set_component(1, &[value]);
+        self.line.edit_value(|node| node.set_component(1, &[value]));
     }
 
     /// The first parameter of type `P` on this line, decoded.
