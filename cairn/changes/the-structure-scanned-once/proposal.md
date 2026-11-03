@@ -9,6 +9,60 @@ created: 2026-11-02
 
 The handoff for the next speed pass over the parser, the decoded model and the serializers, rewritten at the end of [the-parts-written-in-place](../archive/the-parts-written-in-place/proposal.md) (2026-11-03) so a fresh session can take the lead on its own. Rewrite it at the end of each pass that takes it up, as mime-rs does with its cairn/changes/the-scratch-area/proposal.md: where things stand, where the time goes, the levers left, what was tried and dropped, the traps. Each pass lands under its own change id and log entry; this one stays active.
 
+## The fourth pass, interrupted (read this first)
+
+A fourth pass started on 2026-11-03 at 11:25 and was stopped at 12:15 by the user's time limit, before landing. Its three changes were committed and pushed at the user's word in the commit that adds this section, on top of 63751a2, with a CHANGELOG line but no change id and no log entry. Start by deciding them (e3b may still be reverted), then go on with the plan below.
+
+### The working tree
+
+- **e1, the `VERSION` value read as bytes.** `VcardVersion::from_bytes` (src/version.rs, parser-gated) matches `b"2.1"`, `b"3.0"`, `b"4.0"`, which is what `from_str` of the lossy text matched; `VcardCst::version`, `push` and `stamp_escaper` (src/tree/cst.rs) use it instead of `raw_value_str()` (a `from_utf8_lossy` walk per card, 2.2% of card parse). Screened against the baseline (layout 0, 5 interleaved runs): corpus `VcardCst::parse` -2.3%, `parse` -4.5%, parse + decode -1.7%, decode alone -1.2%; card -3.0%, -3.2%, -1.8%, -0.7%.
+- **e2, `physical_line` `#[inline(always)]`** (src/tree/line.rs). Against e1: corpus one -2.8%, parse -0.9%, decode -0.5%, bytes +0.2%; card one -3.6%, parse -2.3%, decode -1.3%, bytes +0.9%. Its `position` scan then stays out of line as its own symbol (9.5% of corpus parse): try inlining that too.
+- **e3b, parameter value lists allocated at their length** (src/tree/param/node.rs). The walk that splits a parameter counts its unquoted commas; the list is `Vec::with_capacity(commas + 1)`, one value is pushed whole, several are split by a second walk (`split_param_values_into`) only then. Against e2: corpus one -2.4%, parse -5.2%, bytes -4.0%, decode alone -4.4%, parse + decode -1.1%; card one -4.6%, parse -4.4%, bytes -6.1%, but card parse + decode +2.7% and card decode alone +3.5%. Undecided: a one-value list is now a 32-byte chunk, the size class of the decode's many single-item lists, so more of them overflow glibc's tcache (seven a class). Settle it in the four layouts, and weigh it against the rows it costs.
+
+`cargo test` passes under default features (310 tests). The differential run against the baseline copy agrees on this tree (e1, e2 and e3b together): the corpus and 600 rounds of edits, 87,746 inputs, 44,680 cards through `parse_many` besides each input's `parse`, every observation equal. Before the commit, clippy `--all-targets -D warnings` under all and no features, the tests under all features (334) and none, `cargo build --no-default-features`, docs with `-Dwarnings` and `cargo fmt` passed; fuzzing and criterion did not run, nor benches/README.md; the four-layout table ran in the old path-prefix layouts only (its result closes this section).
+
+Dropped this pass: **e3, parameter lists sized by a counting walk over the head** (`1 + unquoted ';'`, then `Vec::with_capacity`): corpus parse +16 to +18%, one +18.5%, bytes +10%, though decode alone -5%. The counting walk doubled `take_params` (7.7% to 13.6%), and the 64-byte lists went through glibc's fastbins where the old 240-byte ones did not (`_int_malloc` 5.3% to 9.3%, `malloc_consolidate` 3.5% to 4.6%).
+
+### Three new measuring traps, and the harness that avoids two of them
+
+- **The four layouts are one layout moved.** Found by the ical-rs pass the same day: remapping the source path to prefixes of four lengths moves .text as a whole, so the hot functions keep their places relative to each other and an aliasing between two of them survives all four (there, card parse + decode read +3.3% in every layout for a change to code that row never runs). These binaries link with lld; `-C link-arg=-Wl,--shuffle-sections=.text.*=<seed>` in the build's `RUSTFLAGS` reorders the function sections by seed. Use three seeds as layouts 1 to 3 (build.sh still remaps the path; change it), and keep a result only when it holds in all four.
+
+- **The binary's physical pages.** On tmpfs (the scratchpad: `shmem_enabled` never, so 4 KB pages placed by chance), two byte-identical binaries measured 5% (corpus decode alone) and 12 to 15% (card decode alone) apart, run after run; one copy in twelve of the same binary ran 34% slower on card decode, with 24% more op-cache misses (`op_cache_hit_miss.op_cache_miss:u`; L1 iTLB misses did not track it). Twenty-four copies on ext4 (large folios) stayed within 1.2%. Keep measured binaries on ext4 (the repository's ignored target/vcyc-bins), three copies each, runs rotating across copies, and check an A/A pair (two builds of one tree) agrees within 1% before trusting a screen.
+- **The path hash.** Cargo hashes a path dependency's path into symbol names, which reordered the harness's own drop glue (`VcardValue`'s among them, hot in decode) between a baseline built from base/ and a tree built from the repository, `--remap-path-prefix` or not. Build both from one harness crate whose dependency is a symlink flipped between base/ and the repository: identical trees then give byte-identical binaries.
+
+The sources are saved beside this proposal in harness/: vcyc.rs and vcyc.Cargo.toml (the cycle harness, its dependency path pointing at `$P/cur`), build.sh (`build.sh <new|old> <name> [layout]`: flips the symlink under a lock, builds with the remaps, pinned off the measuring core, copies three copies to target/vcyc-bins), multi.sh (`multi.sh <runs> "<names>" <work...>`, `CPU=10` by default, rotating copies), vdiff.rs, vdiff.Cargo.toml and vcard-old.Cargo.toml (the differential crate and its baseline copy's manifest), diff.sh (the corpus and 600 rounds in five slices on CPUs 11 to 15, about five minutes). Each script names the scratchpad as `P` on its first lines: set it to yours. The differential run salts every round, aligns three windows in four to a `BEGIN:VCARD`, and caught a planted break (commas inside quotes split) on the corpus. This session measured on core 10 (CPUs 10 and 26); the ical-rs session measures on core 4 and keeps its builds on CPUs 0 to 7 and 16 to 23.
+
+### The plan
+
+1. Rebuild the baseline (base/ from `git show 63751a2`, or the working tree's files as committed), switch build.sh's layouts 1 to 3 to `--shuffle-sections` seeds, rerun the A/A check, then the four-layout table of e1 + e2 + e3b against it, and once with e3b reverted; keep e3b only if it holds.
+2. The kind lookups (`VcardPropKind`, `VcardParamKind`, `VcardValueKind::from_name`): 5.7%, 3.8% and 1.8% of corpus decode alone, two jump tables then a byte loop folding both sides. Pack the name in words by overlapping loads (bytes 0, n/2, n-1 under 4; two `u32` under 8; two `u64` up to 16), upper-fold the letters only by SWAR (`lower = (h + 0x1F..) & !(h + 0x05..) & !w & 0x80..`, `w ^ (lower >> 2)`, `h` the low seven bits), and compare with the candidate's packing computed by a `const fn`. The existing every-spelling tests check it. Give the three `Deref`s a table indexed by the discriminant at the same time (`VcardPropName::deref` is 3 to 4% of `to_string`).
+3. The decode's scans. `plain()`, `components()` and `unescape_text` call memchr once a value (memchr's SSE2 path walks a value under 16 bytes byte by byte, behind a call): 7% of corpus decode alone, 3% of the card's. Try the inlined `position` for values under 64 bytes, memchr above (the PHOTOs). Folding the backslash check into `text`'s ASCII check would need its own `from_utf8_unchecked`: a new `unsafe`, ask first.
+4. `declared_value_kind` searched by name after the parameters were decoded: note the `VALUE` value while decoding them (the first parameter of kind `Value`, its first raw value, quotes kept).
+5. `to_string`: `Display` builds a `String`, then `f.write_str` copies it into `to_string`'s own, a second buffer and a full copy a card. A `Vec<u8>` writer with `put` needs a UTF-8 check of the whole text at the end (an extra pass over the PHOTOs) unless the user approves a new `unsafe`; measure the safe version on both rows before asking. `escaped_at` is 24% of the corpus row, mostly its 16-byte block loop over the base64 PHOTOs: an unrolled loop of four blocks with one mask test is the safe step; AVX2 through simd-cpu needs an `unsafe` and the user's yes.
+6. Then the old lists below (allocation, the decoded parameter, the per-card moves).
+
+### The table at the stop
+
+e1 + e2 + e3b against 63751a2, the four path-prefix layouts (weaker than shuffled ones, see the traps), 5 interleaved runs, three copies each on ext4, core 10; mean delta over the layouts, the spread across layouts in brackets:
+
+| workload | delta |
+| --- | ---: |
+| corpus `VcardCst::parse` | -7.0% (-6.3 to -7.8) |
+| corpus `parse` (`parse_many`) | -8.1% (-7.6 to -8.7) |
+| corpus parse + `decode` | -2.5% (-2.3 to -2.8) |
+| corpus parse + `to_bytes` | -7.8% (-7.3 to -8.3) |
+| corpus `decode` of parsed cards | -6.9% (-6.5 to -7.6) |
+| corpus `to_bytes` of parsed cards | -1.1% (-0.6 to -1.7) |
+| corpus `to_string` | +0.6% (-0.4 to +1.4) |
+| card `VcardCst::parse` | -10.1% (-9.3 to -11.1) |
+| card `parse` | -8.3% (-7.3 to -8.9) |
+| card parse + `decode` | +0.1% (-0.6 to +0.8) |
+| card parse + `to_bytes` | -7.6% (-6.4 to -9.1) |
+| card `decode` of parsed cards | +0.2% (-1.4 to +1.8) |
+| card `to_string` | +2.0% (+0.2 to +3.7) |
+
+`to_string` runs none of the changed code, so its +0.6% and +2.0% measure placement, the size of the noise these layouts leave. The card's decode rows are flat: e3b's +3% there is paid for by e1 and e2.
+
 ## Read first
 
 - This repo's AGENTS.md, cairn/spec/parsing.md and cairn/spec/decoded-model.md: round-trip fidelity, the serialization fixpoint and line normalisation are the requirements a speed change must not move.

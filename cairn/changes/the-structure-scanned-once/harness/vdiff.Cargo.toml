@@ -1,0 +1,16 @@
+[package]
+name = "vdiff"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+vcard = { package = "vcard-rs", path = "/home/soywod/code/pimalaya/vcard" }
+vcard_old = { package = "vcard-old", path = "/tmp/claude-1000/-home-soywod-code-pimalaya/ec31efee-60d1-4639-8b56-1cc0d79111b3/scratchpad/old" }
+simd-cpu = { version = "0.0.1", git = "https://github.com/pimalaya/simd-cpu", rev = "f2eb72cff2fafad8ae135e00685bc19f9e80e5cc", features = ["std"] }
+
+[profile.release]
+debug = 1
+overflow-checks = true
+debug-assertions = true
+
+[workspace]

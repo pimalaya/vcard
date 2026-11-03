@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Parsing takes a further 16 to 21% fewer cycles (18 to 25% through `VcardCst::parse`, which no longer reads its first line twice), parsing and decoding 6 to 13%, parsing and `to_bytes` 13 to 18%, a decoded card's `to_string` 3 to 11%, with the same output: a common content line and a decoded property are written straight into place rather than built aside and moved, the property, parameter and value kinds are found without copying the name, the line end and the value colon are found sixteen bytes at a time, and `to_bytes` copies a short piece without a call. A decoded card takes 16 to 18% fewer bytes.
 
+- Parsing takes a further 7 to 10% fewer cycles and parsing then `to_bytes` 8%, with the same output; decoding the test corpus's parsed cards takes 7% fewer, a short card's as many as before. The `VERSION` value is matched as bytes rather than read through a lossy string, and a parameter's value list is allocated once at its length.
+
 ### Fixed
 
 - Fixed `decode_base64` failing on a 2.1 or 3.0 inline value whose continuation lines carry more than the one folding space, which most 2.1 exporters write.

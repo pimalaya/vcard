@@ -614,6 +614,7 @@ fn param_semicolon(head: &str) -> Option<usize> {
 /// The line feed is found sixteen bytes at a time by an inlined scan over the
 /// rest of the input: a call per line paid more than it searched, the lines
 /// running some 25 bytes.
+#[inline(always)]
 fn physical_line(rest: &[u8]) -> (&[u8], &[u8], &[u8]) {
     let Some(lf) = position(rest, |byte| byte == b'\n') else {
         return (rest, b"", b"");

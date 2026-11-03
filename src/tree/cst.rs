@@ -289,7 +289,7 @@ impl<'a> VcardCst<'a> {
     /// [`V4_0`](VcardVersion::V4_0).
     pub fn version(&self) -> VcardVersion {
         self.version_line()
-            .and_then(|line| line.raw_value_str().parse().ok())
+            .and_then(|line| VcardVersion::from_bytes(line.raw_value()))
             .unwrap_or(VcardVersion::V4_0)
     }
 
@@ -320,7 +320,8 @@ impl<'a> VcardCst<'a> {
     pub fn push(&mut self, prop: VcardProp<'a>) -> &mut Self {
         let escaper = self
             .version_line()
-            .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
+            .and_then(|line| VcardVersion::from_bytes(line.raw_value()))
+            .map(VcardEscaper::for_version)
             .unwrap_or_default();
 
         self.props.push(prop.encode(escaper));
@@ -434,7 +435,8 @@ fn stamp_escaper(props: &mut [VcardLine<'_>]) {
     let escaper = props
         .iter()
         .find(|line| line.name.get().eq_ignore_ascii_case("VERSION"))
-        .map(|line| VcardEscaper::for_version_str(line.raw_value_str().as_ref()))
+        .and_then(|line| VcardVersion::from_bytes(line.raw_value()))
+        .map(VcardEscaper::for_version)
         .unwrap_or_default();
 
     if escaper == VcardEscaper::default() {

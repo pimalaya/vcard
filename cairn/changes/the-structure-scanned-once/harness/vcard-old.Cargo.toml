@@ -1,0 +1,24 @@
+[package]
+name = "vcard-old"
+version = "0.5.2"
+edition = "2024"
+
+[lib]
+name = "vcard_old"
+path = "src/lib.rs"
+
+[features]
+default = ["parser", "quoted-printable", "base64", "encoding"]
+parser = ["dep:memchr"]
+jcard = ["dep:serde_json"]
+jscontact = ["jcard"]
+quoted-printable = ["dep:quoted-printable-codec"]
+base64 = ["dep:base64-codec"]
+encoding = ["dep:encoding_rs"]
+
+[dependencies]
+base64-codec = { version = "0.0.1", git = "https://github.com/pimalaya/base64-codec", rev = "d39f6b90f02abf8eb91ef041b7601320df8def99", features = ["alloc"], optional = true }
+encoding_rs = { version = "0.8", default-features = false, features = ["alloc"], optional = true }
+memchr = { version = "2", default-features = false, optional = true }
+quoted-printable-codec = { version = "0.0.1", git = "https://github.com/pimalaya/quoted-printable-codec", rev = "d63612b0f9c046717e183e3be534c98f300d913a", features = ["alloc"], optional = true }
+serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }

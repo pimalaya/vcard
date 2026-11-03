@@ -65,7 +65,9 @@ impl<'a> VcardParamNode<'a> {
     /// counted from that `=` on splits two values.
     ///
     /// The node is pushed first and its values pushed where it lands: a node
-    /// built aside and moved in waits on the stores of its value list.
+    /// built aside and moved in waits on the stores of its value list. The
+    /// walk counts the values, so the list is allocated once at its length,
+    /// and a second walk splits them only when there are several.
     pub(crate) fn take_into(rest: &'a str, params: &mut Vec<Self>) -> Option<&'a str> {
         params.push(const { Self::empty() });
         let at = params.len() - 1;
@@ -74,7 +76,7 @@ impl<'a> VcardParamNode<'a> {
         let mut quoted = false;
         let mut values_quoted = false;
         let mut eq = None;
-        let mut start = 0;
+        let mut commas = 0;
         let mut end = rest.len();
         let mut tail = None;
 
@@ -91,20 +93,29 @@ impl<'a> VcardParamNode<'a> {
                 }
                 b'=' if eq.is_none() => {
                     eq = Some(i);
-                    start = i + 1;
                     values_quoted = false;
                 }
-                b',' if eq.is_some() && !values_quoted => {
-                    node.values.push(VcardLeaf::from(&rest[start..i]));
-                    start = i + 1;
-                }
+                b',' if eq.is_some() && !values_quoted => commas += 1,
                 _ => {}
             }
         }
 
         let name = match eq {
             Some(eq) => {
-                node.values.push(VcardLeaf::from(&rest[start..end]));
+                let values = &rest[eq + 1..end];
+
+                // NOTE: The placeholder's list holds no allocation.
+                mem::forget(mem::replace(
+                    &mut node.values,
+                    Vec::with_capacity(commas + 1),
+                ));
+
+                if commas == 0 {
+                    node.values.push(VcardLeaf::from(values));
+                } else {
+                    split_param_values_into(values, &mut node.values);
+                }
+
                 &rest[..eq]
             }
             None => &rest[..end],
@@ -163,8 +174,14 @@ impl fmt::Display for VcardParamNode<'_> {
 
 /// Split a parameter value list on commas outside double quotes.
 fn split_param_values(values: &str) -> Vec<VcardLeaf<'_>> {
-    let bytes = values.as_bytes();
     let mut pieces = Vec::new();
+    split_param_values_into(values, &mut pieces);
+    pieces
+}
+
+/// [`split_param_values`] onto `pieces`.
+fn split_param_values_into<'a>(values: &'a str, pieces: &mut Vec<VcardLeaf<'a>>) {
+    let bytes = values.as_bytes();
     let mut start = 0;
     let mut quoted = false;
 
@@ -180,7 +197,6 @@ fn split_param_values(values: &str) -> Vec<VcardLeaf<'_>> {
     }
 
     pieces.push(VcardLeaf::from(&values[start..]));
-    pieces
 }
 
 #[cfg(test)]

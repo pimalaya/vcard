@@ -5,6 +5,7 @@ change: the-structure-scanned-once
 
 The handoff stays active across passes; each pass lands under its own change id and checks its own tasks there (the third: [the-parts-written-in-place](../archive/the-parts-written-in-place/tasks.md)). What is left for the next:
 
+- [ ] The interrupted fourth pass's three changes (e1, e2, e3b, committed without a log) decided in four shuffled layouts against 63751a2, then its plan followed (proposal, "The fourth pass, interrupted"); harness and differential sources in harness/
 - [ ] Bench rows: the corpus through `parse_many` (rivals' coverage checked first), a 3.0 card with a folded 40 KB `PHOTO`, a 2.1 quoted-printable card, the two decoders against base64 0.23 and quoted_printable 0.5
 - [ ] Baseline copy, harness (four layouts) and differential crate refreshed from the tree after the-parts-written-in-place, a planted break caught
 - [ ] Lever 1: allocations, the large line and property lists and the small chunks a card frees, measured on parse plus decode

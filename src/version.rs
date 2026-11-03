@@ -41,6 +41,21 @@ pub enum VcardVersion {
     V4_0,
 }
 
+impl VcardVersion {
+    /// The defined version for raw wire bytes, as [`from_str`](str::FromStr)
+    /// reads their text: a byte string other than the three spellings, UTF-8
+    /// or not, names none.
+    #[cfg(feature = "parser")]
+    pub(crate) fn from_bytes(version: &[u8]) -> Option<Self> {
+        match version {
+            b"2.1" => Some(Self::V2_1),
+            b"3.0" => Some(Self::V3_0),
+            b"4.0" => Some(Self::V4_0),
+            _ => None,
+        }
+    }
+}
+
 impl str::FromStr for VcardVersion {
     type Err = VcardVersionParseError;
 
