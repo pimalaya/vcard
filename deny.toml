@@ -10,3 +10,12 @@ allow = [
   "BSD-3-Clause",
   "MIT",
 ]
+
+[advisories]
+# chrono and chrono-tz are unmaintained, not vulnerable, with no maintained
+# release to move to. They reach this crate only as dev dependencies,
+# through the crates the benchmarks and tests compare against.
+ignore = [
+  { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained, dev-only" },
+  { id = "RUSTSEC-2026-0555", reason = "chrono-tz unmaintained, dev-only" },
+]
