@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added `Vcard::to_version`, a card written between vCard 3.0 and 4.0: `pref` and `PREF=1`, inline media and `data:` URIs, `AGENT` and `RELATED;TYPE=agent`, Apple's `X-ADDRESSBOOKSERVER-KIND` and `-MEMBER` and `KIND` and `MEMBER`.
+
+### Fixed
+
+- Fixed a `GENDER` with no identity being written with a trailing `;`.
+- Fixed a JSContact phone with a `tel:` number coming back as a text `TEL`: it is a `TEL;VALUE=uri`.
+
 ## [0.6.0] - 2026-11-03
 
 ### Changed

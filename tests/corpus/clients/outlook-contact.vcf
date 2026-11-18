@@ -1,0 +1,20 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Petit;Carol;;;
+FN:Carol Petit
+ORG:Fabrikam;Sales
+TITLE:Account manager
+TEL;TYPE=WORK,VOICE:+33 1 70 00 00 00
+TEL;TYPE=CELL,VOICE:+33 6 00 00 00 00
+EMAIL;TYPE=PREF,INTERNET:carol@fabrikam.example
+ADR;TYPE=WORK;LABEL="5 Avenue de l'Opéra\n75001 Paris\nFrance":;;5 Avenue de l'Opéra;Paris;;75001;France
+URL;TYPE=WORK:https://fabrikam.example
+X-MS-OL-DEFAULT-POSTAL-ADDRESS:2
+X-MS-IMADDRESS:carol@fabrikam.example
+X-MS-MANAGER:Dana Leroy
+X-MS-CARDPICTURE;TYPE=JPEG;ENCODING=b:/9j/4AAQSkZJRgABAQ==
+X-MICROSOFT-CDO-BUSYSTATUS:BUSY
+AGENT;VALUE=uri:mailto:assistant@fabrikam.example
+REV:20261118T091500Z
+UID:outlook-7f6e5d4c3b2a
+END:VCARD

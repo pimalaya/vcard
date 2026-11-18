@@ -25,9 +25,12 @@ impl<'v> VcardCodec<'v> for VcardGender<'v> {
 }
 
 impl VcardGender<'_> {
-    /// Write the sex and the identity as a component each.
+    /// Write the sex, then the identity as a component of its own when set.
     pub(crate) fn emit(&self, out: &mut VcardValueOut<'_>) {
         out.component(&[&*self.sex]);
-        out.component(&[&*self.identity]);
+
+        if !self.identity.is_empty() {
+            out.component(&[&*self.identity]);
+        }
     }
 }

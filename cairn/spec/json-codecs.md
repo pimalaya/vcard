@@ -60,3 +60,12 @@ The RFC 9554 properties (`CREATED`, `GRAMGENDER`, `LANGUAGE`, `PRONOUNS`, `SOCIA
 - GIVEN a 4.0 card carrying `PRONOUNS`
 - WHEN it is converted to a JSContact Card
 - THEN it maps to the corresponding member rather than into `vCardProps`
+
+### Requirement: Client cards round-trip through JSContact
+
+A card as clients write it SHALL come back from its JSContact Card line for line, every `X-` property and parameter included, once normalized: line and parameter order, `TYPE` list shape and case, the case of a `VALUE`, a `VALUE` stating the default type, a date or timestamp spelled basic, a `\:` (no RFC 6350 escape) read as `:`, `CATEGORIES` order (keywords are a set), folds and name case. A 3.0 card goes up to 4.0 through `Vcard::to_version` first and back down after. Importing, a phone `number` with a `tel:` scheme SHALL be a `TEL;VALUE=uri`, so a URI-valued `TEL` keeps its value type.
+
+#### Scenario: Cards as clients write them
+- GIVEN each of tests/corpus/clients: an iOS contact (3.0, `item` groups with `X-ABLabel`, `X-ABRELATEDNAMES`, `X-ABDATE`, inline photo, `X-SOCIALPROFILE` with `X-` parameters), an iOS group (3.0), a Google contact (3.0, `BDAY:--0315`, `\:` in a URL, referenced photo), an Outlook contact (3.0, `X-MS-*`, `AGENT` URI, quoted `LABEL`) and a Thunderbird contact (4.0, `VALUE=URI` `TEL`, `data:` photo, an `X-` property with list-valued `X-` parameters)
+- WHEN each is converted to a Card and back
+- THEN it comes back line for line once normalized, and a second conversion of the Card equals the first

@@ -1,0 +1,29 @@
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//Thunderbird//NONSGML 128.4.0//EN
+UID:9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d
+FN:Bob Durand
+N:Durand;Bob;;;
+NICKNAME:Bobby
+EMAIL;PREF=1;TYPE=work:bob@contoso.example
+EMAIL;TYPE=home:bob@home.example
+TEL;TYPE=cell;VALUE=TEXT:+33 6 98 76 54 32
+TEL;TYPE=work;VALUE=URI:tel:+33-1-98-76-54-32
+ADR;TYPE=home;LABEL="3 Rue Neuve\nLyon":;;3 Rue Neuve;Lyon;;69001;France
+BDAY;VALUE=DATE:19850713
+ANNIVERSARY:20100918
+GENDER:M
+LANG;PREF=1:fr
+LANG;PREF=2:en
+IMPP:xmpp:bob@jabber.example
+URL;TYPE=home:https://bob.example
+CATEGORIES:Friends,Climbing
+NOTE;X-ALT-DESC=html:Line one\nLine two
+KEY;MEDIATYPE=application/pgp-keys:https://keys.example/bob.asc
+PHOTO:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlE
+ QVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+RELATED;TYPE=spouse:urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6
+X-MOZ-PREFER-MAIL-FORMAT:html
+X-CUSTOM-FIELD;X-FLAG=yes;X-LIST=a,b:custom value
+REV:20261117T183000Z
+END:VCARD

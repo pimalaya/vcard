@@ -376,7 +376,7 @@ impl<'a> Import<'a> {
     }
 
     /// A collection of one-text-member objects (emails, notes, ...), each as
-    /// one property.
+    /// one property, a `tel:` phone number as a `VALUE=uri` one.
     fn simple(
         &mut self,
         prefix: &str,
@@ -400,7 +400,22 @@ impl<'a> Import<'a> {
                 continue;
             };
 
-            let params = self.common_params(prefix, key, object, &[member], phone);
+            let mut params = self.common_params(prefix, key, object, &[member], phone);
+
+            if phone
+                && value
+                    .get(..4)
+                    .is_some_and(|scheme| scheme.eq_ignore_ascii_case("tel:"))
+            {
+                params.push(VcardParam::Value(Cow::Borrowed("uri")));
+                self.prop(
+                    kind,
+                    params,
+                    VcardValue::Uri(VcardUri(Cow::Borrowed(value))),
+                );
+                continue;
+            }
+
             self.prop(kind, params, wrap(Cow::Borrowed(value)));
         }
     }

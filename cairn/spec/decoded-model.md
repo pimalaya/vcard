@@ -147,3 +147,21 @@ A value whose grammar is genuinely structured SHALL have its own type rather tha
 - GIVEN `1995-10-31T22:27:10,5Z` and `19951031T222710.25Z`
 - WHEN they are read
 - THEN both name the same second, and the first orders after the second by its fraction
+
+### Requirement: A card is written as another version
+
+`Vcard::to_version` SHALL rewrite a decoded card between vCard 3.0 (RFC 2426) and 4.0 (RFC 6350 Appendix A), keeping its groups (`item1.`) and every property and parameter no rule names. Up to 4.0, from any earlier version: a `pref` type is `PREF=1`; an inline `PHOTO`, `LOGO`, `SOUND` or `KEY` (`ENCODING=b` with its `TYPE` subtype) is a `data:` URI, and a referenced one drops `VALUE=uri`; an `AGENT` URI is `RELATED;TYPE=agent`, and an inline agent card, which 4.0 has no place for, is dropped; Apple's `X-ADDRESSBOOKSERVER-KIND` and `X-ADDRESSBOOKSERVER-MEMBER` are `KIND` and `MEMBER`. Down from 4.0 to 3.0, each rule runs the other way, a `PREF` other than 1 staying as written. Any other pair of versions SHALL change the version alone.
+
+#### Scenario: An iOS group
+- GIVEN a 3.0 card with `X-ADDRESSBOOKSERVER-KIND:group` and two `X-ADDRESSBOOKSERVER-MEMBER`
+- WHEN it is written as 4.0 and back as 3.0
+- THEN the 4.0 card states `KIND:group` and two `MEMBER`, and the 3.0 card is the original byte for byte
+
+#### Scenario: An iOS contact
+- GIVEN a 3.0 card with a `pref` type, an `item1.` group with `X-ABLabel`, an inline JPEG `PHOTO`, a referenced `LOGO` and an `AGENT` URI
+- WHEN it is written as 4.0 and back as 3.0
+- THEN the 4.0 card states `PREF=1`, the group, a `data:image/jpeg;base64,` `PHOTO`, a bare `LOGO` URI and `RELATED;TYPE=agent`, and the 3.0 card is the original byte for byte
+
+### Requirement: A GENDER with no identity is written as its sex alone
+
+Writing a decoded `GENDER` whose identity is empty SHALL write the sex component alone, so `GENDER:M` decodes and writes back as `GENDER:M`, not `GENDER:M;`.
