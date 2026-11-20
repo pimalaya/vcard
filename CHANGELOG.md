@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-20
+
 ### Added
 
 - Added `Vcard::to_version`, a card written between vCard 3.0 and 4.0: `pref` and `PREF=1`, inline media and `data:` URIs, `AGENT` and `RELATED;TYPE=agent`, Apple's `X-ADDRESSBOOKSERVER-KIND` and `-MEMBER` and `KIND` and `MEMBER`.
@@ -380,7 +382,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   `Vcard::to_jscontact` and `from_jscontact` convert to and from an RFC 9553 Card, infallibly aside from a non-object import root. Unmappable properties are preserved in `vCardProps`, leftover parameters in `vCardParams`, and unknown Card members as `JSPROP` properties.
 
-[unreleased]: https://github.com/pimalaya/vcard/compare/v0.5.2..HEAD
+[Unreleased]: https://github.com/pimalaya/vcard/compare/v0.6.1..HEAD
+[0.6.1]: https://github.com/pimalaya/vcard/compare/v0.6.0..v0.6.1
 [0.5.2]: https://github.com/pimalaya/vcard/compare/v0.5.1..v0.5.2
 [0.5.1]: https://github.com/pimalaya/vcard/compare/v0.5.0..v0.5.1
 [0.5.0]: https://github.com/pimalaya/vcard/compare/v0.4.0..v0.5.0
